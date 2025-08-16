@@ -1,0 +1,17 @@
+body,html {margin:0;font-family:system-ui, Arial, sans-serif;background:#111;color:#eee;height:100%;}
+.erp-shell {display:flex;align-items:center;justify-content:center;min-height:100vh;background:radial-gradient(circle at 30% 30%, #2a2a2a,#0d0d0d);} 
+.panel {width:380px;max-width:90%;background:#1b1b1b;padding:2.2rem 2rem;border:1px solid #333;border-radius:14px;box-shadow:0 8px 24px -4px rgba(0,0,0,.6);}
+.logo {margin:0 0 1.5rem;font-size:1.6rem;text-align:center;background:linear-gradient(90deg,#f5d67b,#d4af37,#b8860b);-webkit-background-clip:text;color:transparent;letter-spacing:.5px;}
+form.card {display:flex;flex-direction:column;gap:.65rem;}
+label {font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:#bbb;}
+input {background:#121212;border:1px solid #2f2f2f;border-radius:8px;padding:.65rem .75rem;color:#eee;font-size:.95rem;outline:none;transition:border .15s, box-shadow .15s;} 
+input:focus {border-color:#d4af37;box-shadow:0 0 0 1px #d4af37;} 
+button {font:inherit;cursor:pointer;border-radius:8px;border:1px solid #444;background:#222;color:#eee;padding:.65rem .9rem;transition:background .15s,border .15s;} 
+button.primary {background:linear-gradient(120deg,#d4af37,#b8860b);color:#111;border:none;font-weight:600;}
+button.primary:disabled {opacity:.55;cursor:default;}
+button:hover:not(:disabled) {background:#2a2a2a;}
+button.primary:hover:not(:disabled) {filter:brightness(1.1);} 
+.err {color:#ff6b6b;font-size:.7rem;margin-top:-.4rem;} 
+.alt {margin-top:.25rem;font-size:.75rem;text-align:center;color:#aaa;} 
+.alt button {background:none;border:none;color:#d4af37;padding:0 .25rem;} 
+.alt button:hover {text-decoration:underline;} 

@@ -3,6 +3,7 @@ from flask_jwt_extended import (
     create_access_token, create_refresh_token,
     jwt_required, get_jwt_identity, get_jwt
 )
+from marshmallow import ValidationError
 from app.extensions import limiter
 from flask import current_app
 from .schemas import LoginSchema, RegistrationSchema, StaffCreateSchema
@@ -18,22 +19,32 @@ staff_create_schema = StaffCreateSchema()
 @bp.post("/register")
 def register():
     db = current_app.extensions['mongo_db']
-    data = registration_schema.load(request.get_json() or {})
+    try:
+        data = registration_schema.load(request.get_json() or {})
+    except ValidationError as err:
+        return jsonify({"error": "validation_failed", "details": err.messages}), 400
+    
     existing = db.users.find_one({"email": data["email"].lower()})
     if existing:
         return jsonify({"error": "email_in_use"}), 409
-    # Always assign base role 'customer'. Additional staff/admin roles managed internally.
+    # Assign default role (customer) by looking up roles collection
+    role_doc = db.roles.find_one({"role_name": "Customer"})
+    if not role_doc:
+        return jsonify({"error": "role_not_found"}), 500
     user_doc = {
+        "full_name": data["name"],
         "email": data["email"].lower(),
-        "name": data["name"],
+        "phone_number": data["phone"],
         "password_hash": hash_password(data["password"]),
-        "roles": ["customer"],
-        "permissions": [],
-        "is_active": True,
-        "phone": data["phone"],
+        "role": {
+            "_id": role_doc["_id"],
+            "role_name": role_doc["role_name"]
+        },
+        "status": "active",
+        "created_at": db.command("isMaster")['localTime'] if 'localTime' in db.command("isMaster") else None
     }
     inserted = db.users.insert_one(user_doc)
-    return jsonify({"id": str(inserted.inserted_id), "email": user_doc["email"], "name": user_doc["name"]}), 201
+    return jsonify({"id": str(inserted.inserted_id), "email": user_doc["email"], "full_name": user_doc["full_name"]}), 201
 
 
 # Role -> default permissions (extend as system grows)
@@ -57,7 +68,11 @@ def _expand_permissions(roles):
 def create_staff():
     """Admin creates a staff member (level determines role)."""
     db = current_app.extensions['mongo_db']
-    data = staff_create_schema.load(request.get_json() or {})
+    try:
+        data = staff_create_schema.load(request.get_json() or {})
+    except ValidationError as err:
+        return jsonify({"error": "validation_failed", "details": err.messages}), 400
+    
     email_l = data["email"].lower()
     if db.users.find_one({"email": email_l}):
         return jsonify({"error": "email_in_use"}), 409
@@ -80,18 +95,32 @@ def create_staff():
 @bp.post("/login")
 def login():
     db = current_app.extensions['mongo_db']
-    data = login_schema.load(request.get_json() or {})
-    user = db.users.find_one({"email": data["email"].lower(), "is_active": True})
+    try:
+        data = login_schema.load(request.get_json() or {})
+    except ValidationError as err:
+        return jsonify({"error": "validation_failed", "details": err.messages}), 400
+    
+    user = db.users.find_one({"email": data["email"].lower(), "status": "active"})
     if not user or not verify_password(data["password"], user["password_hash"]):
         return jsonify({"error": "invalid_credentials"}), 401
 
+    # Fetch full role info
+    role_doc = db.roles.find_one({"_id": user["role"]["_id"]}) if user.get("role") else None
     identity = str(user["_id"])
+    
+    # Convert role info to JSON-serializable format
+    role_info = {}
+    if user.get("role"):
+        role_info = {
+            "_id": str(user["role"]["_id"]),
+            "role_name": user["role"]["role_name"]
+        }
+    
     claims = {
-        "roles": user.get("roles", []),
-        "perms": user.get("permissions", []),
-        "branch_id": user.get("branch_id"),
+        "role": role_info,
+        "permissions": role_doc["permissions"] if role_doc else [],
         "email": user.get("email"),
-        "name": user.get("name"),
+        "full_name": user.get("full_name"),
     }
     access = create_access_token(identity=identity, additional_claims=claims)
     refresh = create_refresh_token(identity=identity, additional_claims=claims)
@@ -99,9 +128,9 @@ def login():
     safe_user = {
         "id": identity,
         "email": user["email"],
-        "name": user.get("name"),
-        "roles": user.get("roles", []),
-        "branch_id": user.get("branch_id"),
+        "full_name": user.get("full_name"),
+        "role": role_info,
+        "permissions": role_doc["permissions"] if role_doc else [],
     }
     return jsonify({"access_token": access, "refresh_token": refresh, "user": safe_user}), 200
 

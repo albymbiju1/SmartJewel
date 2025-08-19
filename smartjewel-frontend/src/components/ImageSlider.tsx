@@ -1,387 +1,290 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from "react";
 
-const ImageSlider = () => {
-  const [currentSlide, setCurrentSlide] = useState(0);
-  const [isTransitioning, setIsTransitioning] = useState(false);
-  const [imageLoadErrors, setImageLoadErrors] = useState<Set<number>>(new Set());
-  const [touchStart, setTouchStart] = useState<number | null>(null);
-  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+// Slides data (reflecting your latest manual changes)
+const slides = [
+  {
+    id: 1,
+    image: "/Slide5.jpg",
+    title: "Diamond Collection",
+    subtitle: "Timeless Elegance",
+    description: "Discover our exquisite diamond jewelry crafted to perfection",
+  },
+  {
+    id: 2,
+    image: "/Slide4.jpg",
+    title: "Gold Heritage",
+    subtitle: "Pure Luxury",
+    description: "Experience the finest gold jewelry with unmatched craftsmanship",
+  },
+  {
+    id: 3,
+    image: "/Slide7.jpg",
+    title: "Precious Gems",
+    subtitle: "Natural Beauty",
+    description: "Rare gemstones set in designs that celebrate elegance",
+  },
+  {
+    id: 4,
+    image: "/Slide9.jpg",
+    title: "Bridal Collection",
+    subtitle: "Forever Yours",
+    description: "Wedding jewelry that marks your special moments",
+  },
+  {
+    id: 5,
+    image: "/Slide3.jpg",
+    title: "Luxury Ornaments",
+    subtitle: "Precision & Style",
+    description: "Ornaments that blend traditional craftsmanship with modern elegance",
+  },
+];
 
-  const slides = [
-    {
-      id: 1,
-      image: '/Slide5.jpg',
-      title: 'SmartJewel',
-      subtitle: 'Sparkling Avenues',
-      description: 'Trendy style, modern sparkle',
-      buttonText: 'Shop Now',
-      textPosition: 'left',
-      badge: 'A Premium Collection'
+export default function ImageSlider() {
+  const [currentSlide, setCurrentSlide] = useState<number>(0);
+  const [isAutoPlaying, setIsAutoPlaying] = useState<boolean>(true);
+  const [isTransitioning, setIsTransitioning] = useState<boolean>(false);
+  const [touchStart, setTouchStart] = useState<number>(0);
+  const [touchEnd, setTouchEnd] = useState<number>(0);
+  const [imagesLoaded, setImagesLoaded] = useState<boolean[]>(
+    new Array(slides.length).fill(false)
+  );
+
+  const sliderRef = useRef<HTMLDivElement>(null);
+  const autoPlayRef = useRef<number | null>(null);
+  const transitionTimeoutRef = useRef<number | null>(null);
+
+  // Navigation helpers
+  const nextSlide = useCallback(() => {
+    if (isTransitioning) return;
+    setIsTransitioning(true);
+    setCurrentSlide((prev) => (prev + 1) % slides.length);
+
+    if (transitionTimeoutRef.current) window.clearTimeout(transitionTimeoutRef.current);
+    transitionTimeoutRef.current = window.setTimeout(() => {
+      setIsTransitioning(false);
+    }, 800);
+  }, [isTransitioning]);
+
+  const prevSlide = useCallback(() => {
+    if (isTransitioning) return;
+    setIsTransitioning(true);
+    setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length);
+
+    if (transitionTimeoutRef.current) window.clearTimeout(transitionTimeoutRef.current);
+    transitionTimeoutRef.current = window.setTimeout(() => {
+      setIsTransitioning(false);
+    }, 800);
+  }, [isTransitioning]);
+
+  const goToSlide = useCallback(
+    (index: number) => {
+      if (isTransitioning || index === currentSlide) return;
+      setIsTransitioning(true);
+      setCurrentSlide(index);
+
+      if (transitionTimeoutRef.current) window.clearTimeout(transitionTimeoutRef.current);
+      transitionTimeoutRef.current = window.setTimeout(() => {
+        setIsTransitioning(false);
+      }, 800);
     },
-    {
-      id: 2,
-      image: '/Slide6.jpg',
-      title: 'SmartJewel',
-      subtitle: 'Golden Moments',
-      description: 'Timeless elegance, modern design',
-      buttonText: 'Explore Gold',
-      textPosition: 'left',
-      badge: 'A Premium Collection'
-    },
-    {
-      id: 3,
-      image: '/Slide7.jpg',
-      title: 'SmartJewel',
-      subtitle: 'Diamond Dreams',
-      description: 'Brilliant diamonds, endless sparkle',
-      buttonText: 'View Diamonds',
-      textPosition: 'left',
-      badge: 'A Premium Collection'
+    [currentSlide, isTransitioning]
+  );
+
+  // Auto-play
+  const startAutoPlay = useCallback(() => {
+    if (autoPlayRef.current) window.clearInterval(autoPlayRef.current);
+    autoPlayRef.current = window.setInterval(() => {
+      if (isAutoPlaying) nextSlide();
+    }, 5000);
+  }, [isAutoPlaying, nextSlide]);
+
+  const stopAutoPlay = useCallback(() => {
+    if (autoPlayRef.current) {
+      window.clearInterval(autoPlayRef.current);
+      autoPlayRef.current = null;
     }
-  ];
-
-  const goToSlide = useCallback((slideIndex: number) => {
-    if (isTransitioning || slideIndex === currentSlide) return;
-    setIsTransitioning(true);
-    setCurrentSlide(slideIndex);
-    setTimeout(() => setIsTransitioning(false), 700);
-  }, [isTransitioning, currentSlide]);
-
-  const goToPrevSlide = useCallback(() => {
-    if (isTransitioning) return;
-    setIsTransitioning(true);
-    setCurrentSlide(prev => prev === 0 ? slides.length - 1 : prev - 1);
-    setTimeout(() => setIsTransitioning(false), 700);
-  }, [isTransitioning, slides.length]);
-
-  const goToNextSlide = useCallback(() => {
-    if (isTransitioning) return;
-    setIsTransitioning(true);
-    setCurrentSlide(prev => prev === slides.length - 1 ? 0 : prev + 1);
-    setTimeout(() => setIsTransitioning(false), 700);
-  }, [isTransitioning, slides.length]);
+  }, []);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (!isTransitioning) {
-        goToNextSlide();
-      }
-    }, 5000);
+    if (isAutoPlaying) startAutoPlay();
+    else stopAutoPlay();
 
-    return () => clearInterval(interval);
-  }, [goToNextSlide, isTransitioning]);
-
-  // Touch handlers for swipe functionality
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchEnd(null);
-    setTouchStart(e.targetTouches[0].clientX);
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd(e.targetTouches[0].clientX);
-  };
-
-  const handleTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
-    
-    const distance = touchStart - touchEnd;
-    const isLeftSwipe = distance > 50;
-    const isRightSwipe = distance < -50;
-
-    if (isLeftSwipe) {
-      goToNextSlide();
-    } else if (isRightSwipe) {
-      goToPrevSlide();
-    }
-  };
+    return () => stopAutoPlay();
+  }, [isAutoPlaying, startAutoPlay, stopAutoPlay]);
 
   // Keyboard navigation
-  useEffect(() => {
-    const handleKeyPress = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') {
-        goToPrevSlide();
-      } else if (e.key === 'ArrowRight') {
-        goToNextSlide();
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      switch (e.key) {
+        case "ArrowLeft":
+          e.preventDefault();
+          prevSlide();
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          nextSlide();
+          break;
+        case " ":
+        case "Spacebar":
+          e.preventDefault();
+          setIsAutoPlaying((prev: boolean) => !prev);
+          break;
       }
-    };
+    },
+    [nextSlide, prevSlide]
+  );
 
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [goToPrevSlide, goToNextSlide]);
+  useEffect(() => {
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [handleKeyDown]);
+
+  // Touch/swipe
+  const onTouchStart = (e: React.TouchEvent) => setTouchStart(e.targetTouches[0].clientX);
+  const onTouchMove = (e: React.TouchEvent) => setTouchEnd(e.targetTouches[0].clientX);
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    if (distance > 50) nextSlide();
+    else if (distance < -50) prevSlide();
+  };
+
+  // Image load
+  const handleImageLoad = (index: number) => {
+    setImagesLoaded((prev: boolean[]) => {
+      const next = [...prev];
+      next[index] = true;
+      return next;
+    });
+  };
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      if (autoPlayRef.current) window.clearInterval(autoPlayRef.current);
+      if (transitionTimeoutRef.current) window.clearTimeout(transitionTimeoutRef.current);
+    };
+  }, []);
 
   return (
-    <div 
-      style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
+    <section
+      className="luxury-slider"
+      ref={sliderRef}
+      onMouseEnter={() => setIsAutoPlaying(false)}
+      onMouseLeave={() => setIsAutoPlaying(true)}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      role="region"
+      aria-label="Jewelry collection slider"
+      aria-live="polite"
     >
-      {/* Slides Container */}
-      <div 
-        style={{ 
-          display: 'flex', 
-          width: '100%', 
-          height: '100%', 
-          transition: 'transform 0.7s ease-in-out',
-          transform: `translateX(-${currentSlide * 100}%)`
-        }}
-      >
+      {/* Slides */}
+      <div className="luxury-slider-container">
         {slides.map((slide, index) => (
           <div
             key={slide.id}
-            style={{
-              width: '100%',
-              height: '100%',
-              flexShrink: 0,
-              position: 'relative',
-              background: imageLoadErrors.has(index) 
-                ? 'linear-gradient(135deg, #f5f5dc 0%, #e6ddd4 100%)' 
-                : 'linear-gradient(135deg, #f5f5dc 0%, #e6ddd4 100%)'
-            }}
+            className={`luxury-slide ${index === currentSlide ? "active" : ""} ${
+              index === (currentSlide - 1 + slides.length) % slides.length ? "prev" : ""
+            } ${index === (currentSlide + 1) % slides.length ? "next" : ""}`}
+            style={{ transform: `translateX(${(index - currentSlide) * 100}%)`, opacity: index === currentSlide ? 1 : 0 }}
           >
             {/* Background Image */}
-            {!imageLoadErrors.has(index) && (
-              <img 
+            <div className="luxury-slide-image-container">
+              <img
                 src={slide.image}
                 alt={slide.title}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  objectPosition: 'center top'
-                }}
-                onError={(e) => {
-                  console.error(`Failed to load image: ${slide.image}`);
-                  setImageLoadErrors(prev => new Set([...prev, index]));
-                }}
-                onLoad={() => {
-                  console.log(`Successfully loaded image: ${slide.image}`);
-                }}
+                className={`luxury-slide-image ${imagesLoaded[index] ? "loaded" : ""}`}
+                onLoad={() => handleImageLoad(index)}
+                loading={index <= 2 ? "eager" : "lazy"}
               />
-            )}
-            
-            {/* Gradient Overlay */}
-            <div style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: 'linear-gradient(to right, rgba(0,0,0,0.4), rgba(0,0,0,0.2), transparent)',
-              zIndex: 5
-            }}></div>
-            
-            {/* Content Overlay */}
-            <div style={{
-              position: 'absolute',
-              top: '50%',
-              left: '4rem',
-              transform: 'translateY(-50%)',
-              zIndex: 10,
-              color: 'white',
-              maxWidth: '450px'
-            }}>
-              {/* Logo Section */}
-              <div style={{ marginBottom: '2rem' }}>
-                <div style={{
-                  width: '4rem',
-                  height: '4rem',
-                  background: 'rgba(255, 255, 255, 0.9)',
-                  borderRadius: '0.5rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginBottom: '0.75rem',
-                  padding: '0.5rem',
-                  boxShadow: '0 4px 8px rgba(0,0,0,0.2)'
-                }}>
-                  <img 
-                    src="/logo192.png" 
-                    alt="SmartJewel" 
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'contain'
-                    }}
-                  />
-                </div>
-                <div style={{
-                  fontSize: '1.75rem',
-                  fontWeight: 'bold',
-                  color: 'white',
-                  fontFamily: 'serif',
-                  marginBottom: '0.25rem',
-                  textShadow: '2px 2px 4px rgba(0,0,0,0.5)'
-                }}>
-                  {slide.title}
-                </div>
-                <div style={{
-                  fontSize: '0.875rem',
-                  color: '#f0f0f0',
-                  textTransform: 'uppercase',
-                  letterSpacing: '1px',
-                  textShadow: '1px 1px 2px rgba(0,0,0,0.5)'
-                }}>
-                  {slide.badge}
-                </div>
+              <div className="luxury-slide-overlay" />
+            </div>
+
+            {/* Content */}
+            <div className="luxury-slide-content">
+              <div className="luxury-content-wrapper">
+                <p className="luxury-subtitle">{slide.subtitle}</p>
+                <h1 className="luxury-title">{slide.title}</h1>
+                <p className="luxury-description">{slide.description}</p>
+                <button className="luxury-cta-button" aria-label="Explore collection">
+                  <span>Explore Collection</span>
+                  <svg className="luxury-cta-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
               </div>
-              
-              {/* Main Content */}
-              <h1 style={{
-                fontSize: '3.5rem',
-                fontWeight: '300',
-                lineHeight: '1.1',
-                margin: '0 0 0.5rem 0',
-                color: 'white',
-                fontFamily: "'Brush Script MT', cursive",
-                fontStyle: 'italic',
-                textShadow: '2px 2px 4px rgba(0,0,0,0.5)'
-              }}>
-                {slide.subtitle}
-              </h1>
-              
-              <p style={{
-                fontSize: '1.25rem',
-                fontWeight: '400',
-                color: '#f0f0f0',
-                margin: '0 0 2rem 0',
-                letterSpacing: '0.5px',
-                textShadow: '1px 1px 2px rgba(0,0,0,0.5)'
-              }}>
-                {slide.description}
-              </p>
-              
-              {/* CTA Button */}
-              <button 
-                style={{
-                  background: '#8B4513',
-                  color: 'white',
-                  padding: '1rem 2.5rem',
-                  border: 'none',
-                  borderRadius: '0.25rem',
-                  fontSize: '1rem',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  transition: 'background-color 0.2s, transform 0.2s',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  boxShadow: '0 4px 8px rgba(0,0,0,0.2)'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = '#654321';
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = '#8B4513';
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}
-              >
-                {slide.buttonText}
-              </button>
             </div>
           </div>
         ))}
       </div>
-      
-      {/* Navigation Arrows */}
+
+      {/* Navigation */}
       <button
-        onClick={goToPrevSlide}
+        className="luxury-nav-btn luxury-nav-prev"
+        onClick={prevSlide}
         disabled={isTransitioning}
-        style={{
-          position: 'absolute',
-          left: '2rem',
-          top: '50%',
-          transform: 'translateY(-50%)',
-          background: 'rgba(255, 255, 255, 0.9)',
-          border: 'none',
-          borderRadius: '50%',
-          width: '3rem',
-          height: '3rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          transition: 'background-color 0.2s, transform 0.2s',
-          zIndex: 20,
-          opacity: isTransitioning ? 0.5 : 1,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = 'white';
-          e.currentTarget.style.transform = 'translateY(-50%) scale(1.1)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.9)';
-          e.currentTarget.style.transform = 'translateY(-50%) scale(1)';
-        }}
+        aria-label="Previous slide"
       >
-        <ChevronLeft size={20} color="#8B4513" />
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
       </button>
 
       <button
-        onClick={goToNextSlide}
+        className="luxury-nav-btn luxury-nav-next"
+        onClick={nextSlide}
         disabled={isTransitioning}
-        style={{
-          position: 'absolute',
-          right: '2rem',
-          top: '50%',
-          transform: 'translateY(-50%)',
-          background: 'rgba(255, 255, 255, 0.9)',
-          border: 'none',
-          borderRadius: '50%',
-          width: '3rem',
-          height: '3rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          transition: 'background-color 0.2s, transform 0.2s',
-          zIndex: 20,
-          opacity: isTransitioning ? 0.5 : 1,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = 'white';
-          e.currentTarget.style.transform = 'translateY(-50%) scale(1.1)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.9)';
-          e.currentTarget.style.transform = 'translateY(-50%) scale(1)';
-        }}
+        aria-label="Next slide"
       >
-        <ChevronRight size={20} color="#8B4513" />
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
       </button>
-      
-      {/* Slider Dots */}
-      <div style={{
-        position: 'absolute',
-        bottom: '2rem',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        display: 'flex',
-        gap: '0.75rem',
-        zIndex: 20
-      }}>
+
+      {/* Dots */}
+      <div className="luxury-dots-container" role="tablist" aria-label="Slide pagination">
         {slides.map((_, index) => (
           <button
             key={index}
+            className={`luxury-dot ${index === currentSlide ? "active" : ""}`}
             onClick={() => goToSlide(index)}
-            style={{
-              width: index === currentSlide ? '2rem' : '0.75rem',
-              height: '0.75rem',
-              borderRadius: '0.375rem',
-              background: index === currentSlide ? '#8B4513' : 'rgba(255, 255, 255, 0.6)',
-              border: 'none',
-              cursor: 'pointer',
-              transition: 'all 0.3s ease',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-            }}
+            disabled={isTransitioning}
+            aria-label={`Go to slide ${index + 1}`}
+            aria-selected={index === currentSlide}
+            role="tab"
           />
         ))}
       </div>
-    </div>
-  );
-};
 
-export default ImageSlider;
+      {/* Counter */}
+      <div className="luxury-counter" aria-hidden="true">
+        <span className="luxury-counter-current">
+          {String(currentSlide + 1).padStart(2, "0")}
+        </span>
+        <span className="luxury-counter-separator">/</span>
+        <span className="luxury-counter-total">
+          {String(slides.length).padStart(2, "0")}
+        </span>
+      </div>
+
+      {/* Auto-play control */}
+      <button
+        className={`luxury-autoplay-btn ${isAutoPlaying ? "playing" : "paused"}`}
+        onClick={() => setIsAutoPlaying(!isAutoPlaying)}
+        aria-label={isAutoPlaying ? "Pause slideshow" : "Play slideshow"}
+      >
+        {isAutoPlaying ? (
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+        )}
+      </button>
+    </section>
+  );
+}
+

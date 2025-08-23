@@ -114,10 +114,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('user_data');
-    
+
     // Clear axios headers
     setAuthToken(undefined);
-    
+
     // Clear state
     setUser(null);
   };

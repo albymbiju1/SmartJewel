@@ -46,20 +46,20 @@ export const RegisterForm: React.FC<Props> = ({ onSuccess, switchToLogin }) => {
   };
 
   return (
-    <div className="auth-card">
+    <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-xl w-full max-w-md">
       {/* Header */}
-      <div className="auth-header">
-        <div className="auth-logo">
-          <img src="/logo192.png" alt="SmartJewel" />
+      <div className="text-center mb-6">
+        <div className="flex justify-center mb-4">
+          <img src="/logo192.png" alt="SmartJewel logo" width="192" height="192" className="h-10 md:h-12 w-auto object-contain drop-shadow-sm select-none" />
         </div>
-        <h1>Create Account</h1>
-        <p>Join SmartJewel and discover premium jewelry</p>
+        <h1 className="text-xl font-semibold text-gray-800">Create Account</h1>
+        <p className="text-gray-500 text-sm">Join SmartJewel and discover premium jewelry</p>
       </div>
 
       {/* Register Form */}
-      <form onSubmit={handleSubmit(onSubmit)} className="auth-form">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         {registerError && (
-          <div className="error-message">
+          <div className="flex items-start gap-2 rounded-md bg-red-50 text-red-700 text-sm px-3 py-2 border border-red-200">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="10"></circle>
               <line x1="15" y1="9" x2="9" y2="15"></line>
@@ -69,10 +69,10 @@ export const RegisterForm: React.FC<Props> = ({ onSuccess, switchToLogin }) => {
           </div>
         )}
 
-        <div className="form-group">
-          <label htmlFor="name">Full Name</label>
-          <div className="input-wrapper">
-            <svg className="input-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <div>
+          <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+          <div className="relative">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
               <circle cx="12" cy="7" r="4"></circle>
             </svg>
@@ -81,16 +81,16 @@ export const RegisterForm: React.FC<Props> = ({ onSuccess, switchToLogin }) => {
               type="text"
               placeholder="Enter your full name"
               {...register('name')}
-              className={errors.name ? 'error' : ''}
+              className={`w-full h-11 rounded-md border bg-white px-10 text-sm focus:outline-none focus:ring-2 ${errors.name ? 'border-red-500 focus:ring-red-200' : 'border-gray-300 focus:ring-[color:var(--brand-gold)]/30'}`}
             />
           </div>
-          {errors.name && <span className="field-error">{errors.name.message}</span>}
+          {errors.name && <span className="text-xs text-red-600 mt-1 block">{errors.name.message}</span>}
         </div>
 
-        <div className="form-group">
-          <label htmlFor="email">Email Address</label>
-          <div className="input-wrapper">
-            <svg className="input-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <div>
+          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+          <div className="relative">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
               <polyline points="22,6 12,13 2,6"></polyline>
             </svg>
@@ -99,16 +99,16 @@ export const RegisterForm: React.FC<Props> = ({ onSuccess, switchToLogin }) => {
               type="email"
               placeholder="Enter your email"
               {...register('email')}
-              className={errors.email ? 'error' : ''}
+              className={`w-full h-11 rounded-md border bg-white px-10 text-sm focus:outline-none focus:ring-2 ${errors.email ? 'border-red-500 focus:ring-red-200' : 'border-gray-300 focus:ring-[color:var(--brand-gold)]/30'}`}
             />
           </div>
-          {errors.email && <span className="field-error">{errors.email.message}</span>}
+          {errors.email && <span className="text-xs text-red-600 mt-1 block">{errors.email.message}</span>}
         </div>
 
-        <div className="form-group">
-          <label htmlFor="phone">Phone Number</label>
-          <div className="input-wrapper">
-            <svg className="input-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <div>
+          <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+          <div className="relative">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
             </svg>
             <input
@@ -116,16 +116,16 @@ export const RegisterForm: React.FC<Props> = ({ onSuccess, switchToLogin }) => {
               type="tel"
               placeholder="Enter your phone number"
               {...register('phone')}
-              className={errors.phone ? 'error' : ''}
+              className={`w-full h-11 rounded-md border bg-white px-10 text-sm focus:outline-none focus:ring-2 ${errors.phone ? 'border-red-500 focus:ring-red-200' : 'border-gray-300 focus:ring-[color:var(--brand-gold)]/30'}`}
             />
           </div>
-          {errors.phone && <span className="field-error">{errors.phone.message}</span>}
+          {errors.phone && <span className="text-xs text-red-600 mt-1 block">{errors.phone.message}</span>}
         </div>
 
-        <div className="form-group">
-          <label htmlFor="password">Password</label>
-          <div className="input-wrapper">
-            <svg className="input-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <div>
+          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+          <div className="relative">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
               <circle cx="12" cy="16" r="1"></circle>
               <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
@@ -135,11 +135,11 @@ export const RegisterForm: React.FC<Props> = ({ onSuccess, switchToLogin }) => {
               type={showPassword ? 'text' : 'password'}
               placeholder="Create a password"
               {...register('password')}
-              className={errors.password ? 'error' : ''}
+              className={`w-full h-11 rounded-md border bg-white px-10 pr-10 text-sm focus:outline-none focus:ring-2 ${errors.password ? 'border-red-500 focus:ring-red-200' : 'border-gray-300 focus:ring-[color:var(--brand-gold)]/30'}`}
             />
             <button
               type="button"
-              className="password-toggle"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
               onClick={() => setShowPassword(!showPassword)}
             >
               {showPassword ? (
@@ -155,21 +155,18 @@ export const RegisterForm: React.FC<Props> = ({ onSuccess, switchToLogin }) => {
               )}
             </button>
           </div>
-          {errors.password && <span className="field-error">{errors.password.message}</span>}
+          {errors.password && <span className="text-xs text-red-600 mt-1 block">{errors.password.message}</span>}
         </div>
 
-        <div className="form-actions">
-          <label className="checkbox-wrapper">
-            <input type="checkbox" required />
-            <span className="checkmark"></span>
-            I agree to the Terms of Service and Privacy Policy
-          </label>
+        <div className="flex items-start gap-2 text-sm text-gray-700">
+          <input type="checkbox" required className="h-4 w-4 mt-1" />
+          I agree to the Terms of Service and Privacy Policy
         </div>
 
-        <button type="submit" disabled={isSubmitting} className="auth-button">
+        <button type="submit" disabled={isSubmitting} className="w-full bg-[color:var(--brand-gold)] text-white hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed rounded-md py-2.5 font-medium inline-flex items-center justify-center gap-2">
           {isSubmitting ? (
             <>
-              <svg className="spinner" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 12a9 9 0 11-6.219-8.56"/>
               </svg>
               Creating Account...
@@ -181,10 +178,10 @@ export const RegisterForm: React.FC<Props> = ({ onSuccess, switchToLogin }) => {
       </form>
 
       {/* Footer */}
-      <div className="auth-footer">
+      <div className="text-center mt-6 text-sm text-gray-500">
         <p>
           Already have an account?{' '}
-          <button type="button" onClick={switchToLogin} className="auth-link">
+          <button type="button" onClick={switchToLogin} className="text-[color:var(--brand-gold)] hover:underline">
             Sign in here
           </button>
         </p>

@@ -4,35 +4,35 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 const slides = [
   {
     id: 1,
-    image: "/Slide5.jpg",
+    image: "/pexel6.jpg",
     title: "Diamond Collection",
     subtitle: "Timeless Elegance",
     description: "Discover our exquisite diamond jewelry crafted to perfection",
   },
   {
     id: 2,
-    image: "/Slide4.jpg",
+    image: "/pexel2.jpg",
     title: "Gold Heritage",
     subtitle: "Pure Luxury",
     description: "Experience the finest gold jewelry with unmatched craftsmanship",
   },
   {
     id: 3,
-    image: "/Slide7.jpg",
+    image: "/pexel3.jpg",
     title: "Precious Gems",
     subtitle: "Natural Beauty",
     description: "Rare gemstones set in designs that celebrate elegance",
   },
   {
     id: 4,
-    image: "/Slide9.jpg",
+    image: "/pexel1.jpg",
     title: "Bridal Collection",
     subtitle: "Forever Yours",
     description: "Wedding jewelry that marks your special moments",
   },
   {
     id: 5,
-    image: "/Slide3.jpg",
+    image: "/pexel4.jpg",
     title: "Luxury Ornaments",
     subtitle: "Precision & Style",
     description: "Ornaments that blend traditional craftsmanship with modern elegance",
@@ -168,7 +168,7 @@ export default function ImageSlider() {
 
   return (
     <section
-      className="luxury-slider"
+      className="relative w-full h-[60vh] md:h-[70vh] overflow-hidden"
       ref={sliderRef}
       onMouseEnter={() => setIsAutoPlaying(false)}
       onMouseLeave={() => setIsAutoPlaying(true)}
@@ -180,36 +180,34 @@ export default function ImageSlider() {
       aria-live="polite"
     >
       {/* Slides */}
-      <div className="luxury-slider-container">
+      <div className="absolute inset-0">
         {slides.map((slide, index) => (
           <div
             key={slide.id}
-            className={`luxury-slide ${index === currentSlide ? "active" : ""} ${
-              index === (currentSlide - 1 + slides.length) % slides.length ? "prev" : ""
-            } ${index === (currentSlide + 1) % slides.length ? "next" : ""}`}
+            className="absolute inset-0 transition-opacity duration-700 ease-out"
             style={{ transform: `translateX(${(index - currentSlide) * 100}%)`, opacity: index === currentSlide ? 1 : 0 }}
           >
             {/* Background Image */}
-            <div className="luxury-slide-image-container">
+            <div className="absolute inset-0">
               <img
                 src={slide.image}
                 alt={slide.title}
-                className={`luxury-slide-image ${imagesLoaded[index] ? "loaded" : ""}`}
+                className={`w-full h-full object-cover ${index === currentSlide && imagesLoaded[index] ? 'ken-burns' : ''}`}
                 onLoad={() => handleImageLoad(index)}
-                loading={index <= 2 ? "eager" : "lazy"}
+                loading={index <= 2 ? 'eager' : 'lazy'}
               />
-              <div className="luxury-slide-overlay" />
+              <div className="absolute inset-0 bg-black/40" />
             </div>
 
             {/* Content */}
-            <div className="luxury-slide-content">
-              <div className="luxury-content-wrapper">
-                <p className="luxury-subtitle">{slide.subtitle}</p>
-                <h1 className="luxury-title">{slide.title}</h1>
-                <p className="luxury-description">{slide.description}</p>
-                <button className="luxury-cta-button" aria-label="Explore collection">
+            <div className="absolute inset-0 flex items-center">
+              <div className="container-xl">
+                <p className="text-amber-400 uppercase tracking-wider text-xs md:text-sm mb-2">{slide.subtitle}</p>
+                <h1 className="text-white font-serif text-3xl md:text-5xl font-semibold mb-3 drop-shadow-md">{slide.title}</h1>
+                <p className="text-gray-100 max-w-xl text-sm md:text-base mb-5">{slide.description}</p>
+                <button className="inline-flex items-center gap-2 bg-white/90 text-gray-900 hover:bg-white px-5 py-2.5 rounded-md text-sm font-medium" aria-label="Explore collection">
                   <span>Explore Collection</span>
-                  <svg className="luxury-cta-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 </button>
@@ -221,7 +219,7 @@ export default function ImageSlider() {
 
       {/* Navigation */}
       <button
-        className="luxury-nav-btn luxury-nav-prev"
+        className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center rounded-full bg-white/70 hover:bg-white text-gray-900 shadow-md"
         onClick={prevSlide}
         disabled={isTransitioning}
         aria-label="Previous slide"
@@ -232,7 +230,7 @@ export default function ImageSlider() {
       </button>
 
       <button
-        className="luxury-nav-btn luxury-nav-next"
+        className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center rounded-full bg-white/70 hover:bg-white text-gray-900 shadow-md"
         onClick={nextSlide}
         disabled={isTransitioning}
         aria-label="Next slide"
@@ -243,11 +241,11 @@ export default function ImageSlider() {
       </button>
 
       {/* Dots */}
-      <div className="luxury-dots-container" role="tablist" aria-label="Slide pagination">
+      <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2" role="tablist" aria-label="Slide pagination">
         {slides.map((_, index) => (
           <button
             key={index}
-            className={`luxury-dot ${index === currentSlide ? "active" : ""}`}
+            className={`w-2.5 h-2.5 rounded-full border ${index === currentSlide ? 'bg-white border-white' : 'border-white/60 hover:bg-white/40'}`}
             onClick={() => goToSlide(index)}
             disabled={isTransitioning}
             aria-label={`Go to slide ${index + 1}`}
@@ -258,21 +256,17 @@ export default function ImageSlider() {
       </div>
 
       {/* Counter */}
-      <div className="luxury-counter" aria-hidden="true">
-        <span className="luxury-counter-current">
-          {String(currentSlide + 1).padStart(2, "0")}
-        </span>
-        <span className="luxury-counter-separator">/</span>
-        <span className="luxury-counter-total">
-          {String(slides.length).padStart(2, "0")}
-        </span>
+      <div className="absolute top-5 right-6 text-white/90 text-sm select-none" aria-hidden="true">
+        <span className="font-mono">{String(currentSlide + 1).padStart(2, '0')}</span>
+        <span className="mx-1">/</span>
+        <span className="font-mono">{String(slides.length).padStart(2, '0')}</span>
       </div>
 
       {/* Auto-play control */}
       <button
-        className={`luxury-autoplay-btn ${isAutoPlaying ? "playing" : "paused"}`}
+        className="absolute bottom-5 right-6 w-10 h-10 flex items-center justify-center rounded-full bg-white/70 hover:bg-white text-gray-900 shadow-md"
         onClick={() => setIsAutoPlaying(!isAutoPlaying)}
-        aria-label={isAutoPlaying ? "Pause slideshow" : "Play slideshow"}
+        aria-label={isAutoPlaying ? 'Pause slideshow' : 'Play slideshow'}
       >
         {isAutoPlaying ? (
           <svg viewBox="0 0 24 24" fill="currentColor">

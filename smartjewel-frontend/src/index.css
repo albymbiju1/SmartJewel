@@ -35,7 +35,7 @@
 
 /* simple fade+slide utility for mega menu */
 @keyframes fadeSlide { from { opacity: 0; transform: translateY(6px);} to { opacity: 1; transform: translateY(0);} }
-.animate-\[fadeSlide_.2s_ease-out\] { animation: fadeSlide .2s ease-out both; }
+.animate-\[fadeSlide_\.2s_ease-out\] { animation: fadeSlide .2s ease-out both; }
 
 
 

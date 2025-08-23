@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { LoginForm } from './LoginForm';
 import { RegisterForm } from './RegisterForm';
 import { useAuth } from '../contexts/AuthContext';
@@ -19,12 +19,6 @@ export const App: React.FC = () => {
     }
   }, [location.pathname]);
 
-  // Redirect to home if already authenticated
-  useEffect(() => {
-    if (isAuthenticated && !isLoading) {
-      navigate('/');
-    }
-  }, [isAuthenticated, isLoading, navigate]);
 
   // Show loading spinner while checking authentication
   if (isLoading) {
@@ -36,76 +30,46 @@ export const App: React.FC = () => {
         justifyContent: 'center',
         backgroundColor: '#f8f9fa'
       }}>
-        <div className="auth-card">
+        <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-xl w-full max-w-md">
           <div className="auth-header">
-            <div className="auth-logo">
-              <img src="/logo192.png" alt="SmartJewel" />
+            <div className="flex justify-center mb-4">
+              <img src="/logo192.png" alt="SmartJewel logo" width="192" height="192" className="h-10 md:h-12 w-auto object-contain" />
             </div>
-            <h1>Loading...</h1>
+            <h1 className="text-xl font-semibold text-gray-800">Loading...</h1>
           </div>
         </div>
       </div>
     );
   }
 
+  // If already authenticated, do not show this page; send user to landing
+  if (isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="text-gray-600 text-sm">Redirecting…</div>
+        {(() => { navigate('/'); return null; })()}
+      </div>
+    );
+  }
+
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f8f9fa' }}>
-      {/* Navigation Bar */}
-      <nav className="navbar">
-        <div className="navbar-container">
-          <Link to="/" className="logo">
-            <img src="/logo192.png" alt="SmartJewel" className="logo-image" />
-          </Link>
-          
-          <div className="nav-actions">
-            <Link to="/" className="nav-link">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                <polyline points="9,22 9,12 15,12 15,22"></polyline>
-              </svg>
-              Home
-            </Link>
-          </div>
-        </div>
-      </nav>
-
       {/* Main Content */}
-      <div className="auth-container">
-        {!isAuthenticated && view === 'login' && (
+      <div className="flex justify-center items-center min-h-screen p-6">
+        {view === 'login' && (
           <LoginForm
             onSuccess={(tokens, u) => {
               login(tokens, u);
+              navigate('/');
             }}
             switchToRegister={() => navigate('/register')}
           />
         )}
-        {!isAuthenticated && view === 'register' && (
+        {view === 'register' && (
           <RegisterForm
             onSuccess={() => navigate('/login')}
             switchToLogin={() => navigate('/login')}
           />
-        )}
-        {isAuthenticated && user && (
-          <div className="auth-card">
-            <div className="auth-header">
-              <div className="auth-logo">
-                <img src="/logo192.png" alt="SmartJewel" />
-              </div>
-              <h1>Welcome Back!</h1>
-              <p>Hello, {user.full_name || user.email}</p>
-            </div>
-            <div className="auth-form">
-              <button 
-                onClick={logout}
-                className="auth-button"
-              >
-                Logout
-              </button>
-              <Link to="/" className="auth-button" style={{ textDecoration: 'none', textAlign: 'center' }}>
-                Go to Dashboard
-              </Link>
-            </div>
-          </div>
         )}
       </div>
     </div>

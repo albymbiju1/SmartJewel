@@ -11,5 +11,6 @@ class Config:
     JWT_REFRESH_TTL_DAYS = int(os.getenv("JWT_REFRESH_TTL_DAYS"))
     CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS").split(",")]
     RATE_LIMIT_DEFAULT = os.getenv("RATE_LIMIT_DEFAULT")
+    ADMIN_EMAILS = [e.strip().lower() for e in (os.getenv("ADMIN_EMAILS") or "").split(",") if e.strip()]
     
 

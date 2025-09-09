@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { LoginForm } from './LoginForm';
 import { RegisterForm } from './RegisterForm';
 import { useAuth } from '../contexts/AuthContext';
+import { getRoleBasedRedirectPath } from '../utils/roleRedirect';
 
 export const App: React.FC = () => {
   const location = useLocation();
@@ -42,12 +43,13 @@ export const App: React.FC = () => {
     );
   }
 
-  // If already authenticated, do not show this page; send user to landing
-  if (isAuthenticated) {
+  // If already authenticated, do not show this page; redirect to role-based dashboard
+  if (isAuthenticated && user) {
+    const redirectPath = getRoleBasedRedirectPath(user.role?.role_name || '');
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="text-gray-600 text-sm">Redirecting…</div>
-        {(() => { navigate('/'); return null; })()}
+        <div className="text-gray-600 text-sm">Redirecting to dashboard…</div>
+        {(() => { navigate(redirectPath); return null; })()}
       </div>
     );
   }
@@ -60,7 +62,8 @@ export const App: React.FC = () => {
           <LoginForm
             onSuccess={(tokens, u) => {
               login(tokens, u);
-              navigate('/');
+              const redirectPath = getRoleBasedRedirectPath(u.role?.role_name || '');
+              navigate(redirectPath);
             }}
             switchToRegister={() => navigate('/register')}
           />

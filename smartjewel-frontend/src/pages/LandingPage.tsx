@@ -3,85 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import ImageSlider from '../components/ImageSlider';
 import { useAuth } from '../contexts/AuthContext';
 import { MENU as MEGA_MENU, NAV_TABS } from '../menuConfig';
+import { getRoleBasedRedirectPath } from '../utils/roleRedirect';
 
-const luxuryServices = [
-  {
-    title: 'Bespoke Craftsmanship',
-    desc: 'Experience the artistry of custom jewelry design, where each piece is meticulously crafted to reflect your unique vision and style.',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <path d="M9.53 16.122a3 3 0 0 0-5.78 1.128 2.25 2.25 0 0 1-2.4 2.245 4.5 4.5 0 0 0 8.4-2.245c0-.399-.078-.78-.22-1.128Zm0 0a15.998 15.998 0 0 0 3.388-1.62m-5.043-.025a15.994 15.994 0 0 1 1.622-3.395m3.42 3.42a15.995 15.995 0 0 0 4.764-4.648l3.876-5.814a1.151 1.151 0 0 0-1.597-1.597L14.146 6.32a15.996 15.996 0 0 0-4.649 4.763m3.42 3.42a6.776 6.776 0 0 0-3.42-3.42" />
-      </svg>
-    )
-  },
-  {
-    title: 'Heritage Collections',
-    desc: 'Discover timeless pieces that celebrate generations of jewelry-making excellence, featuring rare gemstones and precious metals.',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <path d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
-      </svg>
-    )
-  },
-  {
-    title: 'Personal Consultation',
-    desc: 'Receive expert guidance from our master jewelers who understand the significance of every precious moment in your life.',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <path d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-        <circle cx="12" cy="12" r="3" />
-        <path d="M12 1v6m0 6v6m11-7h-6m-6 0H1" />
-      </svg>
-    )
-  },
-  {
-    title: 'Lifetime Guarantee',
-    desc: 'Every piece comes with our commitment to excellence, ensuring your treasured jewelry maintains its brilliance for generations.',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <path d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
-      </svg>
-    )
-  },
-  {
-    title: 'Virtual Showcase',
-    desc: 'Experience our collections from the comfort of your home with immersive virtual viewing and personalized styling sessions.',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <path d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
-        <circle cx="12" cy="12" r="3" />
-      </svg>
-    )
-  },
-  {
-    title: 'Exclusive Events',
-    desc: 'Join our private collection previews and trunk shows, where you can discover limited-edition pieces before anyone else.',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <path d="M16.5 18.75h-9m9 0a3 3 0 0 1 3 3h-15a3 3 0 0 1 3-3m9 0v-3.375c0-.621-.503-1.125-1.125-1.125h-.871M7.5 18.75v-3.375c0-.621.504-1.125 1.125-1.125h.872m5.007 0H9.497m5.007 0a7.454 7.454 0 0 1-.982-3.172M9.497 14.25a7.454 7.454 0 0 0 .981-3.172M5.25 4.236c-.982.143-1.954.317-2.916.52A6.003 6.003 0 0 0 7.73 9.728M5.25 4.236V4.5c0 2.108.966 3.99 2.48 5.228M5.25 4.236V2.721C7.456 2.41 9.71 2.25 12 2.25c2.291 0 4.545.16 6.75.47v1.516M7.73 9.728a6.726 6.726 0 0 0 2.748 1.35m8.272-6.842V4.5c0 2.108-.966 3.99-2.48 5.228m2.48-5.492a46.32 46.32 0 0 1 2.916.52 6.003 6.003 0 0 1-5.395 4.972m0 0a6.726 6.726 0 0 1-2.749 1.35m0 0a6.772 6.772 0 0 1-3.044 0" />
-      </svg>
-    )
-  },
-  {
-    title: 'Concierge Service',
-    desc: 'Enjoy white-glove service with personal shopping assistance, home delivery, and priority access to our finest pieces.',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <path d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m8.25 4.5V16.5a1.5 1.5 0 0 1 3 0v1.75m-3-1.75a1.5 1.5 0 0 0 3 0m-3 0h-3m-2.25-4.5h16.5a1.125 1.125 0 0 1 1.125 1.125v2.5c0 .621-.504 1.125-1.125 1.125H3.375A1.125 1.125 0 0 1 2.25 14.75v-2.5c0-.621.504-1.125 1.125-1.125Z" />
-        <path d="M5.25 9.75V8.25a6.75 6.75 0 0 1 13.5 0v1.5" />
-      </svg>
-    )
-  },
-  {
-    title: 'Investment Advisory',
-    desc: 'Make informed decisions with our expertise in precious metals and gemstone markets, ensuring your jewelry appreciates in value.',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <path d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H4.5m-1.5 0H21m0 0h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.125a9 9 0 0 0-9-9V3.375c0-.621.504-1.125 1.125-1.125h1.5c.621 0 1.125.504 1.125 1.125v3.659M18 10.5h.008v.008H18V10.5Zm-3 0h.008v.008H15V10.5Z" />
-      </svg>
-    )
-  }
-];
 
 export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
@@ -112,6 +35,16 @@ export const LandingPage: React.FC = () => {
     };
   }, [showUserMenu]);
   
+  // Redirect authenticated users to their role-based dashboard
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      const redirectPath = getRoleBasedRedirectPath(user.role?.role_name || '');
+      if (redirectPath !== '/') {
+        navigate(redirectPath);
+      }
+    }
+  }, [isAuthenticated, user, navigate]);
+
   // Debug: Log to verify component is rendering
   console.log('LandingPage component rendering');
   
@@ -132,6 +65,18 @@ export const LandingPage: React.FC = () => {
           </div>
 
           <div className="relative flex items-center gap-2">
+            {/* Quick inventory nav (visible only for admins and inventory staff) */}
+            {isAuthenticated && (user?.role?.role_name === 'Admin' || user?.role?.role_name === 'Staff_L3') && (
+              <div className="hidden md:flex items-center gap-2 mr-2">
+                <button className="text-sm text-gray-700 hover:text-brand-burgundy" onClick={()=>navigate('/inventory/items')}>Items</button>
+                <button className="text-sm text-gray-700 hover:text-brand-burgundy" onClick={()=>navigate('/inventory/stock')}>Stock</button>
+                <button className="text-sm text-gray-700 hover:text-brand-burgundy" onClick={()=>navigate('/inventory/tags')}>Tags</button>
+                <button className="text-sm text-gray-700 hover:text-brand-burgundy" onClick={()=>navigate('/inventory/locations')}>Locations</button>
+                <button className="text-sm text-gray-700 hover:text-brand-burgundy" onClick={()=>navigate('/inventory/prices')}>Prices</button>
+                <button className="text-sm text-gray-700 hover:text-brand-burgundy" onClick={()=>navigate('/inventory/valuation')}>Valuation</button>
+                <button className="text-sm text-gray-700 hover:text-brand-burgundy" onClick={()=>navigate('/inventory/bom')}>BOM</button>
+              </div>
+            )}
             <button className="relative inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-200 text-gray-700 hover:text-brand-burgundy" title="Search" aria-label="Search" onClick={() => setShowSearch((s)=>!s)}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
             </button>
@@ -257,53 +202,158 @@ export const LandingPage: React.FC = () => {
         <ImageSlider />
       </section>
       
-      {/* Welcome Section */}
-      <section className="py-16">
-        <div className="container-xl text-center">
-          <h2 className="font-serif text-3xl md:text-4xl text-gray-800">Where Timeless Elegance Meets Modern Luxury</h2>
-          <p className="max-w-3xl mx-auto leading-8 text-gray-500 mt-3">
-            For over three generations, SmartJewel has been the epitome of fine jewelry craftsmanship.
-            Each piece in our collection tells a story of passion, precision, and unparalleled artistry,
-            designed to celebrate life's most precious moments with extraordinary beauty.
+      {/* Categories Section */}
+      <section className="py-16 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+         {/* Section Header */}
+        <div className="text-center mb-12">
+          <h1 className="font-fraunces font-normal text-[40px] leading-[48px] text-black">
+            Our Exclusive Collections
+          </h1>
+          <p className="font-fraunces font-light text-[20px] leading-[28px] text-[#56544E] mt-2">
+             Discover our carefully curated selection of fine jewelry
           </p>
-          <div className="mt-8 flex justify-center gap-12 flex-wrap">
-            <div className="text-center">
-              <div className="text-3xl font-bold text-[color:var(--brand-gold)] font-serif">75+</div>
-              <div className="text-sm text-gray-500 uppercase tracking-widest">Years of Heritage</div>
+         </div>
+
+
+          
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 lg:gap-6">
+            {/* Earrings */}
+            <div className="group cursor-pointer" onClick={() => navigate('/products?category=earrings')}>
+              <div className="aspect-square overflow-hidden rounded-lg bg-gray-100 group-hover:opacity-75 transition-opacity">
+                <img
+                  src="/earrings-cat.webp"
+                  alt="Earrings"
+                  className="w-full h-full object-cover object-center"
+                />
+              </div>
+              <h3 className="mt-4 font-fraunces font-bold text-[18px] leading-[24px] text-black text-center">Earrings</h3>
             </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-[color:var(--brand-gold)] font-serif">10,000+</div>
-              <div className="text-sm text-gray-500 uppercase tracking-widest">Satisfied Clients</div>
+
+            {/* Finger Rings */}
+            <div className="group cursor-pointer" onClick={() => navigate('/products?category=rings')}>
+              <div className="aspect-square overflow-hidden rounded-lg bg-gray-100 group-hover:opacity-75 transition-opacity">
+                <img
+                  src="/rings-cat.jpg"
+                  alt="Finger Rings"
+                  className="w-full h-full object-cover object-center"
+                />
+              </div>
+              <h3 className="mt-4 font-fraunces font-bold text-[18px] leading-[24px] text-black text-center">Finger Rings</h3>
             </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-[color:var(--brand-gold)] font-serif">500+</div>
-              <div className="text-sm text-gray-500 uppercase tracking-widest">Exclusive Designs</div>
+
+            {/* Pendants */}
+            <div className="group cursor-pointer" onClick={() => navigate('/products?category=pendants')}>
+              <div className="aspect-square overflow-hidden rounded-lg bg-gray-100 group-hover:opacity-75 transition-opacity">
+                <img
+                  src="/pendants-cat.webp"
+                  alt="Pendants"
+                  className="w-full h-full object-cover object-center"
+                />
+              </div>
+              <h3 className="mt-4 font-fraunces font-bold text-[18px] leading-[24px] text-black text-center">Pendants</h3>
+            </div>
+
+            {/* Mangalsutra */}
+            <div className="group cursor-pointer" onClick={() => navigate('/products?category=mangalsutra')}>
+              <div className="aspect-square overflow-hidden rounded-lg bg-gray-100 group-hover:opacity-75 transition-opacity">
+                <img
+                  src="/mangalsutra-cat.jpg"
+                  alt="Mangalsutra"
+                  className="w-full h-full object-cover object-center"
+                />
+              </div>
+              <h3 className="mt-4 font-fraunces font-bold text-[18px] leading-[24px] text-black text-center">Mangalsutra</h3>
+            </div>
+
+            {/* Bracelets */}
+            <div className="group cursor-pointer" onClick={() => navigate('/products?category=bracelets')}>
+              <div className="aspect-square overflow-hidden rounded-lg bg-gray-100 group-hover:opacity-75 transition-opacity">
+                <img
+                  src="/bracelets-cat.webp"
+                  alt="Bracelets"
+                  className="w-full h-full object-cover object-center"
+                />
+              </div>
+              <h3 className="mt-4 font-fraunces font-bold text-[18px] leading-[24px] text-black text-center">Bracelets</h3>
+            </div>
+
+            {/* Bangles */}
+            <div className="group cursor-pointer" onClick={() => navigate('/products?category=bangles')}>
+              <div className="aspect-square overflow-hidden rounded-lg bg-gray-100 group-hover:opacity-75 transition-opacity">
+                <img
+                  src="/bangles-cat.jpg"
+                  alt="Bangles"
+                  className="w-full h-full object-cover object-center"
+                />
+              </div>
+              <h3 className="mt-4 font-fraunces font-bold text-[18px] leading-[24px] text-black text-center">Bangles</h3>
+            </div>
+
+            {/* Chains */}
+            <div className="group cursor-pointer" onClick={() => navigate('/products?category=chains')}>
+              <div className="aspect-square overflow-hidden rounded-lg bg-gray-100 group-hover:opacity-75 transition-opacity">
+                <img
+                  src="/chains-cat.webp"
+                  alt="Chains"
+                  className="w-full h-full object-cover object-center"
+                />
+              </div>
+              <h3 className="mt-4 font-fraunces font-bold text-[18px] leading-[24px] text-black text-center">Chains</h3>
+            </div>
+
+            {/* View All */}
+            <div className="group cursor-pointer" onClick={() => navigate('/products')}>
+              <div className="aspect-square overflow-hidden rounded-lg bg-gradient-to-br from-amber-50 to-amber-100 border-2 border-dashed border-amber-300 group-hover:border-amber-400 transition-colors flex items-center justify-center">
+                <div className="text-center">
+                  <svg className="mx-auto h-12 w-12 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  <span className="mt-2 block font-fraunces font-medium text-[14px] leading-[18px] text-amber-700">View All</span>
+                </div>
+              </div>
+              <h3 className="mt-4 font-fraunces font-bold text-[18px] leading-[24px] text-black text-center">View All</h3>
             </div>
           </div>
         </div>
       </section>
-      
-      {/* Luxury Services Section */}
-      <section className="py-16 bg-gray-50">
-        <div className="container-xl">
-          <div className="text-center mb-16">
-            <h2 className="font-serif text-3xl md:text-4xl text-gray-800">The SmartJewel Experience</h2>
-            <p className="max-w-xl mx-auto text-gray-500 mt-3">
-              Discover the exceptional services that make every moment with us truly extraordinary.
-              From bespoke design to lifetime care, we ensure your jewelry journey is nothing short of perfection.
+
+      {/* Trending Now Section */}
+      <section className="py-12 bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-8">
+            <h2 className="font-fraunces font-normal text-[40px] leading-[48px] text-black mb-2">Trending Now</h2>
+            <p className="font-fraunces font-light text-[20px] leading-[28px] text-[#56544E] max-w-2xl mx-auto">
+              Discover our most sought-after pieces that are capturing hearts and setting trends.
             </p>
           </div>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            {luxuryServices.map((service, index) => (
-              <div key={index} className="bg-white border border-gray-200 rounded-xl p-8 h-full flex flex-col transition shadow-sm hover:shadow-lg">
-                <div className="mb-6 rounded-xl w-16 h-16 flex items-center justify-center text-white"
-                     style={{ background: 'linear-gradient(135deg, #fbbf24, #d97706)' }}>
-                  <div className="w-8 h-8">{service.icon}</div>
-                </div>
-                <h3 className="font-serif text-xl font-semibold text-gray-800 mb-4">{service.title}</h3>
-                <p className="text-gray-500 leading-7 text-[0.95rem] flex-1">{service.desc}</p>
+          
+          <div className="grid grid-cols-1 gap-y-10 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
+            {/* Product 1 */}
+            <div className="group cursor-pointer" onClick={() => navigate('/products?category=pendants')}>
+              <div className="aspect-square overflow-hidden rounded-lg bg-white group-hover:shadow-lg transition-shadow">
+                <img
+                  src="/auspicious-trending.jpg"
+                  alt="Traditional Gold Pendant"
+                  className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
+                />
               </div>
-            ))}
+              <h3 className="mt-4 font-fraunces font-medium text-[16px] leading-[20px] text-black">Traditional Gold Pendant</h3>
+              <p className="mt-1 font-fraunces font-light text-[14px] leading-[18px] text-[#56544E]">Heritage Collection</p>
+              <p className="mt-1 font-fraunces font-medium text-[18px] leading-[22px] text-black">₹78,500</p>
+            </div>
+          </div>
+
+          <div className="text-center mt-10">
+            <button 
+              onClick={() => navigate('/products')}
+              className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 transition-all duration-200"
+            >
+              View All Products
+              <svg className="ml-2 -mr-1 w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
           </div>
         </div>
       </section>

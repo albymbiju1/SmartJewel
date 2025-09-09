@@ -19,7 +19,28 @@ def init_extensions(app):
     db = mongo_client[app.config["MONGO_DB_NAME"]]
     app.extensions['mongo_db'] = db
 
-    cors.init_app(app, supports_credentials=False, origins=app.config["CORS_ORIGINS"])
+    # Expand CORS origins to include localhost/127.0.0.1 counterparts to avoid dev mismatches
+    cfg_origins = app.config["CORS_ORIGINS"] or []
+    expanded = set(cfg_origins)
+    for origin in list(cfg_origins):
+        try:
+            from urllib.parse import urlparse
+            p = urlparse(origin)
+            if p.scheme and p.netloc:
+                host = p.hostname
+                port = f":{p.port}" if p.port else ""
+                if host == "localhost":
+                    expanded.add(f"{p.scheme}://127.0.0.1{port}")
+                if host == "127.0.0.1":
+                    expanded.add(f"{p.scheme}://localhost{port}")
+        except Exception:
+            pass
+
+    cors.init_app(app,
+                  supports_credentials=True,
+                  origins=list(expanded),
+                  allow_headers=["Content-Type", "Authorization"],
+                  methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
     jwt.init_app(app)
     # Apply default rate limit if provided
     default_limit = app.config.get("RATE_LIMIT_DEFAULT")

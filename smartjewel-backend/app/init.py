@@ -6,13 +6,22 @@ from app.blueprints.core.routes import bp as core_bp
 from app.blueprints.auth.routes import bp as auth_bp
 
 def create_app():
-    app = Flask(__name__)
+    import os
+    app = Flask(__name__, static_folder='static')
     app.config.from_object(Config)
+    
+    # Ensure static/uploads directory exists
+    upload_dir = os.path.join(app.root_path, 'static', 'uploads')
+    os.makedirs(upload_dir, exist_ok=True)
+    
     init_extensions(app)
 
 
     app.register_blueprint(core_bp)
     app.register_blueprint(auth_bp)
+    # Inventory blueprint
+    from app.blueprints.inventory.routes import bp as inventory_bp
+    app.register_blueprint(inventory_bp)
 
     @app.route("/")
     def index():

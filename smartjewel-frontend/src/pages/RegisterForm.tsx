@@ -1,17 +1,10 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { api } from '../api';
+import { registrationSchema, RegistrationFormValues } from '../utils/validation';
 
-
-const schema = z.object({
-  name: z.string().min(2, 'Full name must be at least 2 characters').max(80, 'Full name is too long'),
-  email: z.string().email('Please enter a valid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters').max(128, 'Password is too long'),
-  phone: z.string().min(7, 'Phone number is too short').max(16, 'Phone number is too long').regex(/^[0-9\-\+ ]+$/, 'Please enter a valid phone number')
-});
-type FormValues = z.infer<typeof schema>;
+type FormValues = RegistrationFormValues;
 
 interface Props {
   onSuccess: () => void;
@@ -22,14 +15,28 @@ export const RegisterForm: React.FC<Props> = ({ onSuccess, switchToLogin }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [registerError, setRegisterError] = useState<string | null>(null);
   
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormValues>({ 
-    resolver: zodResolver(schema)
+  const { register, handleSubmit, formState: { errors, isSubmitting, isValid, touchedFields }, getValues } = useForm<FormValues>({ 
+    resolver: zodResolver(registrationSchema),
+    mode: 'onChange',
+    criteriaMode: 'all'
   });
+
+  const isFieldValid = (name: keyof FormValues) => {
+    const val = getValues(name);
+    const hasValue = typeof val === 'string' ? val.length > 0 : !!val;
+    return touchedFields[name] && !errors[name] && hasValue;
+  };
 
   const onSubmit = async (values: FormValues) => {
     try {
       setRegisterError(null);
-      await api.post('/auth/register', values);
+      // Backend expects: name, email, password, phone
+      await api.post('/auth/register', {
+        name: values.name,
+        email: values.email,
+        password: values.password,
+        phone: values.phone
+      });
       onSuccess();
     } catch (error: any) {
       const errorData = error.response?.data;
@@ -81,7 +88,7 @@ export const RegisterForm: React.FC<Props> = ({ onSuccess, switchToLogin }) => {
               type="text"
               placeholder="Enter your full name"
               {...register('name')}
-              className={`w-full h-11 rounded-md border bg-white px-10 text-sm focus:outline-none focus:ring-2 ${errors.name ? 'border-red-500 focus:ring-red-200' : 'border-gray-300 focus:ring-[color:var(--brand-gold)]/30'}`}
+              className={`w-full h-11 rounded-md border bg-white px-10 text-sm focus:outline-none focus:ring-2 ${errors.name ? 'border-red-500 focus:ring-red-200' : isFieldValid('name') ? 'border-emerald-500 focus:ring-emerald-200' : 'border-gray-300 focus:ring-[color:var(--brand-gold)]/30'}`}
             />
           </div>
           {errors.name && <span className="text-xs text-red-600 mt-1 block">{errors.name.message}</span>}
@@ -99,7 +106,7 @@ export const RegisterForm: React.FC<Props> = ({ onSuccess, switchToLogin }) => {
               type="email"
               placeholder="Enter your email"
               {...register('email')}
-              className={`w-full h-11 rounded-md border bg-white px-10 text-sm focus:outline-none focus:ring-2 ${errors.email ? 'border-red-500 focus:ring-red-200' : 'border-gray-300 focus:ring-[color:var(--brand-gold)]/30'}`}
+              className={`w-full h-11 rounded-md border bg-white px-10 text-sm focus:outline-none focus:ring-2 ${errors.email ? 'border-red-500 focus:ring-red-200' : isFieldValid('email') ? 'border-emerald-500 focus:ring-emerald-200' : 'border-gray-300 focus:ring-[color:var(--brand-gold)]/30'}`}
             />
           </div>
           {errors.email && <span className="text-xs text-red-600 mt-1 block">{errors.email.message}</span>}
@@ -116,7 +123,7 @@ export const RegisterForm: React.FC<Props> = ({ onSuccess, switchToLogin }) => {
               type="tel"
               placeholder="Enter your phone number"
               {...register('phone')}
-              className={`w-full h-11 rounded-md border bg-white px-10 text-sm focus:outline-none focus:ring-2 ${errors.phone ? 'border-red-500 focus:ring-red-200' : 'border-gray-300 focus:ring-[color:var(--brand-gold)]/30'}`}
+              className={`w-full h-11 rounded-md border bg-white px-10 text-sm focus:outline-none focus:ring-2 ${errors.phone ? 'border-red-500 focus:ring-red-200' : isFieldValid('phone') ? 'border-emerald-500 focus:ring-emerald-200' : 'border-gray-300 focus:ring-[color:var(--brand-gold)]/30'}`}
             />
           </div>
           {errors.phone && <span className="text-xs text-red-600 mt-1 block">{errors.phone.message}</span>}
@@ -135,7 +142,7 @@ export const RegisterForm: React.FC<Props> = ({ onSuccess, switchToLogin }) => {
               type={showPassword ? 'text' : 'password'}
               placeholder="Create a password"
               {...register('password')}
-              className={`w-full h-11 rounded-md border bg-white px-10 pr-10 text-sm focus:outline-none focus:ring-2 ${errors.password ? 'border-red-500 focus:ring-red-200' : 'border-gray-300 focus:ring-[color:var(--brand-gold)]/30'}`}
+              className={`w-full h-11 rounded-md border bg-white px-10 pr-10 text-sm focus:outline-none focus:ring-2 ${errors.password ? 'border-red-500 focus:ring-red-200' : isFieldValid('password') ? 'border-emerald-500 focus:ring-emerald-200' : 'border-gray-300 focus:ring-[color:var(--brand-gold)]/30'}`}
             />
             <button
               type="button"
@@ -158,12 +165,31 @@ export const RegisterForm: React.FC<Props> = ({ onSuccess, switchToLogin }) => {
           {errors.password && <span className="text-xs text-red-600 mt-1 block">{errors.password.message}</span>}
         </div>
 
+        <div>
+          <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
+          <div className="relative">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <circle cx="12" cy="16" r="1"></circle>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+            <input
+              id="confirmPassword"
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Confirm your password"
+              {...register('confirmPassword')}
+              className={`w-full h-11 rounded-md border bg-white px-10 pr-10 text-sm focus:outline-none focus:ring-2 ${errors.confirmPassword ? 'border-red-500 focus:ring-red-200' : isFieldValid('confirmPassword') ? 'border-emerald-500 focus:ring-emerald-200' : 'border-gray-300 focus:ring-[color:var(--brand-gold)]/30'}`}
+            />
+          </div>
+          {errors.confirmPassword && <span className="text-xs text-red-600 mt-1 block">{errors.confirmPassword.message}</span>}
+        </div>
+
         <div className="flex items-start gap-2 text-sm text-gray-700">
           <input type="checkbox" required className="h-4 w-4 mt-1" />
           I agree to the Terms of Service and Privacy Policy
         </div>
 
-        <button type="submit" disabled={isSubmitting} className="w-full bg-[color:var(--brand-gold)] text-white hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed rounded-md py-2.5 font-medium inline-flex items-center justify-center gap-2">
+        <button type="submit" disabled={isSubmitting || !isValid} className="w-full bg-[color:var(--brand-gold)] text-white hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed rounded-md py-2.5 font-medium inline-flex items-center justify-center gap-2">
           {isSubmitting ? (
             <>
               <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

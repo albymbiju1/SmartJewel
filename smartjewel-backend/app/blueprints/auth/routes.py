@@ -4,11 +4,17 @@ from flask_jwt_extended import (
     jwt_required, get_jwt_identity, get_jwt
 )
 from marshmallow import ValidationError
-from app.extensions import limiter
+from app.extensions import limiter, log
 from flask import current_app
 from .schemas import LoginSchema, RegistrationSchema, StaffCreateSchema
 from app.utils.security import verify_password, hash_password
 from app.utils.authz import require_roles
+try:
+    import firebase_admin
+    from firebase_admin import auth as fb_auth
+except Exception:  # pragma: no cover
+    firebase_admin = None
+    fb_auth = None
 
 bp = Blueprint("auth", __name__, url_prefix="/auth")
 login_schema = LoginSchema()
@@ -50,9 +56,19 @@ def register():
 # Role -> default permissions (extend as system grows)
 ROLE_PERMISSIONS = {
     "admin": ["*"],
+    # Read-only inventory for basic staff
     "staff_l1": ["inventory.read"],
+    # Can read and update limited fields
     "staff_l2": ["inventory.read", "inventory.update"],
-    "staff_l3": ["inventory.read", "inventory.update", "inventory.export"],
+    # Inventory Staff Type 3: can add/update stock, assign tags, and track flow
+    "staff_l3": [
+        "inventory.read",
+        "inventory.create",
+        "inventory.update",
+        "inventory.flow",
+        "inventory.tag.assign",
+        "inventory.location.read"
+    ],
     "customer": [],
 }
 
@@ -98,10 +114,12 @@ def login():
     try:
         data = login_schema.load(request.get_json() or {})
     except ValidationError as err:
+        log.warning("auth.login.validation_failed", details=err.messages)
         return jsonify({"error": "validation_failed", "details": err.messages}), 400
     
     user = db.users.find_one({"email": data["email"].lower(), "status": "active"})
     if not user or not verify_password(data["password"], user["password_hash"]):
+        log.info("auth.login.invalid_credentials", email=data.get("email"))
         return jsonify({"error": "invalid_credentials"}), 401
 
     # Fetch full role info
@@ -116,11 +134,16 @@ def login():
             "role_name": user["role"]["role_name"]
         }
     
+    roles_claim = user.get("roles") or ([role_doc["role_name"]] if role_doc and role_doc.get("role_name") else [])
+    perms_claim = role_doc["permissions"] if role_doc and role_doc.get("permissions") else user.get("permissions", [])
+
     claims = {
         "role": role_info,
-        "permissions": role_doc["permissions"] if role_doc else [],
+        "roles": roles_claim,
+        "perms": perms_claim,
         "email": user.get("email"),
         "full_name": user.get("full_name"),
+        "firebase_uid": user.get("firebase_uid"),
     }
     access = create_access_token(identity=identity, additional_claims=claims)
     refresh = create_refresh_token(identity=identity, additional_claims=claims)
@@ -130,7 +153,8 @@ def login():
         "email": user["email"],
         "full_name": user.get("full_name"),
         "role": role_info,
-        "permissions": role_doc["permissions"] if role_doc else [],
+        "roles": roles_claim,
+        "perms": perms_claim,
     }
     return jsonify({"access_token": access, "refresh_token": refresh, "user": safe_user}), 200
 
@@ -166,3 +190,333 @@ def refresh():
 def logout():
     # Stateless JWT: client drops tokens
     return jsonify({"message": "logged_out"}), 200
+
+
+@limiter.limit("10 per minute")
+@bp.post("/resolve-user")
+def resolve_user_by_email():
+    """Resolve minimal user info (role, permissions) by email for social logins.
+
+    Returns only non-sensitive fields. Rate limited.
+    """
+    db = current_app.extensions['mongo_db']
+    payload = request.get_json() or {}
+    email = (payload.get("email") or "").strip().lower()
+    if not email:
+        log.warning("auth.resolve_user.missing_email")
+        return jsonify({"error": "validation_failed", "details": {"email": ["Email is required"]}}), 400
+
+    user = db.users.find_one({"email": email, "status": "active"})
+    if not user:
+        # Not found → treat as customer on client
+        log.info("auth.resolve_user.not_found", email=email)
+        return jsonify({"found": False}), 200
+
+    # Fetch role document if present
+    role_info = {}
+    perms_claim = []
+    roles_claim = []
+    role_doc = None
+    if user.get("role"):
+        role_doc = db.roles.find_one({"_id": user["role"]["_id"]})
+        role_info = {
+            "_id": str(user["role"]["_id"]),
+            "role_name": user["role"].get("role_name")
+        }
+        if role_doc and role_doc.get("role_name"):
+            roles_claim = [role_doc["role_name"]]
+        if role_doc and role_doc.get("permissions"):
+            perms_claim = role_doc["permissions"]
+    else:
+        roles_claim = user.get("roles", [])
+        perms_claim = user.get("permissions", [])
+
+    return jsonify({
+        "found": True,
+        "user": {
+            "id": str(user.get("_id")),
+            "email": user.get("email"),
+            "full_name": user.get("full_name"),
+            "role": role_info,
+            "roles": roles_claim,
+            "perms": perms_claim,
+        }
+    }), 200
+
+
+@limiter.limit("10 per minute")
+@bp.post("/firebase-login")
+def firebase_login():
+    """Exchange a Firebase ID token for backend JWTs, mapped by email to existing user.
+
+    This links Google sign-ins to the same Mongo user (by email), ensuring the same
+    identity/claims and consistent data access.
+    """
+    if fb_auth is None:
+        log.error("auth.firebase_login.firebase_not_configured")
+        return jsonify({"error": "firebase_not_configured"}), 500
+
+    db = current_app.extensions['mongo_db']
+    body = request.get_json() or {}
+    id_token = body.get("id_token")
+    if not id_token:
+        log.warning("auth.firebase_login.missing_id_token")
+        return jsonify({"error": "validation_failed", "details": {"id_token": ["ID token is required"]}}), 400
+
+    # Firebase app should already be initialized, but if not, initialize it
+    try:
+        # Try to get the default app, if it doesn't exist, initialize it
+        firebase_admin.get_app()
+    except ValueError:
+        # App doesn't exist, initialize it
+        try:
+            from firebase_admin import credentials
+            import os, json
+
+            # 1) Prefer GOOGLE_APPLICATION_CREDENTIALS if provided (points to JSON file)
+            creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+            if creds_path and os.path.exists(creds_path):
+                # Try to read project_id from the JSON, fallback to env
+                project_id_env = os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
+                try:
+                    with open(creds_path, "r", encoding="utf-8") as fh:
+                        sa_data = json.load(fh)
+                        project_id_file = sa_data.get("project_id")
+                except Exception:
+                    project_id_file = None
+                project_id_opt = project_id_file or project_id_env
+                cred = credentials.Certificate(creds_path)
+                if project_id_opt:
+                    firebase_admin.initialize_app(cred, {"projectId": project_id_opt})
+                else:
+                    firebase_admin.initialize_app(cred)
+            else:
+                # Try common paths if GOOGLE_APPLICATION_CREDENTIALS not set
+                possible_paths = [
+                    os.path.join(os.getcwd(), "service-account.json"),
+                    os.path.join(os.path.dirname(__file__), "..", "..", "service-account.json"),
+                    os.path.join(os.path.dirname(__file__), "..", "..", "..", "service-account.json"),
+                ]
+                creds_path = None
+                for path in possible_paths:
+                    abs_path = os.path.abspath(path)
+                    if os.path.exists(abs_path):
+                        creds_path = abs_path
+                        break
+                
+                if creds_path:
+                    log.info("auth.firebase_login.found_service_account", path=creds_path)
+                    try:
+                        with open(creds_path, "r", encoding="utf-8") as fh:
+                            sa_data = json.load(fh)
+                            project_id_file = sa_data.get("project_id")
+                    except Exception:
+                        project_id_file = None
+                    project_id_env = os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
+                    project_id_opt = project_id_file or project_id_env
+                    cred = credentials.Certificate(creds_path)
+                    if project_id_opt:
+                        firebase_admin.initialize_app(cred, {"projectId": project_id_opt})
+                    else:
+                        firebase_admin.initialize_app(cred)
+                else:
+                    # 2) Try full JSON blob in env (FIREBASE_CREDENTIALS_JSON)
+                    creds_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
+                    if creds_json:
+                        try:
+                            data = json.loads(creds_json)
+                            # Normalize possible \n in private_key
+                            if isinstance(data, dict) and data.get("private_key"):
+                                data["private_key"] = data["private_key"].replace("\\n", "\n")
+                            cred = credentials.Certificate(data)
+                            project_id_opt = data.get("project_id") or os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
+                            if project_id_opt:
+                                firebase_admin.initialize_app(cred, {"projectId": project_id_opt})
+                            else:
+                                firebase_admin.initialize_app(cred)
+                        except Exception as e:
+                            raise RuntimeError(f"Invalid FIREBASE_CREDENTIALS_JSON: {e}")
+                    else:
+                        # 3) Fallback to split envs (PROJECT_ID, CLIENT_EMAIL, PRIVATE_KEY)
+                        project_id = os.getenv("FIREBASE_PROJECT_ID")
+                        client_email = os.getenv("FIREBASE_CLIENT_EMAIL")
+                        private_key = os.getenv("FIREBASE_PRIVATE_KEY")
+                        if project_id and client_email and private_key:
+                            private_key = private_key.replace("\\n", "\n")
+                            cred = credentials.Certificate({
+                                "project_id": project_id,
+                                "client_email": client_email,
+                                "private_key": private_key,
+                                "type": "service_account",
+                            })
+                            firebase_admin.initialize_app(cred, {"projectId": project_id})
+                        else:
+                            # 4) Last resort: Application Default Credentials (may work in GCP)
+                            adc_project = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("FIREBASE_PROJECT_ID")
+                            if adc_project:
+                                firebase_admin.initialize_app(options={"projectId": adc_project})
+                            else:
+                                firebase_admin.initialize_app()
+        except Exception as exc:  # pragma: no cover
+            log.error("auth.firebase_login.firebase_init_failed", error=str(exc))
+            return jsonify({"error": "firebase_init_failed", "details": str(exc)}), 500
+
+    try:
+        decoded = fb_auth.verify_id_token(id_token, check_revoked=True)
+    except fb_auth.RevokedIdTokenError:
+        log.warning("auth.firebase_login.revoked_token")
+        return jsonify({"error": "token_revoked"}), 401
+    except fb_auth.ExpiredIdTokenError:
+        log.warning("auth.firebase_login.expired_token")
+        return jsonify({"error": "token_expired"}), 401
+    except fb_auth.InvalidIdTokenError:
+        log.warning("auth.firebase_login.invalid_id_token")
+        return jsonify({"error": "invalid_id_token"}), 401
+    except Exception as e:
+        log.warning("auth.firebase_login.verify_failed", error=str(e))
+        return jsonify({"error": "verify_failed"}), 401
+
+    email = (decoded.get("email") or "").lower()
+    name = decoded.get("name") or email.split('@')[0]
+    if not email:
+        log.warning("auth.firebase_login.email_missing_in_token")
+        return jsonify({"error": "email_missing_in_token"}), 400
+
+    firebase_uid = decoded.get("uid")
+
+    # Try find by firebase_uid first
+    user_by_fuid = db.users.find_one({"$or": [{"firebase_uid": firebase_uid}, {"uid": firebase_uid}]}) if firebase_uid else None
+    user_by_email = db.users.find_one({"email": email})
+
+    # Merge duplicates if both exist and are different
+    if user_by_fuid and user_by_email and str(user_by_fuid["_id"]) != str(user_by_email["_id"]):
+        primary = user_by_email  # prefer the email/password account as primary
+        duplicate = user_by_fuid
+        log.info("auth.firebase_login.merge_users", primary=str(primary["_id"]), duplicate=str(duplicate["_id"]))
+        _merge_users(db, primary_id=primary["_id"], duplicate_id=duplicate["_id"]) 
+        # reload primary after merge
+        user = db.users.find_one({"_id": primary["_id"]})
+    else:
+        user = user_by_fuid or user_by_email
+
+    if not user:
+        # Determine default role: Admin if email in ADMIN_EMAILS, else Customer
+        admin_emails = (current_app.config.get("ADMIN_EMAILS") or [])
+        desired_role = "Admin" if email in admin_emails else "Customer"
+        role_doc = db.roles.find_one({"role_name": desired_role})
+        if not role_doc:
+            # Attempt to auto-create minimal roles if missing to avoid 500s in fresh DB
+            try:
+                customer_role = db.roles.find_one({"role_name": "Customer"})
+                if not customer_role:
+                    db.roles.insert_one({"role_name": "Customer", "permissions": ["profile.read", "orders.read"]})
+                    customer_role = db.roles.find_one({"role_name": "Customer"})
+                admin_role = db.roles.find_one({"role_name": "Admin"})
+                if not admin_role:
+                    db.roles.insert_one({"role_name": "Admin", "permissions": ["*"]})
+                    admin_role = db.roles.find_one({"role_name": "Admin"})
+                role_doc = admin_role if desired_role == "Admin" else customer_role
+            except Exception as e:
+                log.error("auth.firebase_login.role_autocreate_failed", error=str(e))
+                return jsonify({"error": "role_not_found"}), 500
+        user_doc = {
+            "full_name": name,
+            "email": email,
+            "firebase_uid": firebase_uid,
+            "uid": firebase_uid,
+            "role": {"_id": role_doc["_id"], "role_name": role_doc["role_name"]},
+            "status": "active",
+            "created_at": _now(db)
+        }
+        ins = db.users.insert_one(user_doc)
+        log.info("auth.firebase_login.user_created", user_id=str(ins.inserted_id), email=email)
+        user = db.users.find_one({"_id": ins.inserted_id})
+    else:
+        # Ensure firebase_uid is stored on primary user
+        if firebase_uid and not (user.get("firebase_uid") or user.get("uid")):
+            db.users.update_one({"_id": user["_id"]}, {"$set": {"firebase_uid": firebase_uid, "uid": firebase_uid}})
+            log.info("auth.firebase_login.attach_uid", user_id=str(user["_id"]))
+        # Optionally elevate to Admin if listed and role isn't already Admin
+        admin_emails = (current_app.config.get("ADMIN_EMAILS") or [])
+        if email in admin_emails:
+            try:
+                if not (user.get("role") and user["role"].get("role_name") == "Admin"):
+                    admin_role = db.roles.find_one({"role_name": "Admin"})
+                    if admin_role:
+                        db.users.update_one({"_id": user["_id"]}, {"$set": {"role": {"_id": admin_role["_id"], "role_name": "Admin"}}})
+                        log.info("auth.firebase_login.promote_admin", user_id=str(user["_id"]))
+                        user = db.users.find_one({"_id": user["_id"]})
+            except Exception:
+                pass
+
+    # Prepare role/claims similar to password login
+    role_info = {}
+    role_doc = None
+    if user.get("role"):
+        role_doc = db.roles.find_one({"_id": user["role"]["_id"]})
+        role_info = {"_id": str(user["role"]["_id"]), "role_name": user["role"].get("role_name")}
+    roles_claim = user.get("roles") or ([role_doc["role_name"]] if role_doc and role_doc.get("role_name") else [])
+    perms_claim = role_doc["permissions"] if role_doc and role_doc.get("permissions") else user.get("permissions", [])
+
+    identity = str(user["_id"])
+    claims = {
+        "role": role_info,
+        "roles": roles_claim,
+        "perms": perms_claim,
+        "email": user.get("email"),
+        "full_name": user.get("full_name"),
+        "firebase_uid": user.get("firebase_uid") or user.get("uid"),
+    }
+    access = create_access_token(identity=identity, additional_claims=claims)
+    refresh = create_refresh_token(identity=identity, additional_claims=claims)
+
+    safe_user = {
+        "id": identity,
+        "email": user["email"],
+        "full_name": user.get("full_name"),
+        "role": role_info,
+        "roles": roles_claim,
+        "perms": perms_claim,
+    }
+    log.info("auth.firebase_login.success", user_id=identity, email=user.get("email"))
+    return jsonify({"access_token": access, "refresh_token": refresh, "user": safe_user}), 200
+
+
+def _now(db):
+    # Use Mongo server time if available
+    try:
+        is_master = db.command("isMaster")
+        return is_master.get("localTime")
+    except Exception:
+        from datetime import datetime
+        return datetime.utcnow()
+
+
+def _merge_users(db, primary_id, duplicate_id):
+    """Merge duplicate user into primary.
+
+    - Reassigns references in known collections from duplicate_id -> primary_id
+    - Deletes duplicate user document
+    """
+    # Collections and fields referencing user IDs
+    ref_updates = [
+        ("stock_movements", "created_by"),
+        ("tags", "assigned_by"),
+    ]
+    for coll, field in ref_updates:
+        res = db[coll].update_many({field: duplicate_id}, {"$set": {field: primary_id}})
+        log.info("auth.merge.ref_update", collection=coll, field=field, modified=res.modified_count)
+
+    # Finally, remove duplicate user
+    # Also update created_by_uid/assigned_by_uid if present
+    primary = db.users.find_one({"_id": primary_id})
+    duplicate = db.users.find_one({"_id": duplicate_id})
+    p_uid = (primary or {}).get("firebase_uid")
+    d_uid = (duplicate or {}).get("firebase_uid")
+    if p_uid and d_uid and p_uid != d_uid:
+        res1 = db.stock_movements.update_many({"created_by_uid": d_uid}, {"$set": {"created_by_uid": p_uid}})
+        res2 = db.tags.update_many({"assigned_by_uid": d_uid}, {"$set": {"assigned_by_uid": p_uid}})
+        log.info("auth.merge.uid_update", stock_movements=res1.modified_count, tags=res2.modified_count)
+
+    db.users.delete_one({"_id": duplicate_id})
+    log.info("auth.merge.duplicate_deleted", duplicate_id=str(duplicate_id))

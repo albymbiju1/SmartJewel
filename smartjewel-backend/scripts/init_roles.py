@@ -14,15 +14,15 @@ roles = [
     },
     {
         "role_name": "Staff_L1",
-        "permissions": ["inventory.read", "orders.read"]
+        "permissions": ["inventory.read", "inventory.create", "inventory.update", "orders.read"]
     },
     {
         "role_name": "Staff_L2", 
-        "permissions": ["inventory.read", "inventory.update", "orders.read", "orders.update"]
+        "permissions": ["inventory.read", "inventory.create", "inventory.update", "orders.read", "orders.update"]
     },
     {
         "role_name": "Staff_L3",
-        "permissions": ["inventory.read", "inventory.update", "inventory.export", "orders.read", "orders.update", "orders.export"]
+        "permissions": ["inventory.read", "inventory.create", "inventory.update", "inventory.export", "inventory.flow", "inventory.tag.assign", "inventory.location.read", "inventory.valuation.read", "inventory.bom.manage", "orders.read", "orders.update", "orders.export"]
     },
     {
         "role_name": "Admin",

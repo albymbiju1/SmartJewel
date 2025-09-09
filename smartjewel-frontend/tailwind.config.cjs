@@ -9,6 +9,7 @@ module.exports = {
     extend: {
       fontFamily: {
         serif: ['Playfair Display', 'serif'],
+        fraunces: ['Fraunces', 'serif'],
       },
       colors: {
         brand: {

@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 
 interface Product {
@@ -28,12 +28,22 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
   title, 
   description = "Discover our exquisite collection of handcrafted jewelry" 
 }) => {
+  const [searchParams] = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedMetal, setSelectedMetal] = useState('');
-  const [priceRange, setPriceRange] = useState('');
+  const [selectedMetal, setSelectedMetal] = useState<string>(searchParams.get('metal') || '');
+  const [priceRange, setPriceRange] = useState<string>(searchParams.get('price') || '');
+  const urlCategories = useMemo(() => (searchParams.get('categories') || '').split(',').filter(Boolean), [searchParams]);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Keep local state synced if URL params change
+    setSelectedMetal(searchParams.get('metal') || '');
+    setPriceRange(searchParams.get('price') || '');
+  }, [searchParams]);
+
+  const normalizeCategory = (c: string) => c.toLowerCase().replace(/\s+/g, '-');
 
   useEffect(() => {
     const loadProducts = async () => {
@@ -42,81 +52,56 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
         const response = await api.get('/inventory/products');
         let filteredProducts = response.data.products || [];
 
-        // Filter by category if specified
+        // Optional single-category pre-filter for existing routes
         if (category && category !== 'all') {
           const categoryLower = category.toLowerCase();
-          
-          // Handle specific jewelry categories
           if (categoryLower === 'bangles') {
             filteredProducts = filteredProducts.filter((item: Product) => 
-              item.category.toLowerCase() === 'bangles' ||
-              item.name.toLowerCase().includes('bangle')
+              item.category.toLowerCase() === 'bangles' || item.name.toLowerCase().includes('bangle')
             );
           } else if (categoryLower === 'chains') {
             filteredProducts = filteredProducts.filter((item: Product) => 
-              item.category.toLowerCase() === 'chains' ||
-              item.name.toLowerCase().includes('chain')
+              item.category.toLowerCase() === 'chains' || item.name.toLowerCase().includes('chain')
             );
           } else if (categoryLower === 'pendants') {
             filteredProducts = filteredProducts.filter((item: Product) => 
-              item.category.toLowerCase() === 'pendants' ||
-              item.name.toLowerCase().includes('pendant')
+              item.category.toLowerCase() === 'pendants' || item.name.toLowerCase().includes('pendant')
             );
           } else if (categoryLower === 'mangalsutra') {
             filteredProducts = filteredProducts.filter((item: Product) => 
-              item.category.toLowerCase() === 'mangalsutra' ||
-              item.name.toLowerCase().includes('mangalsutra')
+              item.category.toLowerCase() === 'mangalsutra' || item.name.toLowerCase().includes('mangalsutra')
             );
           } else if (categoryLower === 'bracelets') {
             filteredProducts = filteredProducts.filter((item: Product) => 
-              item.category.toLowerCase() === 'bracelets' ||
-              item.name.toLowerCase().includes('bracelet')
+              item.category.toLowerCase() === 'bracelets' || item.name.toLowerCase().includes('bracelet')
             );
           } else if (categoryLower === 'rings') {
             filteredProducts = filteredProducts.filter((item: Product) => 
-              item.category.toLowerCase() === 'rings' ||
-              item.name.toLowerCase().includes('ring')
+              item.category.toLowerCase() === 'rings' || item.name.toLowerCase().includes('ring')
             );
           } else if (categoryLower === 'earrings') {
             filteredProducts = filteredProducts.filter((item: Product) => 
-              item.category.toLowerCase() === 'earrings' ||
-              item.name.toLowerCase().includes('earring')
+              item.category.toLowerCase() === 'earrings' || item.name.toLowerCase().includes('earring')
             );
           } else if (categoryLower === 'necklaces') {
             filteredProducts = filteredProducts.filter((item: Product) => 
-              item.category.toLowerCase() === 'necklaces' ||
-              item.category.toLowerCase() === 'necklace' ||
-              item.name.toLowerCase().includes('necklace')
+              item.category.toLowerCase() === 'necklaces' || item.category.toLowerCase() === 'necklace' || item.name.toLowerCase().includes('necklace')
             );
-          }
-          // Handle material/collection categories
-          else if (categoryLower === 'gold') {
-            filteredProducts = filteredProducts.filter((item: Product) => 
-              item.metal.toLowerCase().includes('gold')
-            );
+          } else if (categoryLower === 'gold') {
+            filteredProducts = filteredProducts.filter((item: Product) => item.metal.toLowerCase().includes('gold'));
           } else if (categoryLower === 'diamond') {
             filteredProducts = filteredProducts.filter((item: Product) => 
-              item.metal.toLowerCase().includes('diamond') || 
-              item.name.toLowerCase().includes('diamond') ||
-              item.description?.toLowerCase().includes('diamond')
+              item.metal.toLowerCase().includes('diamond') || item.name.toLowerCase().includes('diamond') || item.description?.toLowerCase().includes('diamond')
             );
           } else if (categoryLower === 'wedding') {
             filteredProducts = filteredProducts.filter((item: Product) => 
-              item.category.toLowerCase().includes('mangalsutra') ||
-              item.category.toLowerCase().includes('necklace') ||
-              item.category.toLowerCase().includes('ring') ||
-              item.name.toLowerCase().includes('wedding') ||
-              item.name.toLowerCase().includes('bridal')
+              item.category.toLowerCase().includes('mangalsutra') || item.category.toLowerCase().includes('necklace') || item.category.toLowerCase().includes('ring') || item.name.toLowerCase().includes('wedding') || item.name.toLowerCase().includes('bridal')
             );
           } else if (categoryLower === 'collections') {
-            // Premium collections (higher price items)
             filteredProducts = filteredProducts.filter((item: Product) => 
-              (item.price && item.price > 50000) || 
-              item.name.toLowerCase().includes('collection') ||
-              item.description?.toLowerCase().includes('collection')
+              (item.price && item.price > 50000) || item.name.toLowerCase().includes('collection') || item.description?.toLowerCase().includes('collection')
             );
           } else if (categoryLower === 'gifting') {
-            // Suitable for gifting (moderate price items)
             filteredProducts = filteredProducts.filter((item: Product) => 
               ['Earrings', 'Pendants', 'Bracelets', 'Chains', 'Rings'].includes(item.category)
             );
@@ -140,16 +125,26 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
       product.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
       product.description?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesMetal = !selectedMetal || 
-      product.metal.toLowerCase().includes(selectedMetal.toLowerCase());
+    const matchesMetal = !selectedMetal || product.metal.toLowerCase().includes(selectedMetal.toLowerCase());
 
-    const matchesPrice = !priceRange || 
+    const matchesPrice = !priceRange ||
       (priceRange === 'under-25k' && (product.price || 0) < 25000) ||
       (priceRange === '25k-50k' && (product.price || 0) >= 25000 && (product.price || 0) <= 50000) ||
       (priceRange === '50k-100k' && (product.price || 0) > 50000 && (product.price || 0) <= 100000) ||
       (priceRange === 'above-100k' && (product.price || 0) > 100000);
 
-    return matchesSearch && matchesMetal && matchesPrice;
+    // Match multiple URL categories if provided
+    const matchesCategories = !urlCategories.length || (() => {
+      const pc = normalizeCategory(product.category);
+      return urlCategories.some(uc => {
+        const ucText = uc.replace('-', ' ');
+        return pc === uc || pc.includes(uc) || uc.includes(pc) ||
+          product.name.toLowerCase().includes(ucText) ||
+          product.category.toLowerCase().includes(ucText);
+      });
+    })();
+
+    return matchesSearch && matchesMetal && matchesPrice && matchesCategories;
   });
 
   const uniqueMetals = [...new Set(products.map(p => p.metal))];

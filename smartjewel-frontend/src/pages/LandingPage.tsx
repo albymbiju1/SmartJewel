@@ -4,6 +4,7 @@ import ImageSlider from '../components/ImageSlider';
 import { useAuth } from '../contexts/AuthContext';
 import { MENU as MEGA_MENU, NAV_TABS } from '../menuConfig';
 import { getRoleBasedRedirectPath } from '../utils/roleRedirect';
+import { MegaMenuFilter } from '../components/MegaMenuFilter';
 
 
 export const LandingPage: React.FC = () => {
@@ -169,28 +170,42 @@ export const LandingPage: React.FC = () => {
           {/* Mega menu appears for the hovered item, with gentle motion like Tanishq */}
           {activeMenu && (
             <div className="absolute left-0 top-12 w-full max-w-[1100px] hidden md:block">
-              <div className="grid grid-cols-3 md:grid-cols-4 gap-6 p-6 bg-white border border-gray-200 rounded-xl shadow-2xl animate-[fadeSlide_.2s_ease-out]" onMouseEnter={() => setActiveMenu(activeMenu)}>
-                {/* Columns */}
-                {(MEGA_MENU[activeMenu!]?.columns || MEGA_MENU['all'].columns).map((col) => (
-                  <div key={col.title}>
-                    <div className="font-serif text-sm text-gray-900 mb-2">{col.title}</div>
-                    {col.items.map((it) => (
-                      <a key={it.label} href={it.href || '#'} className="block text-gray-600 text-sm my-1 no-underline hover:text-brand-burgundy cursor-pointer">{it.label}</a>
-                    ))}
-                  </div>
-                ))}
-                {/* Promo column if present */}
-                {MEGA_MENU[activeMenu]?.promo && (
-                  <div className="hidden md:flex flex-col gap-3">
-                    <img src={MEGA_MENU[activeMenu]!.promo!.image} alt="promo" className="w-full h-28 object-cover rounded-lg" />
-                    <div className="text-sm font-medium text-gray-900">{MEGA_MENU[activeMenu]!.promo!.title}</div>
-                    <a className="inline-flex items-center gap-1 text-brand-burgundy text-sm no-underline hover:underline" href={MEGA_MENU[activeMenu]!.promo!.href}>
-                      {MEGA_MENU[activeMenu]!.promo!.cta}
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
-                    </a>
-                  </div>
-                )}
-              </div>
+              {/* For All, Gold, Diamond, Wedding, Collections, Gifting tabs show interactive mega menu with optional preset metal */}
+              {( ['all','gold','diamond','wedding','collections','gifting'].includes(activeMenu) ) ? (
+                <MegaMenuFilter
+                  onApplied={() => setActiveMenu(null)}
+                  promo={MEGA_MENU[activeMenu]?.promo || null}
+                  presetMetal={
+                    activeMenu === 'gold' ? 'Gold' :
+                    activeMenu === 'diamond' ? 'Diamond' :
+                    activeMenu === 'wedding' ? 'Gold' :
+                    null
+                  }
+                />
+              ) : (
+                <div className="grid grid-cols-3 md:grid-cols-4 gap-6 p-6 bg-white border border-gray-200 rounded-xl shadow-2xl animate-[fadeSlide_.2s_ease-out]" onMouseEnter={() => setActiveMenu(activeMenu)}>
+                  {/* Columns */}
+                  {(MEGA_MENU[activeMenu!]?.columns || MEGA_MENU['all'].columns).map((col) => (
+                    <div key={col.title}>
+                      <div className="font-serif text-sm text-gray-900 mb-2">{col.title}</div>
+                      {col.items.map((it) => (
+                        <a key={it.label} href={it.href || '#'} className="block text-gray-600 text-sm my-1 no-underline hover:text-brand-burgundy cursor-pointer">{it.label}</a>
+                      ))}
+                    </div>
+                  ))}
+                  {/* Promo column if present */}
+                  {MEGA_MENU[activeMenu]?.promo && (
+                    <div className="hidden md:flex flex-col gap-3">
+                      <img src={MEGA_MENU[activeMenu]!.promo!.image} alt="promo" className="w-full h-28 object-cover rounded-lg" />
+                      <div className="text-sm font-medium text-gray-900">{MEGA_MENU[activeMenu]!.promo!.title}</div>
+                      <a className="inline-flex items-center gap-1 text-brand-burgundy text-sm no-underline hover:underline" href={MEGA_MENU[activeMenu]!.promo!.href}>
+                        {MEGA_MENU[activeMenu]!.promo!.cta}
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

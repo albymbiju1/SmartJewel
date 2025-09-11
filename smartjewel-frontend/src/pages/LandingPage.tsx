@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ImageSlider from '../components/ImageSlider';
 import { motion } from 'framer-motion';
@@ -14,6 +14,10 @@ export const LandingPage: React.FC = () => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  // Temporary multi-select state while a mega menu is open
+  const [mmCategories, setMmCategories] = useState<string[]>([]);
+  const [mmMetals, setMmMetals] = useState<string[]>([]);
+  const [mmPrices, setMmPrices] = useState<string[]>([]);
   const userMenuRef = useRef<HTMLDivElement | HTMLButtonElement>(null);
 
   // Close user menu when clicking outside
@@ -36,6 +40,19 @@ export const LandingPage: React.FC = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showUserMenu]);
+
+  const normalizeCategory = (c: string) => c.toLowerCase().replace(/\s+/g, '-');
+  const priceLabelToSlug = (label: string) => {
+    const t = label.toLowerCase();
+    if (t.includes('under') && (t.includes('25') || t.includes('25k'))) return 'under-25k';
+    if (t.includes('25') && (t.includes('50') || t.includes('50k'))) return '25k-50k';
+    if ((t.includes('50') && t.includes('100')) || t.includes('100k')) return '50k-100k';
+    if (t.includes('above') || t.includes('1,00,000') || t.includes('100k')) return 'above-100k';
+    return '';
+  };
+
+  // Reset temp selections when switching tabs
+  useEffect(() => { setMmCategories([]); setMmMetals([]); setMmPrices([]); }, [activeMenu]);
   
   // Redirect authenticated users to their role-based dashboard
   useEffect(() => {
@@ -131,7 +148,7 @@ export const LandingPage: React.FC = () => {
         {/* Category navigation with mega menu */}
         <div className="border-b border-gray-100 bg-white sticky top-0 z-header">
           <div className="container-xl relative h-12 flex items-center" onMouseLeave={() => setActiveMenu(null)}>
-            <ul className="list-none flex gap-7 items-center relative" role="menubar" aria-label="Category Navigation" onKeyDown={(e)=>{
+            <ul className="list-none flex gap-6 items-center relative" role="menubar" aria-label="Category Navigation" onKeyDown={(e)=>{
               const items = NAV_TABS.map(t => t.key);
               const idx = activeMenu ? items.indexOf(activeMenu) : -1;
               if(e.key==='Escape'){ setActiveMenu(null); }
@@ -150,63 +167,101 @@ export const LandingPage: React.FC = () => {
             {NAV_TABS.map((item)=> (
               <li key={item.key} className="relative" role="none">
                 <button
-                  className={`relative border-0 bg-transparent text-sm tracking-wide cursor-pointer py-2 transition-colors ${activeMenu===item.key ? 'text-brand-burgundy font-semibold' : 'text-gray-700 hover:text-brand-burgundy'}`}
+                  className={`border-0 bg-transparent text-[15px] font-medium cursor-pointer py-2 transition-colors border-b-2 border-transparent ${activeMenu===item.key ? 'text-gray-900 border-brand-burgundy' : 'text-gray-700 hover:text-gray-900 hover:border-gray-300'}`}
                   role="menuitem"
                   aria-haspopup="true"
                   aria-expanded={activeMenu===item.key}
                   onMouseEnter={() => setActiveMenu(item.key)}
                   onFocus={() => setActiveMenu(item.key)}
                 >
-                  <span className="inline-flex items-center gap-1.5">
-                    {item.label}
-                    <svg className={`transition-transform ${activeMenu===item.key ? 'rotate-180 text-brand-burgundy' : 'rotate-0 text-gray-400'}`} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6"></path></svg>
-                  </span>
-                  {activeMenu===item.key && (
-                    <span className="absolute left-0 -bottom-3 block h-[2px] w-full bg-brand-burgundy"></span>
-                  )}
+                  {item.label}
                 </button>
               </li>
             ))}
           </ul>
-          {/* Mega menu appears for the hovered item, with gentle motion like Tanishq */}
+          {/* Mega menu appears for the hovered item, classic columns with multi-select */}
           {activeMenu && (
             <div className="absolute left-0 top-12 w-full max-w-[1100px] hidden md:block">
-              {/* For All, Gold, Diamond, Wedding, Collections, Gifting tabs show interactive mega menu with optional preset metal */}
-              {( ['all','gold','diamond','wedding','collections','gifting'].includes(activeMenu) ) ? (
-                <MegaMenuFilter
-                  onApplied={() => setActiveMenu(null)}
-                  promo={MEGA_MENU[activeMenu]?.promo || null}
-                  presetMetal={
-                    activeMenu === 'gold' ? 'Gold' :
-                    activeMenu === 'diamond' ? 'Diamond' :
-                    activeMenu === 'wedding' ? 'Gold' :
-                    null
-                  }
-                />
-              ) : (
-                <div className="grid grid-cols-3 md:grid-cols-4 gap-6 p-6 bg-white border border-gray-200 rounded-xl shadow-2xl animate-[fadeSlide_.2s_ease-out]" onMouseEnter={() => setActiveMenu(activeMenu)}>
-                  {/* Columns */}
-                  {(MEGA_MENU[activeMenu!]?.columns || MEGA_MENU['all'].columns).map((col) => (
-                    <div key={col.title}>
-                      <div className="font-serif text-sm text-gray-900 mb-2">{col.title}</div>
-                      {col.items.map((it) => (
-                        <a key={it.label} href={it.href || '#'} className="block text-gray-600 text-sm my-1 no-underline hover:text-brand-burgundy cursor-pointer">{it.label}</a>
-                      ))}
+              <div className="grid grid-cols-3 md:grid-cols-4 gap-6 p-6 bg-white border border-gray-200 rounded-xl shadow-2xl animate-[fadeSlide_.2s_ease-out]" onMouseEnter={() => setActiveMenu(activeMenu)}>
+                {/* Columns */}
+                {(MEGA_MENU[activeMenu!]?.columns || MEGA_MENU['all'].columns).map((col) => (
+                  <div key={col.title}>
+                    <div className="flex items-center gap-2 pb-2 mb-3 border-b border-gray-100">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-gradient-to-br from-amber-400 to-rose-400 shadow"></span>
+                      <div className="text-[11px] uppercase tracking-[0.08em] text-gray-700 font-semibold">{col.title}</div>
                     </div>
-                  ))}
-                  {/* Promo column if present */}
-                  {MEGA_MENU[activeMenu]?.promo && (
-                    <div className="hidden md:flex flex-col gap-3">
-                      <img src={MEGA_MENU[activeMenu]!.promo!.image} alt="promo" className="w-full h-28 object-cover rounded-lg" />
-                      <div className="text-sm font-medium text-gray-900">{MEGA_MENU[activeMenu]!.promo!.title}</div>
-                      <a className="inline-flex items-center gap-1 text-brand-burgundy text-sm no-underline hover:underline" href={MEGA_MENU[activeMenu]!.promo!.href}>
-                        {MEGA_MENU[activeMenu]!.promo!.cta}
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
-                      </a>
-                    </div>
-                  )}
+                    {col.items.map((it) => {
+                      const isCategory = col.title.toLowerCase().includes('category') || col.title.toLowerCase()==='for her' || col.title.toLowerCase()==='for him' || col.title.toLowerCase()==='trending' || col.title.toLowerCase()==='themes' || col.title.toLowerCase()==='by occasion';
+                      const isMetal = col.title.toLowerCase().includes('metal') && (it.label.toLowerCase()==='gold' || it.label.toLowerCase()==='diamond' || it.label.toLowerCase()==='platinum' || it.label.toLowerCase()==='silver');
+                      const isPrice = col.title.toLowerCase().includes('price') || col.title.toLowerCase().includes('budget');
+                      const catSlug = normalizeCategory(it.label);
+                      const priceSlug = priceLabelToSlug(it.label);
+                      const metalSlug = it.label.toLowerCase();
+                      const selected = (isCategory && mmCategories.includes(catSlug)) || (isMetal && mmMetals.includes(metalSlug)) || (isPrice && priceSlug && mmPrices.includes(priceSlug));
+                      const onClick = (e: React.MouseEvent) => {
+                        e.preventDefault();
+                        if (isCategory) {
+                          setMmCategories(prev => prev.includes(catSlug) ? prev.filter(x=>x!==catSlug) : [...prev, catSlug]);
+                        } else if (isMetal) {
+                          setMmMetals(prev => prev.includes(metalSlug) ? prev.filter(x=>x!==metalSlug) : [...prev, metalSlug]);
+                        } else if (isPrice && priceSlug) {
+                          setMmPrices(prev => prev.includes(priceSlug) ? prev.filter(x=>x!==priceSlug) : [...prev, priceSlug]);
+                        } else if (it.href) {
+                          navigate(it.href);
+                          setActiveMenu(null);
+                        }
+                      };
+                      return (
+                        <a
+                          key={it.label}
+                          href={it.href || '#'}
+                          onClick={onClick}
+                          className={`group relative block text-gray-700 text-sm my-1 no-underline rounded px-1 transition-colors duration-150 hover:text-brand-burgundy hover:bg-amber-50/50 ${selected ? 'text-brand-burgundy font-medium bg-amber-50/60' : ''}`}
+                        >
+                          <span className="inline-flex items-center gap-2">
+                            {selected && (
+                              <svg width="12" height="12" viewBox="0 0 24 24" className="text-amber-500 drop-shadow-[0_1px_1px_rgba(0,0,0,0.15)]">
+                                <defs>
+                                  <linearGradient id="sjStar" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" stopColor="#f59e0b" />
+                                    <stop offset="100%" stopColor="#f43f5e" />
+                                  </linearGradient>
+                                </defs>
+                                <path fill="url(#sjStar)" d="M12 2l1.8 4.9L19 8.2l-4 3.1 1.4 5.2L12 13.8 7.6 16.5 9 11.3 5 8.2l5.2-1.3L12 2z"/>
+                              </svg>
+                            )}
+                            {it.label}
+                          </span>
+                          <span className="pointer-events-none absolute left-0 -bottom-0.5 h-[2px] w-0 bg-gradient-to-r from-amber-400 to-rose-400 transition-all duration-200 group-hover:w-full"></span>
+                        </a>
+                      );
+                    })}
+                  </div>
+                ))}
+                {/* Promo column if present */}
+                {MEGA_MENU[activeMenu]?.promo && (
+                  <div className="hidden md:flex flex-col gap-3">
+                    <img src={MEGA_MENU[activeMenu]!.promo!.image} alt="promo" className="w-full h-28 object-cover rounded-lg" />
+                    <div className="text-sm font-medium text-gray-900">{MEGA_MENU[activeMenu]!.promo!.title}</div>
+                    <a className="inline-flex items-center gap-1 text-brand-burgundy text-sm no-underline hover:underline" href={MEGA_MENU[activeMenu]!.promo!.href}>
+                      {MEGA_MENU[activeMenu]!.promo!.cta}
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
+                    </a>
+                  </div>
+                )}
+                {/* Actions row */}
+                <div className="col-span-full flex items-center justify-end gap-3 pt-2">
+                  <button className="px-3 py-1.5 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm" onClick={()=>{ setMmCategories([]); setMmMetals([]); setMmPrices([]); }}>Clear</button>
+                  <button className="px-3 py-1.5 rounded-md bg-brand-burgundy text-white hover:opacity-90 text-sm" onClick={()=>{
+                    const search = new URLSearchParams();
+                    if (mmCategories.length) search.set('categories', mmCategories.join(','));
+                    if (mmMetals.length) search.set('metal', mmMetals.join(','));
+                    if (mmPrices.length) search.set('price', mmPrices.join(','));
+                    navigate(`/products?${search.toString()}`);
+                    setActiveMenu(null);
+                  }}>Apply</button>
                 </div>
-              )}
+              </div>
             </div>
           )}
         </div>

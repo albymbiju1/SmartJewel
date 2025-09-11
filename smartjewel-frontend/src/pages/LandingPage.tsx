@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ImageSlider from '../components/ImageSlider';
+import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { MENU as MEGA_MENU, NAV_TABS } from '../menuConfig';
 import { getRoleBasedRedirectPath } from '../utils/roleRedirect';
+import { MegaMenuFilter } from '../components/MegaMenuFilter';
 
 
 export const LandingPage: React.FC = () => {
@@ -169,28 +171,42 @@ export const LandingPage: React.FC = () => {
           {/* Mega menu appears for the hovered item, with gentle motion like Tanishq */}
           {activeMenu && (
             <div className="absolute left-0 top-12 w-full max-w-[1100px] hidden md:block">
-              <div className="grid grid-cols-3 md:grid-cols-4 gap-6 p-6 bg-white border border-gray-200 rounded-xl shadow-2xl animate-[fadeSlide_.2s_ease-out]" onMouseEnter={() => setActiveMenu(activeMenu)}>
-                {/* Columns */}
-                {(MEGA_MENU[activeMenu!]?.columns || MEGA_MENU['all'].columns).map((col) => (
-                  <div key={col.title}>
-                    <div className="font-serif text-sm text-gray-900 mb-2">{col.title}</div>
-                    {col.items.map((it) => (
-                      <a key={it.label} href={it.href || '#'} className="block text-gray-600 text-sm my-1 no-underline hover:text-brand-burgundy cursor-pointer">{it.label}</a>
-                    ))}
-                  </div>
-                ))}
-                {/* Promo column if present */}
-                {MEGA_MENU[activeMenu]?.promo && (
-                  <div className="hidden md:flex flex-col gap-3">
-                    <img src={MEGA_MENU[activeMenu]!.promo!.image} alt="promo" className="w-full h-28 object-cover rounded-lg" />
-                    <div className="text-sm font-medium text-gray-900">{MEGA_MENU[activeMenu]!.promo!.title}</div>
-                    <a className="inline-flex items-center gap-1 text-brand-burgundy text-sm no-underline hover:underline" href={MEGA_MENU[activeMenu]!.promo!.href}>
-                      {MEGA_MENU[activeMenu]!.promo!.cta}
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
-                    </a>
-                  </div>
-                )}
-              </div>
+              {/* For All, Gold, Diamond, Wedding, Collections, Gifting tabs show interactive mega menu with optional preset metal */}
+              {( ['all','gold','diamond','wedding','collections','gifting'].includes(activeMenu) ) ? (
+                <MegaMenuFilter
+                  onApplied={() => setActiveMenu(null)}
+                  promo={MEGA_MENU[activeMenu]?.promo || null}
+                  presetMetal={
+                    activeMenu === 'gold' ? 'Gold' :
+                    activeMenu === 'diamond' ? 'Diamond' :
+                    activeMenu === 'wedding' ? 'Gold' :
+                    null
+                  }
+                />
+              ) : (
+                <div className="grid grid-cols-3 md:grid-cols-4 gap-6 p-6 bg-white border border-gray-200 rounded-xl shadow-2xl animate-[fadeSlide_.2s_ease-out]" onMouseEnter={() => setActiveMenu(activeMenu)}>
+                  {/* Columns */}
+                  {(MEGA_MENU[activeMenu!]?.columns || MEGA_MENU['all'].columns).map((col) => (
+                    <div key={col.title}>
+                      <div className="font-serif text-sm text-gray-900 mb-2">{col.title}</div>
+                      {col.items.map((it) => (
+                        <a key={it.label} href={it.href || '#'} className="block text-gray-600 text-sm my-1 no-underline hover:text-brand-burgundy cursor-pointer">{it.label}</a>
+                      ))}
+                    </div>
+                  ))}
+                  {/* Promo column if present */}
+                  {MEGA_MENU[activeMenu]?.promo && (
+                    <div className="hidden md:flex flex-col gap-3">
+                      <img src={MEGA_MENU[activeMenu]!.promo!.image} alt="promo" className="w-full h-28 object-cover rounded-lg" />
+                      <div className="text-sm font-medium text-gray-900">{MEGA_MENU[activeMenu]!.promo!.title}</div>
+                      <a className="inline-flex items-center gap-1 text-brand-burgundy text-sm no-underline hover:underline" href={MEGA_MENU[activeMenu]!.promo!.href}>
+                        {MEGA_MENU[activeMenu]!.promo!.cta}
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -206,105 +222,161 @@ export const LandingPage: React.FC = () => {
       <section className="py-16 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
          {/* Section Header */}
-        <div className="text-center mb-12">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.2 }}
+          transition={{ duration: 0.6, ease: 'easeOut' }}
+          className="text-center mb-12"
+        >
           <h1 className="font-fraunces font-normal text-[40px] leading-[48px] text-black">
             Our Exclusive Collections
           </h1>
           <p className="font-fraunces font-light text-[20px] leading-[28px] text-[#56544E] mt-2">
              Discover our carefully curated selection of fine jewelry
           </p>
-         </div>
-
+        </motion.div>
 
           
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 lg:gap-6">
+          <motion.div
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, amount: 0.15 }}
+            variants={{
+              hidden: { opacity: 0 },
+              show: {
+                opacity: 1,
+                transition: { staggerChildren: 0.08 }
+              }
+            }}
+            className="grid grid-cols-2 md:grid-cols-4 gap-4 lg:gap-6">
             {/* Earrings */}
-            <div className="group cursor-pointer" onClick={() => navigate('/products?category=earrings')}>
-              <div className="aspect-square overflow-hidden rounded-lg bg-gray-100 group-hover:opacity-75 transition-opacity">
+            <motion.div
+              variants={{ hidden: { opacity: 0, y: 18 }, show: { opacity: 1, y: 0 } }}
+              transition={{ duration: 0.45, ease: 'easeOut' }}
+              className="group cursor-pointer"
+              onClick={() => navigate('/products?category=earrings')}
+            >
+              <div className="aspect-square overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-100 transition-all duration-300 group-hover:shadow-lg">
                 <img
                   src="/earrings-cat.webp"
                   alt="Earrings"
-                  className="w-full h-full object-cover object-center"
+                  className="w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
                 />
               </div>
-              <h3 className="mt-4 font-fraunces font-bold text-[18px] leading-[24px] text-black text-center">Earrings</h3>
-            </div>
+              <h3 className="mt-3 font-fraunces font-medium text-[16px] leading-[22px] text-gray-900 text-center md:text-[18px] md:leading-[24px]">Earrings</h3>
+            </motion.div>
 
             {/* Finger Rings */}
-            <div className="group cursor-pointer" onClick={() => navigate('/products?category=rings')}>
-              <div className="aspect-square overflow-hidden rounded-lg bg-gray-100 group-hover:opacity-75 transition-opacity">
+            <motion.div
+              variants={{ hidden: { opacity: 0, y: 18 }, show: { opacity: 1, y: 0 } }}
+              transition={{ duration: 0.45, ease: 'easeOut' }}
+              className="group cursor-pointer"
+              onClick={() => navigate('/products?category=rings')}
+            >
+              <div className="aspect-square overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-100 transition-all duration-300 group-hover:shadow-lg">
                 <img
                   src="/rings-cat.jpg"
                   alt="Finger Rings"
-                  className="w-full h-full object-cover object-center"
+                  className="w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
                 />
               </div>
-              <h3 className="mt-4 font-fraunces font-bold text-[18px] leading-[24px] text-black text-center">Finger Rings</h3>
-            </div>
+              <h3 className="mt-3 font-fraunces font-medium text-[16px] leading-[22px] text-gray-900 text-center md:text-[18px] md:leading-[24px]">Finger Rings</h3>
+            </motion.div>
 
             {/* Pendants */}
-            <div className="group cursor-pointer" onClick={() => navigate('/products?category=pendants')}>
-              <div className="aspect-square overflow-hidden rounded-lg bg-gray-100 group-hover:opacity-75 transition-opacity">
+            <motion.div
+              variants={{ hidden: { opacity: 0, y: 18 }, show: { opacity: 1, y: 0 } }}
+              transition={{ duration: 0.45, ease: 'easeOut' }}
+              className="group cursor-pointer"
+              onClick={() => navigate('/products?category=pendants')}
+            >
+              <div className="aspect-square overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-100 transition-all duration-300 group-hover:shadow-lg">
                 <img
                   src="/pendants-cat.webp"
                   alt="Pendants"
-                  className="w-full h-full object-cover object-center"
+                  className="w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
                 />
               </div>
-              <h3 className="mt-4 font-fraunces font-bold text-[18px] leading-[24px] text-black text-center">Pendants</h3>
-            </div>
+              <h3 className="mt-3 font-fraunces font-medium text-[16px] leading-[22px] text-gray-900 text-center md:text-[18px] md:leading-[24px]">Pendants</h3>
+            </motion.div>
 
             {/* Mangalsutra */}
-            <div className="group cursor-pointer" onClick={() => navigate('/products?category=mangalsutra')}>
-              <div className="aspect-square overflow-hidden rounded-lg bg-gray-100 group-hover:opacity-75 transition-opacity">
+            <motion.div
+              variants={{ hidden: { opacity: 0, y: 18 }, show: { opacity: 1, y: 0 } }}
+              transition={{ duration: 0.45, ease: 'easeOut' }}
+              className="group cursor-pointer"
+              onClick={() => navigate('/products?category=mangalsutra')}
+            >
+              <div className="aspect-square overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-100 transition-all duration-300 group-hover:shadow-lg">
                 <img
                   src="/mangalsutra-cat.jpg"
                   alt="Mangalsutra"
-                  className="w-full h-full object-cover object-center"
+                  className="w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
                 />
               </div>
-              <h3 className="mt-4 font-fraunces font-bold text-[18px] leading-[24px] text-black text-center">Mangalsutra</h3>
-            </div>
+              <h3 className="mt-3 font-fraunces font-medium text-[16px] leading-[22px] text-gray-900 text-center md:text-[18px] md:leading-[24px]">Mangalsutra</h3>
+            </motion.div>
 
             {/* Bracelets */}
-            <div className="group cursor-pointer" onClick={() => navigate('/products?category=bracelets')}>
-              <div className="aspect-square overflow-hidden rounded-lg bg-gray-100 group-hover:opacity-75 transition-opacity">
+            <motion.div
+              variants={{ hidden: { opacity: 0, y: 18 }, show: { opacity: 1, y: 0 } }}
+              transition={{ duration: 0.45, ease: 'easeOut' }}
+              className="group cursor-pointer"
+              onClick={() => navigate('/products?category=bracelets')}
+            >
+              <div className="aspect-square overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-100 transition-all duration-300 group-hover:shadow-lg">
                 <img
                   src="/bracelets-cat.webp"
                   alt="Bracelets"
-                  className="w-full h-full object-cover object-center"
+                  className="w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
                 />
               </div>
-              <h3 className="mt-4 font-fraunces font-bold text-[18px] leading-[24px] text-black text-center">Bracelets</h3>
-            </div>
+              <h3 className="mt-3 font-fraunces font-medium text-[16px] leading-[22px] text-gray-900 text-center md:text-[18px] md:leading-[24px]">Bracelets</h3>
+            </motion.div>
 
             {/* Bangles */}
-            <div className="group cursor-pointer" onClick={() => navigate('/products?category=bangles')}>
-              <div className="aspect-square overflow-hidden rounded-lg bg-gray-100 group-hover:opacity-75 transition-opacity">
+            <motion.div
+              variants={{ hidden: { opacity: 0, y: 18 }, show: { opacity: 1, y: 0 } }}
+              transition={{ duration: 0.45, ease: 'easeOut' }}
+              className="group cursor-pointer"
+              onClick={() => navigate('/products?category=bangles')}
+            >
+              <div className="aspect-square overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-100 transition-all duration-300 group-hover:shadow-lg">
                 <img
                   src="/bangles-cat.jpg"
                   alt="Bangles"
-                  className="w-full h-full object-cover object-center"
+                  className="w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
                 />
               </div>
-              <h3 className="mt-4 font-fraunces font-bold text-[18px] leading-[24px] text-black text-center">Bangles</h3>
-            </div>
+              <h3 className="mt-3 font-fraunces font-medium text-[16px] leading-[22px] text-gray-900 text-center md:text-[18px] md:leading-[24px]">Bangles</h3>
+            </motion.div>
 
             {/* Chains */}
-            <div className="group cursor-pointer" onClick={() => navigate('/products?category=chains')}>
-              <div className="aspect-square overflow-hidden rounded-lg bg-gray-100 group-hover:opacity-75 transition-opacity">
+            <motion.div
+              variants={{ hidden: { opacity: 0, y: 18 }, show: { opacity: 1, y: 0 } }}
+              transition={{ duration: 0.45, ease: 'easeOut' }}
+              className="group cursor-pointer"
+              onClick={() => navigate('/products?category=chains')}
+            >
+              <div className="aspect-square overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-100 transition-all duration-300 group-hover:shadow-lg">
                 <img
                   src="/chains-cat.webp"
                   alt="Chains"
-                  className="w-full h-full object-cover object-center"
+                  className="w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
                 />
               </div>
-              <h3 className="mt-4 font-fraunces font-bold text-[18px] leading-[24px] text-black text-center">Chains</h3>
-            </div>
+              <h3 className="mt-3 font-fraunces font-medium text-[16px] leading-[22px] text-gray-900 text-center md:text-[18px] md:leading-[24px]">Chains</h3>
+            </motion.div>
 
             {/* View All */}
-            <div className="group cursor-pointer" onClick={() => navigate('/products')}>
-              <div className="aspect-square overflow-hidden rounded-lg bg-gradient-to-br from-amber-50 to-amber-100 border-2 border-dashed border-amber-300 group-hover:border-amber-400 transition-colors flex items-center justify-center">
+            <motion.div
+              variants={{ hidden: { opacity: 0, y: 18 }, show: { opacity: 1, y: 0 } }}
+              transition={{ duration: 0.45, ease: 'easeOut' }}
+              className="group cursor-pointer"
+              onClick={() => navigate('/products')}
+            >
+              <div className="aspect-square overflow-hidden rounded-xl bg-gradient-to-br from-amber-50 to-amber-100 border-2 border-dashed border-amber-300 group-hover:border-amber-400 transition-colors flex items-center justify-center">
                 <div className="text-center">
                   <svg className="mx-auto h-12 w-12 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -312,9 +384,9 @@ export const LandingPage: React.FC = () => {
                   <span className="mt-2 block font-fraunces font-medium text-[14px] leading-[18px] text-amber-700">View All</span>
                 </div>
               </div>
-              <h3 className="mt-4 font-fraunces font-bold text-[18px] leading-[24px] text-black text-center">View All</h3>
-            </div>
-          </div>
+              <h3 className="mt-3 font-fraunces font-medium text-[16px] leading-[22px] text-gray-900 text-center md:text-[18px] md:leading-[24px]">View All</h3>
+            </motion.div>
+          </motion.div>
         </div>
       </section>
 

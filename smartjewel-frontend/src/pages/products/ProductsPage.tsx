@@ -41,6 +41,14 @@ export const ProductsPage: React.FC = () => {
         title: 'Necklaces Collection',
         description: 'Statement necklaces that define elegance'
       },
+      'necklace-set': {
+        title: 'Necklace Set Collection',
+        description: 'Perfectly paired necklace sets for special occasions'
+      },
+      'nose-pin': {
+        title: 'Nose Pin Collection',
+        description: 'Delicate nose pins crafted to highlight your style'
+      },
       'gold': {
         title: 'Gold Collection',
         description: 'Pure gold jewelry that stands the test of time'

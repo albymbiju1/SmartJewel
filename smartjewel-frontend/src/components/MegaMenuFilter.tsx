@@ -22,7 +22,7 @@ const categoryOptions = [
 const metalOptions = ['Gold', 'Diamond', 'Platinum', 'Silver'];
 
 const priceOptions = [
-  'Under ₹25,000', '₹25,000 – ₹50,000', '₹50,000 – ₹1,00,000', '₹1,00,000 & above'
+  'Under 25k', '25k – 50k', '50k – 100k', '100k & above'
 ];
 
 interface MegaMenuFilterProps {
@@ -43,11 +43,14 @@ export const MegaMenuFilter: React.FC<MegaMenuFilterProps> = ({ onApplied, promo
   const initialCategories = useMemo(() => (params.get('categories') || '').split(',').filter(Boolean), [params]);
   const initialMetal = params.get('metal') || '';
   const initialPrice = params.get('price') || '';
+  const initialPurity = params.get('purity') || '';
+  // colour removed
   const hasPriceInUrl = useMemo(() => params.has('price'), [params]);
 
   const [selectedCategories, setSelectedCategories] = useState<string[]>(initialCategories);
   const [selectedMetal, setSelectedMetal] = useState<string>(initialMetal || (presetMetal || ''));
   const [selectedPrice, setSelectedPrice] = useState<string>(''); // do not default select price
+  const [selectedPurities, setSelectedPurities] = useState<string[]>(initialPurity ? initialPurity.split(',') : []);
 
   // Keep state in sync if URL changes while menu is open
   useEffect(() => {
@@ -56,8 +59,9 @@ export const MegaMenuFilter: React.FC<MegaMenuFilterProps> = ({ onApplied, promo
     setSelectedMetal(initialMetal || (presetMetal || ''));
     // Price: only set from URL; otherwise keep empty (no default selection)
     setSelectedPrice(hasPriceInUrl ? initialPrice : '');
+    setSelectedPurities(initialPurity ? initialPurity.split(',') : []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialCategories.join(','), initialMetal, initialPrice, hasPriceInUrl, presetMetal]);
+  }, [initialCategories.join(','), initialMetal, initialPrice, initialPurity, hasPriceInUrl, presetMetal]);
 
   const toggleCategory = (label: string) => {
     const slug = normalizeCategory(label);
@@ -69,6 +73,7 @@ export const MegaMenuFilter: React.FC<MegaMenuFilterProps> = ({ onApplied, promo
     if (selectedCategories.length) search.set('categories', selectedCategories.join(','));
     if (selectedMetal) search.set('metal', selectedMetal.toLowerCase());
     if (selectedPrice) search.set('price', selectedPrice);
+    if (selectedPurities.length) search.set('purity', selectedPurities.join(','));
     navigate(`/products?${search.toString()}`);
     onApplied?.();
   };
@@ -77,95 +82,96 @@ export const MegaMenuFilter: React.FC<MegaMenuFilterProps> = ({ onApplied, promo
     setSelectedCategories([]);
     setSelectedMetal('');
     setSelectedPrice('');
+    setSelectedPurities([]);
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 p-6 bg-white border border-gray-200 rounded-xl shadow-2xl">
-      {/* Filter groups */}
-      <div>
+    <div className="p-6 pb-24 bg-white border border-gray-200 rounded-xl shadow-2xl items-start md:grid md:[grid-template-columns:11rem_1fr] md:gap-6">
+      {/* Left: Shop by Category (fixed width) */}
+      <div className="min-w-0">
         <div className="text-sm font-semibold text-gray-900 mb-3">Shop by Category</div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-1 pr-1">
           {categoryOptions.map((cat) => {
             const slug = normalizeCategory(cat);
             const checked = selectedCategories.includes(slug);
             return (
-              <label key={slug} className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer border ${checked ? 'bg-amber-50 border-amber-300 text-amber-900' : 'border-gray-200 hover:bg-gray-50 text-gray-700'}`}>
+              <label key={slug} className={`flex items-center gap-2 px-2 py-1 rounded cursor-pointer border w-full ${checked ? 'bg-amber-50 border-amber-300 text-amber-900' : 'border-gray-200 hover:bg-gray-50 text-gray-700'}`}>
                 <input
                   type="checkbox"
-                  className="accent-amber-600"
+                  className="accent-amber-600 shrink-0"
                   checked={checked}
                   onChange={() => toggleCategory(cat)}
                 />
-                <span className="text-sm">{cat}</span>
+                <span className="text-sm leading-snug whitespace-nowrap overflow-hidden text-ellipsis flex-1" title={cat}>{cat}</span>
               </label>
             );
           })}
         </div>
       </div>
 
-      <div>
-        <div className="text-sm font-semibold text-gray-900 mb-3">Shop by Metal</div>
-        <div className="flex flex-wrap gap-2">
-          {metalOptions.map((m) => (
-            <button
-              key={m}
-              type="button"
-              className={`px-3 py-1.5 rounded-full border text-sm ${selectedMetal.toLowerCase()===m.toLowerCase() ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
-              onClick={() => setSelectedMetal(prev => prev.toLowerCase()===m.toLowerCase() ? '' : m)}
-            >
-              {m}
-            </button>
-          ))}
+      {/* Right: Purity -> Price -> Metal (flexible) */}
+      <div className="min-w-0 flex flex-col gap-6">
+        <div>
+          <div className="text-sm font-semibold text-gray-900 mb-3">Shop by Purity</div>
+          <div className="flex flex-wrap gap-2">
+            {['22KT','18KT','14KT'].map(p => {
+              const checked = selectedPurities.includes(p);
+              return (
+                <label key={p} className={`px-3 py-1.5 rounded-full border text-sm cursor-pointer ${checked? 'bg-gray-100 border-gray-300 text-gray-900' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
+                  <input type="checkbox" className="hidden" checked={checked} onChange={() => {
+                    const next = checked ? selectedPurities.filter(x=>x!==p) : [...selectedPurities, p];
+                    setSelectedPurities(next);
+                  }} />
+                  {p}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <div className="text-sm font-semibold text-gray-900 mb-3">Shop by Price</div>
+          <div className="flex flex-col gap-2">
+            {priceOptions.map((p) => {
+              const slug = priceLabelToSlug(p);
+              const checked = selectedPrice === slug;
+              return (
+                <label key={p} className={`flex items-start gap-2 px-2 py-1.5 rounded cursor-pointer border w-full ${checked ? 'bg-green-50 border-green-300 text-green-900' : 'border-gray-200 hover:bg-gray-50 text-gray-700'}`}>
+                  <input
+                    type="radio"
+                    name="price"
+                    className="accent-green-600 shrink-0"
+                    checked={checked}
+                    onChange={() => setSelectedPrice(slug)}
+                  />
+                  <span className="text-sm leading-snug whitespace-nowrap overflow-hidden text-ellipsis flex-1" title={p}>{p}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <div className="text-sm font-semibold text-gray-900 mb-3">Shop by Metal</div>
+          <div className="flex flex-wrap gap-2">
+            {metalOptions.map((m) => (
+              <button
+                key={m}
+                type="button"
+                className={`px-3 py-1.5 rounded-full border text-sm ${selectedMetal.toLowerCase()===m.toLowerCase() ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+                onClick={() => setSelectedMetal(prev => prev.toLowerCase()===m.toLowerCase() ? '' : m)}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      <div>
-        <div className="text-sm font-semibold text-gray-900 mb-3">Shop by Price</div>
-        <div className="flex flex-col gap-2">
-          {priceOptions.map((p) => {
-            const slug = priceLabelToSlug(p);
-            const checked = selectedPrice === slug;
-            return (
-              <label key={p} className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer border ${checked ? 'bg-green-50 border-green-300 text-green-900' : 'border-gray-200 hover:bg-gray-50 text-gray-700'}`}>
-                <input
-                  type="radio"
-                  name="price"
-                  className="accent-green-600"
-                  checked={checked}
-                  onChange={() => setSelectedPrice(slug)}
-                />
-                <span className="text-sm">{p}</span>
-              </label>
-            );
-          })}
-        </div>
-      </div>
+      
 
-      {/* Promo / Featured */}
-      <div className="hidden md:flex flex-col gap-3">
-        {promo ? (
-          <>
-            <img src={promo.image} alt={promo.title} className="w-full h-28 object-cover rounded-lg" />
-            <div className="text-sm font-medium text-gray-900">{promo.title}</div>
-            <a className="inline-flex items-center gap-1 text-brand-burgundy text-sm no-underline hover:underline" href={promo.href}>
-              {promo.cta}
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
-            </a>
-          </>
-        ) : (
-          <>
-            <img src="/Slide1.jpg" alt="Featured" className="w-full h-28 object-cover rounded-lg" />
-            <div className="text-sm font-medium text-gray-900">New Arrivals</div>
-            <a className="inline-flex items-center gap-1 text-brand-burgundy text-sm no-underline hover:underline" href="/products">
-              Shop Now
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
-            </a>
-          </>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div className="md:col-span-3 flex items-center justify-end gap-3">
+      {/* Actions (sticky footer) */}
+      <div className="sticky bottom-0 z-10 bg-white pt-3 mt-2 border-t border-gray-200 flex items-center justify-end gap-3 md:col-span-2">
         <button onClick={clearFilters} className="px-4 py-2 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50">Clear</button>
         <button onClick={applyFilters} className="px-4 py-2 rounded-md bg-brand-burgundy text-white hover:opacity-90">Apply Filters</button>
       </div>

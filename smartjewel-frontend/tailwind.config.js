@@ -10,6 +10,9 @@ module.exports = {
         'brand': {
           'burgundy': '#8B0000',
           'gold': '#FFD700',
+          'rose': '#b74f4f',
+          'rose-50': '#fff6f6',
+          'amber-50': '#fff8eb',
         }
       },
       fontFamily: {
@@ -27,6 +30,13 @@ module.exports = {
       },
       zIndex: {
         'header': '40',
+      },
+      borderRadius: {
+        '2xl': '1rem',
+        'pill': '9999px',
+      },
+      boxShadow: {
+        'elevated': '0 10px 25px -10px rgba(0,0,0,0.15), 0 4px 12px -6px rgba(0,0,0,0.08)',
       }
     },
   },

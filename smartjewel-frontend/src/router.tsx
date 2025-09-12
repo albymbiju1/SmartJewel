@@ -12,6 +12,8 @@ import { ValuationPage } from './pages/inventory/ValuationPage';
 import { BomPage } from './pages/inventory/BomPage';
 import { InventoryDashboard } from './pages/inventory/InventoryDashboard';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
+import { StaffDirectory } from './pages/admin/StaffDirectory';
+import { StaffSchedulePage } from './pages/admin/StaffSchedulePage';
 import { SalesDashboard } from './pages/sales/SalesDashboard';
 import { ProductsPage } from './pages/products/ProductsPage';
 import { AllJewelleryPage } from './pages/products/AllJewelleryPage';
@@ -35,7 +37,8 @@ export const AppRouter: React.FC = () => (
       <Route path="/admin/dashboard" element={<RequireAuth><AdminDashboard /></RequireAuth>} />
       <Route path="/admin/inventory" element={<RequireAuth><InventoryDashboard /></RequireAuth>} />
       <Route path="/admin/reports" element={<RequireAuth><div>Admin Reports</div></RequireAuth>} />
-      <Route path="/admin/staff" element={<RequireAuth><div>Staff Management</div></RequireAuth>} />
+      <Route path="/admin/staff" element={<RequireAuth><StaffDirectory /></RequireAuth>} />
+      <Route path="/admin/staff/:id/schedule" element={<RequireAuth><StaffSchedulePage /></RequireAuth>} />
       <Route path="/admin/sales" element={<RequireAuth><div>Sales Overview</div></RequireAuth>} />
       <Route path="/admin/customers" element={<RequireAuth><div>Customer Management</div></RequireAuth>} />
       <Route path="/admin/engagement" element={<RequireAuth><div>Customer Engagement</div></RequireAuth>} />

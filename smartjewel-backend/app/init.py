@@ -4,6 +4,7 @@ from app.config import Config
 from app.extensions import init_extensions, log
 from app.blueprints.core.routes import bp as core_bp
 from app.blueprints.auth.routes import bp as auth_bp
+from app.blueprints.staff import bp as staff_bp
 
 def create_app():
     import os
@@ -19,6 +20,8 @@ def create_app():
 
     app.register_blueprint(core_bp)
     app.register_blueprint(auth_bp)
+    app.register_blueprint(staff_bp)
+
     # Inventory blueprint
     from app.blueprints.inventory.routes import bp as inventory_bp
     app.register_blueprint(inventory_bp)

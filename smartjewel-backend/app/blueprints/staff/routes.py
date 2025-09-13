@@ -302,10 +302,20 @@ def create_shift_schedule(id):
         match["days"] = sorted(doc.get("days") or [])
     else:
         # For one-time compare on date window
+        # Convert datetime.date to datetime.datetime for MongoDB compatibility
+        from datetime import datetime, date
         if doc.get("effective_from"):
-            match["effective_from"] = doc.get("effective_from")
+            effective_from_date = doc.get("effective_from")
+            if isinstance(effective_from_date, date):
+                match["effective_from"] = datetime.combine(effective_from_date, datetime.min.time())
+            else:
+                match["effective_from"] = effective_from_date
         if doc.get("effective_to"):
-            match["effective_to"] = doc.get("effective_to")
+            effective_to_date = doc.get("effective_to")
+            if isinstance(effective_to_date, date):
+                match["effective_to"] = datetime.combine(effective_to_date, datetime.min.time())
+            else:
+                match["effective_to"] = effective_to_date
     if doc.get("store_id"):
         match["store_id"] = doc.get("store_id")
 
@@ -313,11 +323,26 @@ def create_shift_schedule(id):
     if existing:
         # Overwrite notes and any changes
         update_doc = {k: v for k, v in doc.items() if k not in ["staff_id"]}
+        
+        # Convert datetime.date to datetime.datetime for MongoDB compatibility in update
+        if update_doc.get("effective_from") and isinstance(update_doc.get("effective_from"), date):
+            update_doc["effective_from"] = datetime.combine(update_doc["effective_from"], datetime.min.time())
+        if update_doc.get("effective_to") and isinstance(update_doc.get("effective_to"), date):
+            update_doc["effective_to"] = datetime.combine(update_doc["effective_to"], datetime.min.time())
+        
         db.shift_schedules.update_one({"_id": existing["_id"]}, {"$set": update_doc})
         return jsonify({"id": str(existing["_id"]), "updated": True}), 200
 
     # Insert new
     doc["created_at"] = _now(db)
+    
+    # Convert datetime.date to datetime.datetime for MongoDB storage
+    from datetime import date
+    if doc.get("effective_from") and isinstance(doc.get("effective_from"), date):
+        doc["effective_from"] = datetime.combine(doc["effective_from"], datetime.min.time())
+    if doc.get("effective_to") and isinstance(doc.get("effective_to"), date):
+        doc["effective_to"] = datetime.combine(doc["effective_to"], datetime.min.time())
+    
     ins = db.shift_schedules.insert_one(doc)
     return jsonify({"id": str(ins.inserted_id), "created": True}), 201
 
@@ -330,6 +355,14 @@ def update_shift_schedule(sid):
         payload = ShiftScheduleSchema(partial=True).load(request.get_json() or {})
     except ValidationError as err:
         return jsonify({"error": "validation_failed", "details": err.messages}), 400
+    
+    # Convert datetime.date to datetime.datetime for MongoDB compatibility
+    from datetime import datetime, date
+    if payload.get("effective_from") and isinstance(payload.get("effective_from"), date):
+        payload["effective_from"] = datetime.combine(payload["effective_from"], datetime.min.time())
+    if payload.get("effective_to") and isinstance(payload.get("effective_to"), date):
+        payload["effective_to"] = datetime.combine(payload["effective_to"], datetime.min.time())
+    
     res = db.shift_schedules.update_one({"_id": _oid(sid)}, {"$set": payload})
     if res.matched_count == 0:
         return jsonify({"error": "not_found"}), 404

@@ -28,6 +28,7 @@ export const StaffDirectory: React.FC = () => {
   const [data, setData] = useState<StaffResponse>({ items: [], page: 1, limit: 10, total: 0 });
   const [roles, setRoles] = useState<{ id: string; role_name: string }[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [editingStaff, setEditingStaff] = useState<StaffItem | null>(null);
   const [form, setForm] = useState({ full_name: '', email: '', phone_number: '', role_id: '', status: 'active' as 'active'|'inactive' });
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string>('');
@@ -74,22 +75,39 @@ export const StaffDirectory: React.FC = () => {
     setSubmitting(true);
     setSubmitError('');
     try {
-      await api.post('/api/staff', {
-        full_name: form.full_name,
-        email: form.email,
-        phone_number: form.phone_number || undefined,
-        role_id: form.role_id,
-        status: form.status,
-      });
+      if (editingStaff) {
+        // Update existing staff
+        console.log('Updating staff:', editingStaff.id, form);
+        const response = await api.put(`/api/staff/${editingStaff.id}`, {
+          full_name: form.full_name,
+          phone_number: form.phone_number || undefined,
+          role_id: form.role_id,
+          status: form.status,
+        });
+        console.log('Update response:', response.data);
+      } else {
+        // Create new staff
+        console.log('Creating staff:', form);
+        const response = await api.post('/api/staff', {
+          full_name: form.full_name,
+          email: form.email,
+          phone_number: form.phone_number || undefined,
+          role_id: form.role_id,
+          status: form.status,
+        });
+        console.log('Create response:', response.data);
+      }
       setShowForm(false);
+      setEditingStaff(null);
       setForm({ full_name: '', email: '', phone_number: '', role_id: '', status: 'active' });
-      // Fetch a fresh first page explicitly to reflect the new row
+      // Fetch a fresh first page explicitly to reflect the changes
       const fresh = await api.get<StaffResponse>(`/api/staff?page=1&limit=${limit}`);
       const filtered = { ...fresh.data, items: (fresh.data.items || []).filter(u => !['Customer','Admin'].includes(u.role?.role_name || '')) };
       setData(filtered);
       setPage(1);
     } catch (e: any) {
-      console.error(e);
+      console.error('Error in onSubmit:', e);
+      console.error('Error response:', e?.response?.data);
       const msg = e?.response?.data?.error || e?.message || 'Failed to save';
       setSubmitError(typeof msg === 'string' ? msg : 'Failed to save');
     } finally {
@@ -102,7 +120,11 @@ export const StaffDirectory: React.FC = () => {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold text-gray-900">Staff Directory</h1>
         <div className="flex items-center gap-2">
-          <button className="px-4 py-2 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50" onClick={()=>setShowForm(true)}>Add Staff</button>
+          <button className="px-4 py-2 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50" onClick={()=>{
+            setEditingStaff(null);
+            setForm({ full_name: '', email: '', phone_number: '', role_id: '', status: 'active' });
+            setShowForm(true);
+          }}>Add Staff</button>
         </div>
       </div>
 
@@ -157,7 +179,17 @@ export const StaffDirectory: React.FC = () => {
                 <td className="px-4 py-3 text-right">
                   <div className="inline-flex gap-2">
                     <button className="text-sm text-blue-700 hover:underline" onClick={()=>navigate(`/admin/staff/${u.id}/schedule`)}>Schedule</button>
-                    <button className="text-sm text-gray-700 hover:underline" onClick={()=>{/* TODO: edit */}}>Edit</button>
+                    <button className="text-sm text-gray-700 hover:underline" onClick={()=>{
+                      setEditingStaff(u);
+                      setForm({
+                        full_name: u.full_name,
+                        email: u.email,
+                        phone_number: u.phone_number || '',
+                        role_id: u.role?._id || '',
+                        status: u.status
+                      });
+                      setShowForm(true);
+                    }}>Edit</button>
                   </div>
                 </td>
               </tr>
@@ -178,15 +210,26 @@ export const StaffDirectory: React.FC = () => {
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
           <div className="w-full max-w-lg bg-white rounded-xl shadow-2xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Add Staff</h2>
-              <button onClick={()=>setShowForm(false)} className="text-gray-500 hover:text-gray-800">✕</button>
+              <h2 className="text-lg font-semibold">{editingStaff ? 'Edit Staff' : 'Add Staff'}</h2>
+              <button onClick={()=>{
+                setShowForm(false);
+                setEditingStaff(null);
+                setForm({ full_name: '', email: '', phone_number: '', role_id: '', status: 'active' });
+              }} className="text-gray-500 hover:text-gray-800">✕</button>
             </div>
             <form onSubmit={onSubmit} className="grid grid-cols-1 gap-3">
               {submitError && (
                 <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">{submitError}</div>
               )}
               <input className="h-10 border border-gray-200 rounded-md px-3" placeholder="Full name" value={form.full_name} onChange={e=>setForm({...form, full_name: e.target.value})} required />
-              <input className="h-10 border border-gray-200 rounded-md px-3" type="email" placeholder="Email" value={form.email} onChange={e=>setForm({...form, email: e.target.value})} required />
+              {!editingStaff && (
+                <input className="h-10 border border-gray-200 rounded-md px-3" type="email" placeholder="Email" value={form.email} onChange={e=>setForm({...form, email: e.target.value})} required />
+              )}
+              {editingStaff && (
+                <div className="h-10 border border-gray-200 rounded-md px-3 flex items-center text-gray-500 bg-gray-50">
+                  {form.email}
+                </div>
+              )}
               <input className="h-10 border border-gray-200 rounded-md px-3" placeholder="Phone (optional)" value={form.phone_number} onChange={e=>setForm({...form, phone_number: e.target.value})} />
               <select className="h-10 border border-gray-200 rounded-md px-3" value={form.role_id} onChange={e=>setForm({...form, role_id: e.target.value})} required>
                 <option value="">Select Role</option>
@@ -198,7 +241,7 @@ export const StaffDirectory: React.FC = () => {
               </select>
               <div className="flex items-center justify-end gap-2 mt-2">
                 <button type="button" className="px-3 py-2 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50" onClick={()=>setShowForm(false)}>Cancel</button>
-                <button disabled={submitting} type="submit" className="px-3 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700">{submitting? 'Saving...':'Save'}</button>
+                <button disabled={submitting} type="submit" className="px-3 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700">{submitting? 'Saving...': (editingStaff ? 'Update' : 'Save')}</button>
               </div>
             </form>
           </div>

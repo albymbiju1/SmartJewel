@@ -59,7 +59,7 @@ export const ItemsPage: React.FC = () => {
     try {
       const data = new FormData();
       Object.entries(formData).forEach(([key, value]) => {
-        data.append(key, value.toString());
+        data.append(key, value != null ? value.toString() : '');
       });
       if (imageFile) {
         data.append('image', imageFile);
@@ -83,7 +83,7 @@ export const ItemsPage: React.FC = () => {
     try {
       const data = new FormData();
       Object.entries(formData).forEach(([key, value]) => {
-        data.append(key, value.toString());
+        data.append(key, value != null ? value.toString() : '');
       });
       if (imageFile) {
         data.append('image', imageFile);

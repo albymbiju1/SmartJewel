@@ -73,3 +73,4 @@ if __name__ == "__main__":
     print("Never commit files with real credentials to version control.")
     # Uncomment the line below after modifying the credentials
     # create_admin_user()
+

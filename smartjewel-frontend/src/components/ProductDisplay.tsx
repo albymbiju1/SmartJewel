@@ -4,6 +4,7 @@ import { api } from '../api';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QuickViewModal } from './QuickViewModal';
 import { MegaMenuFilter } from './MegaMenuFilter';
+import { useWishlist } from '../contexts/WishlistContext';
 
 interface Product {
   _id: string;
@@ -31,6 +32,8 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
   title, 
   description = "Discover our exquisite collection of handcrafted jewelry" 
 }) => {
+  // Access wishlist state to render hearts accurately
+  const { isWishlisted } = useWishlist();
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -349,8 +352,25 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
                     )}
                     {/* Wishlist (always visible like reference) */}
                     <div className="absolute top-2 right-2 flex flex-col gap-2">
-                      <button title="Add to Wishlist" className="p-2 rounded-full bg-white/90 shadow hover:bg-white">
-                        <svg className="w-5 h-5 text-rose-600" viewBox="0 0 24 24" fill="currentColor"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 3 13.352 3 10.75 3 8.264 4.988 6.5 7.2 6.5c1.278 0 2.516.492 3.445 1.378A4.87 4.87 0 0114.1 6.5c2.212 0 4.1 1.764 4.1 4.25 0 2.602-1.688 4.61-3.99 6.757a25.178 25.178 0 01-4.244 3.17 15.247 15.247 0 01-.383.218l-.022.012-.007.003-.003.002a.75.75 0 01-.66 0l-.003-.002z"/></svg>
+                      <button
+                        title="Toggle Wishlist"
+                        className="p-2 rounded-full bg-white/90 shadow hover:bg-white"
+                        onClick={(e)=>{
+                          e.stopPropagation();
+                          const ev = new CustomEvent('sj:toggleWishlist', { detail: { productId: product._id, name: product.name, price: product.price, image: product.image, metal: product.metal, purity: product.purity } });
+                          window.dispatchEvent(ev);
+                        }}
+                      >
+                        {/* Heart reflects wishlist state */}
+                        <svg
+                          className={`w-5 h-5 ${isWishlisted(product._id) ? 'text-rose-600' : 'text-gray-400'}`}
+                          viewBox="0 0 24 24"
+                          fill={isWishlisted(product._id) ? 'currentColor' : 'none'}
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                        >
+                          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                        </svg>
                       </button>
                     </div>
                   </div>

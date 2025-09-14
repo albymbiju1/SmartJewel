@@ -25,6 +25,9 @@ import { CollectionsPage } from './pages/products/CollectionsPage';
 import { GiftingPage } from './pages/products/GiftingPage';
 import { ProductDetailPage } from './pages/products/ProductDetailPage';
 import { RequireAuth } from './components/AuthGuard';
+import { WishlistPage } from './pages/products/WishlistPage';
+import { CartPage } from './pages/products/CartPage';
+import { CheckoutPage } from './pages/products/CheckoutPage';
 
 export const AppRouter: React.FC = () => (
   <Router>
@@ -58,7 +61,7 @@ export const AppRouter: React.FC = () => (
       <Route path="/sales/pos" element={<RequireAuth><SalesDashboard /></RequireAuth>} />
       <Route path="/sales/customers" element={<RequireAuth><div>Customer Management</div></RequireAuth>} />
       <Route path="/sales/ai-assist" element={<RequireAuth><div>AI Assistant</div></RequireAuth>} />
-      <Route path="/sales/cart" element={<RequireAuth><div>Shopping Cart</div></RequireAuth>} />
+      <Route path="/sales/cart" element={<RequireAuth><CartPage /></RequireAuth>} />
 
       {/* Product Routes (public for customers) */}
       <Route path="/products" element={<ProductsPage />} />
@@ -69,6 +72,9 @@ export const AppRouter: React.FC = () => (
       <Route path="/products/collections" element={<CollectionsPage />} />
       <Route path="/products/gifting" element={<GiftingPage />} />
       <Route path="/product/:id" element={<ProductDetailPage />} />
+      <Route path="/wishlist" element={<WishlistPage />} />
+      <Route path="/cart" element={<CartPage />} />
+      <Route path="/checkout" element={<CheckoutPage />} />
 
       {/* Inventory Routes (protected) */}
       <Route path="/inventory/dashboard" element={<RequireAuth><InventoryDashboard /></RequireAuth>} />

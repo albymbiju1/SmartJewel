@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import ImageSlider from '../components/ImageSlider';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
+import { useWishlist } from '../contexts/WishlistContext';
+import { useCart } from '../contexts/CartContext';
 import { MENU as MEGA_MENU, NAV_TABS } from '../menuConfig';
 import { getRoleBasedRedirectPath } from '../utils/roleRedirect';
 import { MegaMenuFilter } from '../components/MegaMenuFilter';
@@ -19,6 +21,10 @@ export const LandingPage: React.FC = () => {
   const [mmMetals, setMmMetals] = useState<string[]>([]);
   const [mmPrices, setMmPrices] = useState<string[]>([]);
   const userMenuRef = useRef<HTMLDivElement | HTMLButtonElement>(null);
+
+  // Cart bounce animation state
+  const [cartBump, setCartBump] = useState(false);
+  const prevCartCount = useRef<number>(0);
 
   // Close user menu when clicking outside
   useEffect(() => {
@@ -67,6 +73,25 @@ export const LandingPage: React.FC = () => {
   // Debug: Log to verify component is rendering
   console.log('LandingPage component rendering');
   
+  const { count: wishlistCount } = useWishlist();
+  const { cartCount } = useCart();
+
+  // Bounce when cartCount increases
+  useEffect(() => {
+    if (cartCount > prevCartCount.current) {
+      setCartBump(true);
+      window.setTimeout(() => setCartBump(false), 350);
+    }
+    prevCartCount.current = cartCount;
+  }, [cartCount]);
+
+  // Listen for custom bounce events (e.g., from Wishlist add)
+  useEffect(() => {
+    const fn = () => { setCartBump(true); window.setTimeout(() => setCartBump(false), 350); };
+    window.addEventListener('sj:cart:bounce', fn as EventListener);
+    return () => window.removeEventListener('sj:cart:bounce', fn as EventListener);
+  }, []);
+
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'white' }}>
       <nav className="relative z-40 bg-white shadow-sm" role="navigation" aria-label="Primary">
@@ -102,12 +127,22 @@ export const LandingPage: React.FC = () => {
             <button className="relative inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-200 text-gray-700 hover:text-brand-burgundy" title={isAuthenticated ? (user?.full_name || user?.email || 'Account'): 'Account'} onClick={()=>{ isAuthenticated ? setShowUserMenu(!showUserMenu) : navigate('/login')}} aria-label="Account" ref={userMenuRef as React.RefObject<HTMLButtonElement>}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
             </button>
-            <button className="relative inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-200 text-gray-700 hover:text-brand-burgundy" title="Wishlist" aria-label="Wishlist">
+            <button className="relative inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-200 text-gray-700 hover:text-brand-burgundy" title="Wishlist" aria-label="Wishlist" onClick={()=>navigate('/wishlist')}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+              {/* Wishlist count badge */}
+              {wishlistCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-600 text-white text-[10px] leading-[18px] text-center shadow">
+                  {wishlistCount}
+                </span>
+              )}
             </button>
-            <button className="relative inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-200 text-gray-700 hover:text-brand-burgundy" title="Cart" aria-label="Cart">
+            <button className={`relative inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-200 text-gray-700 hover:text-brand-burgundy ${cartBump ? 'animate-bounce-once' : ''}`} title="Cart" aria-label="Cart" onClick={()=>navigate('/cart')}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
-
+              {cartCount > 0 && (
+                <span className={`absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-blue-600 text-white text-[10px] leading-[18px] text-center shadow ${cartBump ? 'animate-bounce-once' : ''}`}>
+                  {cartCount}
+                </span>
+              )}
             </button>
           </div>
 

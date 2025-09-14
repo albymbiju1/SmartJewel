@@ -208,3 +208,25 @@ __marimo__/
 
 
 service-account.json
+
+# Sensitive database scripts and configuration files
+scripts/create_*_user.py
+scripts/update_*_password.py
+scripts/fix_*_password.py
+scripts/cleanup_*_users.py
+scripts/check_*_users.py
+scripts/create_test_*.py
+scripts/*_sensitive.py
+scripts/*_credentials.py
+
+# Database dumps and backups
+*.db
+*.sqlite
+*.dump
+backup/
+dumps/
+
+# Local configuration files with sensitive data
+config.local.py
+settings.local.py
+local_config.py

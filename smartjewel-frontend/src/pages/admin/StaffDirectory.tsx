@@ -134,7 +134,6 @@ export const StaffDirectory: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-gray-900 font-fraunces">Staff Management</h1>
-              <p className="text-lg text-gray-600 mt-2">Manage your team members, roles, and permissions</p>
             </div>
             <button 
               onClick={() => {
@@ -142,7 +141,7 @@ export const StaffDirectory: React.FC = () => {
                 setForm({ full_name: '', email: '', phone_number: '', role_id: '', status: 'active' });
                 setShowForm(true);
               }}
-              className="bg-gradient-to-r from-yellow-500 to-amber-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-yellow-600 hover:to-amber-700 transition-all duration-300 transform hover:-translate-y-0.5 hover:shadow-lg flex items-center space-x-2"
+              className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white px-6 py-3 rounded-xl font-semibold hover:from-blue-700 hover:to-indigo-800 transition-all duration-300 transform hover:-translate-y-0.5 hover:shadow-lg flex items-center space-x-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -223,7 +222,7 @@ export const StaffDirectory: React.FC = () => {
                 </svg>
               </div>
               <input 
-                className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-yellow-500 focus:border-transparent transition-all duration-300" 
+                className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 bg-white" 
                 placeholder="Search staff members..." 
                 value={query} 
                 onChange={e => { setPage(1); setQuery(e.target.value); }} 
@@ -231,7 +230,7 @@ export const StaffDirectory: React.FC = () => {
             </div>
             
             <select 
-              className="py-3 px-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-yellow-500 focus:border-transparent transition-all duration-300" 
+              className="py-3 px-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 bg-white" 
               value={status} 
               onChange={e => { setPage(1); setStatus(e.target.value); }}
             >
@@ -241,7 +240,7 @@ export const StaffDirectory: React.FC = () => {
             </select>
             
             <select 
-              className="py-3 px-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-yellow-500 focus:border-transparent transition-all duration-300" 
+              className="py-3 px-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 bg-white" 
               value={roleId} 
               onChange={e => { setPage(1); setRoleId(e.target.value); }}
             >
@@ -254,7 +253,7 @@ export const StaffDirectory: React.FC = () => {
             </select>
             
             <button 
-              className="py-3 px-6 bg-gradient-to-r from-yellow-500 to-amber-600 text-white rounded-xl font-semibold hover:from-yellow-600 hover:to-amber-700 transition-all duration-300 transform hover:-translate-y-0.5 hover:shadow-lg" 
+              className="py-3 px-6 bg-gradient-to-r from-slate-600 to-gray-700 text-white rounded-xl font-semibold hover:from-slate-700 hover:to-gray-800 transition-all duration-300 transform hover:-translate-y-0.5 hover:shadow-lg" 
               onClick={() => setPage(1)}
             >
               Apply Filters
@@ -291,7 +290,7 @@ export const StaffDirectory: React.FC = () => {
           ) : data.items.map((staff) => (
             <div key={staff.id} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg hover:border-gray-200 transition-all duration-300 transform hover:-translate-y-1">
               <div className="flex items-center space-x-4 mb-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-amber-500 rounded-full flex items-center justify-center text-white font-bold text-lg">
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-sm">
                   {getInitials(staff.full_name)}
                 </div>
                 <div className="flex-1">
@@ -328,7 +327,7 @@ export const StaffDirectory: React.FC = () => {
               <div className="flex space-x-2">
                 <button 
                   onClick={() => navigate(`/admin/staff/${staff.id}/schedule`)}
-                  className="flex-1 py-2 px-3 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors duration-200"
+                  className="flex-1 py-2.5 px-3 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 hover:text-blue-800 transition-all duration-200 border border-blue-100"
                 >
                   Schedule
                 </button>
@@ -344,7 +343,7 @@ export const StaffDirectory: React.FC = () => {
                     });
                     setShowForm(true);
                   }}
-                  className="flex-1 py-2 px-3 bg-gray-50 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors duration-200"
+                  className="flex-1 py-2.5 px-3 bg-gray-50 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-100 hover:text-gray-800 transition-all duration-200 border border-gray-200"
                 >
                   Edit
                 </button>
@@ -355,17 +354,17 @@ export const StaffDirectory: React.FC = () => {
 
         {/* Pagination */}
         <div className="flex items-center justify-between bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <div className="text-sm text-gray-600">
+          <div className="text-sm text-gray-600 font-medium">
             Showing {((page - 1) * limit) + 1} to {Math.min(page * limit, data.total)} of {data.total} staff members
           </div>
-          <div className="flex space-x-2">
+          <div className="flex space-x-3">
             <button 
               disabled={page <= 1} 
               onClick={() => setPage(p => Math.max(1, p - 1))} 
-              className={`px-4 py-2 rounded-lg border font-medium transition-all duration-300 ${
+              className={`px-5 py-2.5 rounded-lg border font-medium transition-all duration-300 ${
                 page <= 1 
-                  ? 'text-gray-400 border-gray-200 cursor-not-allowed' 
-                  : 'text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400'
+                  ? 'text-gray-400 border-gray-200 cursor-not-allowed bg-gray-50' 
+                  : 'text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400 hover:shadow-sm'
               }`}
             >
               Previous
@@ -373,10 +372,10 @@ export const StaffDirectory: React.FC = () => {
             <button 
               disabled={(page * limit) >= data.total} 
               onClick={() => setPage(p => p + 1)} 
-              className={`px-4 py-2 rounded-lg border font-medium transition-all duration-300 ${
+              className={`px-5 py-2.5 rounded-lg border font-medium transition-all duration-300 ${
                 (page * limit) >= data.total 
-                  ? 'text-gray-400 border-gray-200 cursor-not-allowed' 
-                  : 'text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400'
+                  ? 'text-gray-400 border-gray-200 cursor-not-allowed bg-gray-50' 
+                  : 'text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400 hover:shadow-sm'
               }`}
             >
               Next
@@ -417,7 +416,7 @@ export const StaffDirectory: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
                 <input 
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-yellow-500 focus:border-transparent transition-all duration-300" 
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 bg-white" 
                   placeholder="Enter full name" 
                   value={form.full_name} 
                   onChange={e => setForm({...form, full_name: e.target.value})} 
@@ -429,7 +428,7 @@ export const StaffDirectory: React.FC = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
                   <input 
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-yellow-500 focus:border-transparent transition-all duration-300" 
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 bg-white" 
                     type="email" 
                     placeholder="Enter email address" 
                     value={form.email} 
@@ -451,7 +450,7 @@ export const StaffDirectory: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
                 <input 
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-yellow-500 focus:border-transparent transition-all duration-300" 
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 bg-white" 
                   placeholder="Enter phone number (optional)" 
                   value={form.phone_number} 
                   onChange={e => setForm({...form, phone_number: e.target.value})} 
@@ -461,7 +460,7 @@ export const StaffDirectory: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
                 <select 
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-yellow-500 focus:border-transparent transition-all duration-300" 
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 bg-white" 
                   value={form.role_id} 
                   onChange={e => setForm({...form, role_id: e.target.value})} 
                   required
@@ -478,7 +477,7 @@ export const StaffDirectory: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
                 <select 
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-yellow-500 focus:border-transparent transition-all duration-300" 
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 bg-white" 
                   value={form.status} 
                   onChange={e => setForm({...form, status: e.target.value as 'active'|'inactive'})}
                 >
@@ -498,7 +497,7 @@ export const StaffDirectory: React.FC = () => {
                 <button 
                   disabled={submitting} 
                   type="submit" 
-                  className="flex-1 py-3 px-4 bg-gradient-to-r from-yellow-500 to-amber-600 text-white rounded-xl font-medium hover:from-yellow-600 hover:to-amber-700 transition-all duration-300 transform hover:-translate-y-0.5 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                  className="flex-1 py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-xl font-medium hover:from-blue-700 hover:to-indigo-800 transition-all duration-300 transform hover:-translate-y-0.5 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                 >
                   {submitting ? 'Saving...' : (editingStaff ? 'Update Staff' : 'Add Staff')}
                 </button>

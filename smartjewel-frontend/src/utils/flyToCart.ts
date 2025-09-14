@@ -11,7 +11,8 @@ export function flyToCart(opts: { source: Element | null | undefined; imageUrl?:
 
     // Try to find the actual Cart button first; if missing (e.g., page without header),
     // fall back to a global invisible anchor rendered at app root.
-    const targetEl = (document.querySelector('button[aria-label="Cart"]') as HTMLElement | null)
+    const targetEl = (document.querySelector('#app-cart-button') as HTMLElement | null)
+      || (document.querySelector('button[aria-label="Cart"]') as HTMLElement | null)
       || (document.querySelector('[data-cart-anchor]') as HTMLElement | null);
     if (!targetEl) return;
 

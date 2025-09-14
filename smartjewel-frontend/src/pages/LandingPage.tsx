@@ -136,7 +136,7 @@ export const LandingPage: React.FC = () => {
                 </span>
               )}
             </button>
-            <button className={`relative inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-200 text-gray-700 hover:text-brand-burgundy ${cartBump ? 'animate-bounce-once' : ''}`} title="Cart" aria-label="Cart" onClick={()=>navigate('/cart')}>
+            <button id="app-cart-button" className={`relative inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-200 text-gray-700 hover:text-brand-burgundy ${cartBump ? 'animate-bounce-once' : ''}`} title="Cart" aria-label="Cart" onClick={()=>navigate('/cart')}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
               {cartCount > 0 && (
                 <span className={`absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-blue-600 text-white text-[10px] leading-[18px] text-center shadow ${cartBump ? 'animate-bounce-once' : ''}`}>

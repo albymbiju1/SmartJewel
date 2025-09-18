@@ -1,11 +1,13 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from './AuthContext';
+import { productPriceService } from '../services/productPriceService';
 
 export interface CartItem {
   productId: string;
   name: string;
   price?: number;
+  currentPrice?: number; // Fresh price from API
   image?: string;
   quantity: number;
   size?: string;
@@ -20,6 +22,7 @@ interface CartContextValue {
   removeFromCart: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
+  refreshPrices: () => Promise<void>;
   cartCount: number;
   cartTotal: number;
 }
@@ -54,6 +57,21 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const res = await api.get('/customers/me/cart');
         const backendItems = Array.isArray(res.data.items) ? res.data.items : [];
         setItems(backendItems);
+        
+        // Refresh prices after loading cart items
+        if (backendItems.length > 0) {
+          setTimeout(() => {
+            const productIds = backendItems.map((item: CartItem) => item.productId);
+            productPriceService.getCurrentPrices(productIds).then(currentPrices => {
+              setItems(prev => prev.map(item => ({
+                ...item,
+                currentPrice: currentPrices.get(item.productId) || item.price
+              })));
+            }).catch(() => {
+              // Ignore price refresh errors
+            });
+          }, 100);
+        }
       } catch (e) {
         // ignore
       }
@@ -92,10 +110,33 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return next;
   });
 
-  const cartCount = useMemo(() => items.reduce((sum, it) => sum + it.quantity, 0), [items]);
-  const cartTotal = useMemo(() => items.reduce((sum, it) => sum + (it.price || 0) * it.quantity, 0), [items]);
+  const refreshPrices = async () => {
+    if (items.length === 0) return;
+    
+    try {
+      // Clear price cache to force fresh price fetching
+      productPriceService.clearAllCache();
+      
+      const productIds = items.map(item => item.productId);
+      const currentPrices = await productPriceService.getCurrentPrices(productIds);
+      
+      setItems(prev => prev.map(item => ({
+        ...item,
+        currentPrice: currentPrices.get(item.productId) || item.price
+      })));
+    } catch (error) {
+      console.warn('Failed to refresh cart prices:', error);
+    }
+  };
 
-  const value: CartContextValue = { items, addToCart, removeFromCart, updateQuantity, clearCart, cartCount, cartTotal };
+  const cartCount = useMemo(() => items.reduce((sum, it) => sum + it.quantity, 0), [items]);
+  const cartTotal = useMemo(() => items.reduce((sum, it) => {
+    // Use currentPrice if available, otherwise fall back to stored price
+    const price = it.currentPrice || it.price || 0;
+    return sum + price * it.quantity;
+  }, 0), [items]);
+
+  const value: CartContextValue = { items, addToCart, removeFromCart, updateQuantity, clearCart, refreshPrices, cartCount, cartTotal };
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 };
 

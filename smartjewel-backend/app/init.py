@@ -32,6 +32,10 @@ def create_app():
     from app.blueprints.payments import bp as payments_bp
     app.register_blueprint(payments_bp)
 
+    # Market data (gold rate) blueprint
+    from app.blueprints.market import bp as market_bp
+    app.register_blueprint(market_bp)
+
     @app.route("/")
     def index():
         # List all routes for debugging

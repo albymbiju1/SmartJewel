@@ -5,6 +5,16 @@ from app.utils.authz import require_permissions, require_any_role
 
 
 bp = Blueprint("inventory", __name__, url_prefix="/inventory")
+# Helper: read latest gold rate per gram (24k) and return float or None
+def _latest_rates(db):
+    try:
+        doc = db.gold_rate.find_one({}, sort=[("updated_at", -1)]) or {}
+        rates = doc.get("rates") or {}
+        # Normalize keys to lower e.g. "24k" -> "24k"
+        norm = {str(k).lower(): float(v) for k, v in rates.items() if v is not None}
+        return norm
+    except Exception:
+        return {}
 
 # -------- Locations --------
 @bp.post("/locations")
@@ -285,8 +295,10 @@ def list_products():
         return jsonify({"products": []}), 200
 
 
+from flask_jwt_extended import jwt_required
+
 @bp.get("/items/<item_id>")
-@require_permissions("inventory.read")
+@jwt_required(optional=True)
 def get_item(item_id):
     db = current_app.extensions['mongo_db']
     oid = _oid(item_id)
@@ -298,6 +310,59 @@ def get_item(item_id):
     d["_id"] = str(d["_id"])
     if d.get("default_location_id"):
         d["default_location_id"] = str(d["default_location_id"])
+    # Compute price using the proper price calculation system
+    try:
+        from app.services.price_calculator import GoldPriceCalculator
+        
+        weight = float(d.get("weight") or 0)
+        unit = (d.get("weight_unit") or 'g').lower()
+        if unit in ('gram', 'grams', 'g'):
+            grams = weight
+        elif unit in ('mg', 'milligram', 'milligrams'):
+            grams = weight / 1000.0
+        elif unit in ('kg', 'kilogram', 'kilograms'):
+            grams = weight * 1000.0
+        else:
+            grams = weight
+            
+        if grams > 0:
+            # Get current gold rates
+            rates = _latest_rates(db)
+            gold_rate_24k = rates.get('24k', 0)
+            
+            if gold_rate_24k > 0:
+                # Use the proper price calculator
+                price_calculator = GoldPriceCalculator(db)
+                price_breakdown = price_calculator.calculate_total_price(d, gold_rate_24k)
+                d["computed_price"] = price_breakdown["total_price"]
+                d["currency"] = "INR"
+                d["price_breakdown"] = price_breakdown
+    except Exception as e:
+        # Fallback to old method if new calculation fails
+        try:
+            weight = float(d.get("weight") or 0)
+            unit = (d.get("weight_unit") or 'g').lower()
+            if unit in ('gram', 'grams', 'g'):
+                grams = weight
+            elif unit in ('mg', 'milligram', 'milligrams'):
+                grams = weight / 1000.0
+            elif unit in ('kg', 'kilogram', 'kilograms'):
+                grams = weight * 1000.0
+            else:
+                grams = weight
+            rates = _latest_rates(db)
+            purity_key = str(d.get("purity") or '').lower()
+            base_rate = rates.get(purity_key) or rates.get('24k')
+            making = float((d.get('making_charges') or 0))
+            gst_rate = float((d.get('gst_percent') or 0)) / 100.0
+            if base_rate:
+                base = grams * base_rate
+                subtotal = base + making
+                total = round(subtotal * (1 + gst_rate), 2)
+                d["computed_price"] = total
+                d["currency"] = "INR"
+        except Exception:
+            pass
     return jsonify({"item": d})
 
 

@@ -1,11 +1,13 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from './AuthContext';
+import { productPriceService } from '../services/productPriceService';
 
 interface WishlistItem {
   productId: string;
   name: string;
   price?: number;
+  currentPrice?: number; // Fresh price from API
   image?: string;
   metal?: string;
   purity?: string;
@@ -17,6 +19,7 @@ interface WishlistContextValue {
   isWishlisted: (productId: string) => boolean;
   remove: (productId: string) => void;
   clear: () => void;
+  refreshPrices: () => Promise<void>;
   count: number;
 }
 
@@ -52,6 +55,21 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const res = await api.get('/customers/me/wishlist');
         const backendItems = Array.isArray(res.data.items) ? res.data.items : [];
         setItems(backendItems);
+        
+        // Refresh prices after loading wishlist items
+        if (backendItems.length > 0) {
+          setTimeout(() => {
+            const productIds = backendItems.map((item: WishlistItem) => item.productId);
+            productPriceService.getCurrentPrices(productIds).then(currentPrices => {
+              setItems(prev => prev.map(item => ({
+                ...item,
+                currentPrice: currentPrices.get(item.productId) || item.price
+              })));
+            }).catch(() => {
+              // Ignore price refresh errors
+            });
+          }, 100);
+        }
       } catch (e) {
         // fallback to local if backend not available
       }
@@ -83,9 +101,29 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (user) { api.put('/customers/me/wishlist', { items: next }).catch(()=>{}); }
     return next;
   });
+
+  const refreshPrices = async () => {
+    if (items.length === 0) return;
+    
+    try {
+      // Clear price cache to force fresh price fetching
+      productPriceService.clearAllCache();
+      
+      const productIds = items.map(item => item.productId);
+      const currentPrices = await productPriceService.getCurrentPrices(productIds);
+      
+      setItems(prev => prev.map(item => ({
+        ...item,
+        currentPrice: currentPrices.get(item.productId) || item.price
+      })));
+    } catch (error) {
+      console.warn('Failed to refresh wishlist prices:', error);
+    }
+  };
+
   const count = useMemo(() => items.length, [items]);
 
-  const value: WishlistContextValue = { items, toggleWishlist, isWishlisted, remove, clear, count };
+  const value: WishlistContextValue = { items, toggleWishlist, isWishlisted, remove, clear, refreshPrices, count };
   return <WishlistContext.Provider value={value}>{children}</WishlistContext.Provider>;
 };
 

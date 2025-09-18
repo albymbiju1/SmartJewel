@@ -1,0 +1,3 @@
+Razorpay Test Mode is enabled via backend. Use Razorpay test cards to simulate outcomes.
+- Success test card: 4111 1111 1111 1111, Any future date, Any CVV, Any OTP
+- Failure can be simulated using 4000 0000 0000 9995 or cancel in modal.

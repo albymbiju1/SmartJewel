@@ -15,7 +15,13 @@ db = None
 
 def init_extensions(app):
     global mongo_client, db
-    mongo_client = MongoClient(app.config["MONGODB_URI"])
+    # Use shorter client timeouts so API doesn't hang when DB is down
+    mongo_client = MongoClient(
+        app.config["MONGODB_URI"],
+        serverSelectionTimeoutMS=3000,
+        connectTimeoutMS=3000,
+        socketTimeoutMS=3000,
+    )
     db = mongo_client[app.config["MONGO_DB_NAME"]]
     app.extensions['mongo_db'] = db
 

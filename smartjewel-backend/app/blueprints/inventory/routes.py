@@ -263,23 +263,26 @@ def list_items():
 @bp.get("/products")
 def list_products():
     """Public endpoint for displaying products to customers without authentication."""
-    db = current_app.extensions['mongo_db']
-    q = {"status": "active"}  # Only show active products to customers
-    
-    # Optional filtering by category, metal, etc.
-    for f in ["category", "metal", "purity"]:
-        v = request.args.get(f)
-        if v:
-            q[f] = v
-    
-    cur = db.items.find(q).limit(200)
-    items = []
-    for d in cur:
-        d["_id"] = str(d["_id"])
-        if d.get("default_location_id"):
-            d["default_location_id"] = str(d["default_location_id"])
-        items.append(d)
-    return jsonify({"products": items})
+    try:
+        db = current_app.extensions['mongo_db']
+        q = {"status": "active"}
+        # Optional filtering by category, metal, etc.
+        for f in ["category", "metal", "purity"]:
+            v = request.args.get(f)
+            if v:
+                q[f] = v
+        cur = db.items.find(q).limit(200)
+        items = []
+        for d in cur:
+            d["_id"] = str(d["_id"])
+            if d.get("default_location_id"):
+                d["default_location_id"] = str(d["default_location_id"])
+            items.append(d)
+        return jsonify({"products": items})
+    except Exception as exc:
+        # Fail fast if DB is unavailable so frontend loader doesn't spin
+        current_app.logger.error("catalog_fetch_failed", extra={"error": str(exc)})
+        return jsonify({"products": []}), 200
 
 
 @bp.get("/items/<item_id>")

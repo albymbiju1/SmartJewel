@@ -63,15 +63,27 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
   }, [searchParams]);
 
   const normalizeCategory = (c: string) => c.toLowerCase().replace(/\s+/g, '-');
+  const toTitleCase = (s: string) => s.replace(/-/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
 
   useEffect(() => {
     const loadProducts = async () => {
       try {
         setIsLoading(true);
-        const response = await api.get('/inventory/products');
+        // Build query params for server-side filtering
+        const params: Record<string, string> = {};
+        if (category && category !== 'all') {
+          const catLower = category.toLowerCase();
+          if (catLower === 'gold' || catLower === 'diamond') {
+            params.metal = toTitleCase(catLower); // e.g., Gold, Diamond
+          } else {
+            params.category = toTitleCase(catLower); // e.g., Earrings, Necklace Set
+          }
+        }
+        const query = new URLSearchParams(params).toString();
+        const response = await api.get(`/inventory/products${query ? `?${query}` : ''}`);
         let filteredProducts = response.data.products || [];
 
-        // Optional single-category pre-filter for existing routes
+        // Optional single-category pre-filter for legacy name-based categories
         if (category && category !== 'all') {
           const categoryLower = category.toLowerCase();
           if (categoryLower === 'bangles') {

@@ -233,3 +233,71 @@ def get_customer_analytics():
     }
     
     return jsonify(analytics)
+
+
+# ---------------- User-specific Wishlist & Cart ----------------
+
+@bp.get("/me/wishlist")
+@jwt_required()
+def get_my_wishlist():
+    db = current_app.extensions['mongo_db']
+    uid = get_jwt_identity()
+    user_oid = _oid(uid)
+    if not user_oid:
+        return jsonify({"error": "invalid_user"}), 400
+    doc = db.wishlists.find_one({"user_id": user_oid}) or {"items": []}
+    items = doc.get("items", [])
+    return jsonify({"items": items})
+
+
+@bp.put("/me/wishlist")
+@jwt_required()
+def put_my_wishlist():
+    db = current_app.extensions['mongo_db']
+    uid = get_jwt_identity()
+    user_oid = _oid(uid)
+    if not user_oid:
+        return jsonify({"error": "invalid_user"}), 400
+    data = request.get_json() or {}
+    items = data.get("items", [])
+    if not isinstance(items, list):
+        return jsonify({"error": "bad_items"}), 400
+    db.wishlists.update_one(
+        {"user_id": user_oid},
+        {"$set": {"items": items, "updated_at": _now(db)}},
+        upsert=True,
+    )
+    return jsonify({"saved": True})
+
+
+@bp.get("/me/cart")
+@jwt_required()
+def get_my_cart():
+    db = current_app.extensions['mongo_db']
+    uid = get_jwt_identity()
+    user_oid = _oid(uid)
+    if not user_oid:
+        return jsonify({"error": "invalid_user"}), 400
+    doc = db.carts.find_one({"user_id": user_oid}) or {"items": []}
+    items = doc.get("items", [])
+    return jsonify({"items": items})
+
+
+@bp.put("/me/cart")
+@jwt_required()
+def put_my_cart():
+    db = current_app.extensions['mongo_db']
+    uid = get_jwt_identity()
+    user_oid = _oid(uid)
+    if not user_oid:
+        return jsonify({"error": "invalid_user"}), 400
+    data = request.get_json() or {}
+    items = data.get("items", [])
+    if not isinstance(items, list):
+        return jsonify({"error": "bad_items"}), 400
+    db.carts.update_one(
+        {"user_id": user_oid},
+        {"$set": {"items": items, "updated_at": _now(db)}},
+        upsert=True,
+    )
+    return jsonify({"saved": True})

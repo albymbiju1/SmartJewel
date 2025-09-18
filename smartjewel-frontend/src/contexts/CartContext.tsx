@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { api } from '../api';
+import { useAuth } from './AuthContext';
 
 export interface CartItem {
   productId: string;
@@ -27,6 +29,7 @@ const CartContext = createContext<CartContextValue | undefined>(undefined);
 const STORAGE_KEY = 'sj_cart_v1';
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, isLoading: authLoading } = useAuth();
   const [items, setItems] = useState<CartItem[]>(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -40,21 +43,54 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   }, [items]);
 
+  // Sync from backend on login, clear on logout
+  useEffect(() => {
+    const fetchCart = async () => {
+      if (!user) {
+        setItems([]);
+        return;
+      }
+      try {
+        const res = await api.get('/customers/me/cart');
+        const backendItems = Array.isArray(res.data.items) ? res.data.items : [];
+        setItems(backendItems);
+      } catch (e) {
+        // ignore
+      }
+    };
+    if (!authLoading) fetchCart();
+  }, [user, authLoading]);
+
   const addToCart = (item: Omit<CartItem, 'quantity'>, quantity: number = 1) => {
     setItems(prev => {
       const idx = prev.findIndex(x => x.productId === item.productId && x.size === item.size && x.style === item.style);
       if (idx >= 0) {
         const next = [...prev];
         next[idx] = { ...next[idx], quantity: Math.min(99, next[idx].quantity + quantity) };
+        if (user) { api.put('/customers/me/cart', { items: next }).catch(()=>{}); }
         return next;
       }
-      return [...prev, { ...item, quantity: Math.max(1, Math.min(99, quantity)) }];
+      const next = [...prev, { ...item, quantity: Math.max(1, Math.min(99, quantity)) }];
+      if (user) { api.put('/customers/me/cart', { items: next }).catch(()=>{}); }
+      return next;
     });
   };
 
-  const removeFromCart = (productId: string) => setItems(prev => prev.filter(x => x.productId !== productId));
-  const updateQuantity = (productId: string, quantity: number) => setItems(prev => prev.map(x => x.productId === productId ? { ...x, quantity: Math.max(1, Math.min(99, quantity)) } : x));
-  const clearCart = () => setItems([]);
+  const removeFromCart = (productId: string) => setItems(prev => {
+    const next = prev.filter(x => x.productId !== productId);
+    if (user) { api.put('/customers/me/cart', { items: next }).catch(()=>{}); }
+    return next;
+  });
+  const updateQuantity = (productId: string, quantity: number) => setItems(prev => {
+    const next = prev.map(x => x.productId === productId ? { ...x, quantity: Math.max(1, Math.min(99, quantity)) } : x);
+    if (user) { api.put('/customers/me/cart', { items: next }).catch(()=>{}); }
+    return next;
+  });
+  const clearCart = () => setItems(prev => {
+    const next: CartItem[] = [];
+    if (user) { api.put('/customers/me/cart', { items: next }).catch(()=>{}); }
+    return next;
+  });
 
   const cartCount = useMemo(() => items.reduce((sum, it) => sum + it.quantity, 0), [items]);
   const cartTotal = useMemo(() => items.reduce((sum, it) => sum + (it.price || 0) * it.quantity, 0), [items]);

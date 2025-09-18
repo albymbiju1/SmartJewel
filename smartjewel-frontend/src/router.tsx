@@ -28,6 +28,7 @@ import { RequireAuth } from './components/AuthGuard';
 import { WishlistPage } from './pages/products/WishlistPage';
 import { CartPage } from './pages/products/CartPage';
 import { CheckoutPage } from './pages/products/CheckoutPage';
+import { OrderConfirmationPage } from './pages/products/OrderConfirmationPage';
 
 export const AppRouter: React.FC = () => (
   <Router>
@@ -75,6 +76,7 @@ export const AppRouter: React.FC = () => (
       <Route path="/wishlist" element={<WishlistPage />} />
       <Route path="/cart" element={<CartPage />} />
       <Route path="/checkout" element={<CheckoutPage />} />
+      <Route path="/order-confirmation" element={<OrderConfirmationPage />} />
 
       {/* Inventory Routes (protected) */}
       <Route path="/inventory/dashboard" element={<RequireAuth><InventoryDashboard /></RequireAuth>} />

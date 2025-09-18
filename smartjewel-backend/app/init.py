@@ -28,6 +28,10 @@ def create_app():
     from app.blueprints.inventory.routes import bp as inventory_bp
     app.register_blueprint(inventory_bp)
 
+    # Payments blueprint (demo/test)
+    from app.blueprints.payments import bp as payments_bp
+    app.register_blueprint(payments_bp)
+
     @app.route("/")
     def index():
         # List all routes for debugging

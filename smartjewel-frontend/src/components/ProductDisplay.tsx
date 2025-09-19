@@ -339,10 +339,11 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
               {pageSlice.map((product, idx) => (
                 <motion.div
                   key={product._id}
-                  className={`card overflow-hidden hover:shadow-elevated transition-shadow group ${viewMode==='list' ? 'flex' : ''}`}
+                  className={`card overflow-hidden hover:shadow-elevated transition-shadow group cursor-pointer ${viewMode==='list' ? 'flex' : ''}`}
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: idx * 0.02 }}
+                  onClick={() => navigate(`/product/${product._id}`)}
                 >
                   <div className={`${viewMode==='list' ? 'w-48 flex-shrink-0' : ''} aspect-square overflow-hidden relative`}>
                     {product.image ? (
@@ -411,13 +412,13 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
                         <div className="flex items-center justify-between gap-3">
                           <span className="text-lg font-bold text-gray-900">₹{product.price.toLocaleString()}</span>
                           <div className="flex items-center gap-2">
-                            <button onClick={() => { setQuickViewProduct(product); setQuickViewOpen(true); }} className="px-3 py-1 rounded-md border border-gray-200 text-sm hover:bg-gray-50">Quick View</button>
-                            <button onClick={() => navigate(`/product/${product._id}`)} className="bg-blue-600 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-700 transition-colors">View Details</button>
+                            <button onClick={(e) => { e.stopPropagation(); setQuickViewProduct(product); setQuickViewOpen(true); }} className="px-3 py-1 rounded-md border border-gray-200 text-sm hover:bg-gray-50">Quick View</button>
+                            <button onClick={(e) => { e.stopPropagation(); navigate(`/product/${product._id}`); }} className="bg-blue-600 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-700 transition-colors">View Details</button>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <button className="pill px-3 py-1 text-sm">Similar</button>
-                          <button className="pill px-3 py-1 text-sm">Try it</button>
+                          <button onClick={(e) => e.stopPropagation()} className="pill px-3 py-1 text-sm">Similar</button>
+                          <button onClick={(e) => e.stopPropagation()} className="pill px-3 py-1 text-sm">Try it</button>
                         </div>
                       </div>
                     )}

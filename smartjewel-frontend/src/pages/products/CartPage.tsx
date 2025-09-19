@@ -2,8 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../../contexts/CartContext';
 import { API_BASE_URL, api } from '../../api';
-import { priceUpdateService } from '../../services/priceUpdateService';
-import { useToast } from '../../components/Toast';
 
 interface Product {
   _id: string;
@@ -27,13 +25,11 @@ const toAbsoluteImage = (img?: string) => {
 
 export const CartPage: React.FC = () => {
   const navigate = useNavigate();
-  const { items, updateQuantity, removeFromCart, clearCart, refreshPrices } = useCart();
-  const toast = useToast();
+  const { items, updateQuantity, removeFromCart, clearCart } = useCart();
 
   // Fetched product details to supplement cart items (weight, current price if missing, etc.)
   const [productMap, setProductMap] = useState<Record<string, Product>>({});
   const [loadingProducts, setLoadingProducts] = useState(false);
-  const [isUpdatingPrices, setIsUpdatingPrices] = useState(false);
 
   useEffect(() => {
     const uniqueIds = Array.from(new Set(items.map(i => i.productId))).filter(Boolean);
@@ -72,8 +68,7 @@ export const CartPage: React.FC = () => {
   const lineItems = useMemo(() => items.map(it => {
     const p = productMap[it.productId];
     const derived = (p?.computed_price ?? p?.price ?? 0);
-    // Use currentPrice if available, otherwise fall back to stored price or derived price
-    const unitPrice = it.currentPrice || (typeof it.price === 'number' ? it.price : derived);
+    const unitPrice = typeof it.price === 'number' ? it.price : derived;
     const total = unitPrice * it.quantity;
     return { cart: it, product: p, unitPrice, total };
   }), [items, productMap]);
@@ -102,36 +97,6 @@ export const CartPage: React.FC = () => {
     setPromoCode('');
   };
 
-  const handleUpdateAllPrices = async () => {
-    try {
-      setIsUpdatingPrices(true);
-      toast.info('Updating all product prices...', { description: 'This may take a moment' });
-      
-      // Trigger product price update to recalculate with new making cost
-      const result = await priceUpdateService.updateProductPrices(false);
-      
-      if (result.success) {
-        toast.success('Prices updated successfully!', { 
-          description: `${result.updated_count} products updated with new prices` 
-        });
-        
-        // Refresh cart prices after update
-        await refreshPrices();
-      } else {
-        toast.error('Failed to update prices', { 
-          description: 'Please try again or contact support' 
-        });
-      }
-    } catch (error) {
-      console.error('Price update failed:', error);
-      toast.error('Failed to update prices', { 
-        description: 'Please try again or contact support' 
-      });
-    } finally {
-      setIsUpdatingPrices(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Breadcrumb */}
@@ -148,41 +113,6 @@ export const CartPage: React.FC = () => {
         <div className="container mx-auto px-6 text-center">
           <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">Your Bag</h1>
           <p className="text-gray-600">Review your selected designs and proceed to checkout</p>
-          {items.length > 0 && (
-            <div className="mt-4 flex gap-3 justify-center">
-              <button
-                onClick={refreshPrices}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Refresh Prices
-              </button>
-              <button
-                onClick={handleUpdateAllPrices}
-                disabled={isUpdatingPrices}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isUpdatingPrices ? (
-                  <>
-                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Updating...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    Update All Prices
-                  </>
-                )}
-              </button>
-            </div>
-          )}
         </div>
       </div>
 
@@ -206,8 +136,7 @@ export const CartPage: React.FC = () => {
             <div className="lg:col-span-2 space-y-4">
               {items.map((it) => {
                 const p = productMap[it.productId];
-                const derived = (p?.computed_price ?? p?.price ?? 0);
-                const unitPrice = it.currentPrice || (typeof it.price === 'number' ? it.price : derived);
+                const unitPrice = typeof it.price === 'number' ? it.price : (p?.price ?? 0);
                 const lineTotal = unitPrice * it.quantity;
                 return (
                   <div key={`${it.productId}-${it.size || ''}-${it.style || ''}`} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">

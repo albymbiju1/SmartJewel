@@ -37,17 +37,11 @@ export const ProductDetailPage: React.FC = () => {
       
       try {
         setIsLoading(true);
-        // First try to get specific item, if not available get from all items
-        try {
-          const response = await api.get(`/inventory/items/${id}`);
-          setProduct(response.data.item);
-        } catch {
-          // Fallback: get all items and find by ID
-          const allItemsResponse = await api.get('/inventory/items');
-          const items = allItemsResponse.data.items || [];
-          const foundItem = items.find((item: Product) => item._id === id);
-          setProduct(foundItem || null);
-        }
+        // Use the public products endpoint to get all products and find by ID
+        const response = await api.get('/inventory/products');
+        const products = response.data.products || [];
+        const foundProduct = products.find((item: Product) => item._id === id);
+        setProduct(foundProduct || null);
       } catch (error) {
         console.error('Failed to load product:', error);
       } finally {
@@ -116,7 +110,7 @@ export const ProductDetailPage: React.FC = () => {
             <div className="p-6">
               <div className="aspect-square relative overflow-hidden rounded-lg border">
                 <img
-                  src={(activeImage || (product.image || ''))}
+                  src={(activeImage || (product.image || '')).startsWith('http') ? (activeImage || (product.image || '')) : `http://127.0.0.1:5000${(activeImage || (product.image || ''))}`}
                   alt={product.name}
                   className={`w-full h-full object-cover ${zoomed ? 'scale-150 cursor-zoom-out' : 'cursor-zoom-in'} transition-transform duration-300`}
                   onClick={() => setZoomed(z => !z)}
@@ -138,7 +132,7 @@ export const ProductDetailPage: React.FC = () => {
                 <div className="mt-3 grid grid-cols-5 gap-2">
                   {[product.image].map((img, i) => (
                     <button key={i} onClick={()=>{ setActiveImage(img); setZoomed(false); }} className={`aspect-square rounded overflow-hidden border ${activeImage===img ? 'ring-2 ring-amber-400' : ''}`}>
-                      <img src={img} alt={`thumb-${i}`} className="w-full h-full object-cover" />
+                      <img src={img.startsWith('http') ? img : `http://127.0.0.1:5000${img}`} alt={`thumb-${i}`} className="w-full h-full object-cover" />
                     </button>
                   ))}
                 </div>

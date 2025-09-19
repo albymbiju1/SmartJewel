@@ -13,7 +13,7 @@ interface CustomerForm {
 
 export const CheckoutPage: React.FC = () => {
   const navigate = useNavigate();
-  const { items, cartTotal } = useCart();
+  const { items, cartTotal, updateQuantity, removeFromCart } = useCart();
 
   // Form + UI state
   const [form, setForm] = useState<CustomerForm>({ name: '', email: '', phone: '', address: '' });
@@ -209,7 +209,31 @@ export const CheckoutPage: React.FC = () => {
                         <p className="text-sm text-gray-600">
                           {it.metal || (it as any).material || '—'}{it.purity ? ` • ${it.purity}` : ''}{(it as any).weight ? ` • ${(it as any).weight}${(it as any).unit || 'g'}` : ''}
                         </p>
-                        <p className="text-sm text-gray-600">Qty: {it.quantity}</p>
+                        <div className="mt-2 flex items-center gap-3">
+                          <div className="inline-flex items-center gap-2">
+                            <button
+                              aria-label="Decrease quantity"
+                              className="w-8 h-8 rounded border border-gray-200 text-gray-700 hover:bg-gray-50"
+                              onClick={() => updateQuantity(it.productId, Math.max(1, it.quantity - 1))}
+                            >
+                              −
+                            </button>
+                            <span className="min-w-[1.5rem] text-center text-sm">{it.quantity}</span>
+                            <button
+                              aria-label="Increase quantity"
+                              className="w-8 h-8 rounded border border-gray-200 text-gray-700 hover:bg-gray-50"
+                              onClick={() => updateQuantity(it.productId, Math.min(99, it.quantity + 1))}
+                            >
+                              +
+                            </button>
+                          </div>
+                          <button
+                            className="text-sm text-rose-600 hover:text-rose-700"
+                            onClick={() => removeFromCart(it.productId)}
+                          >
+                            Remove
+                          </button>
+                        </div>
                       </div>
                       <div className="text-right">
                         <div className="text-gray-900 font-medium">₹{((it.price || 0) * it.quantity).toLocaleString('en-IN')}</div>

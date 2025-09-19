@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { QuickViewModal } from './QuickViewModal';
 import { MegaMenuFilter } from './MegaMenuFilter';
 import { useWishlist } from '../contexts/WishlistContext';
+import { useCart } from '../contexts/CartContext';
 
 interface Product {
   _id: string;
@@ -34,6 +35,8 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
 }) => {
   // Access wishlist state to render hearts accurately
   const { isWishlisted } = useWishlist();
+  // Access cart context for Buy Now functionality
+  const { addToCart } = useCart();
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -413,7 +416,23 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
                           <span className="text-lg font-bold text-gray-900">₹{product.price.toLocaleString()}</span>
                           <div className="flex items-center gap-2">
                             <button onClick={(e) => { e.stopPropagation(); setQuickViewProduct(product); setQuickViewOpen(true); }} className="px-3 py-1 rounded-md border border-gray-200 text-sm hover:bg-gray-50">Quick View</button>
-                            <button onClick={(e) => { e.stopPropagation(); navigate(`/product/${product._id}`); }} className="bg-blue-600 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-700 transition-colors">View Details</button>
+                            <button 
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                addToCart({
+                                  productId: product._id,
+                                  name: product.name,
+                                  price: product.price || 0,
+                                  image: product.image || '',
+                                  metal: product.metal,
+                                  purity: product.purity
+                                }, 1);
+                                navigate('/checkout');
+                              }} 
+                              className="bg-orange-600 text-white px-3 py-1 rounded-md text-sm hover:bg-orange-700 transition-colors"
+                            >
+                              Buy Now
+                            </button>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">

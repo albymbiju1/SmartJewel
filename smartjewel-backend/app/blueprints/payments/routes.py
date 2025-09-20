@@ -41,7 +41,7 @@ def inr_paise(amount_rupees: float) -> int:
 
 
 @bp.post("/razorpay/order")
-@jwt_required(optional=True)
+@jwt_required()
 def create_razorpay_order():
     """
     Create a Razorpay order in test mode.
@@ -125,7 +125,7 @@ def create_razorpay_order():
 
 # Public alias to match requirement: /api/create-order
 @bp.post("/api/create-order")
-@jwt_required(optional=True)
+@jwt_required()
 def api_create_order_alias():
     # Forward to same logic; keep payload shape identical
     return create_razorpay_order()

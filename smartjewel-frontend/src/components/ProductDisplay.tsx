@@ -419,15 +419,18 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
                             <button 
                               onClick={(e) => { 
                                 e.stopPropagation(); 
-                                addToCart({
+                                // Emit a global Buy Now event to centralize auth check and navigation
+                                const ev = new CustomEvent('sj:buyNow', { detail: {
                                   productId: product._id,
                                   name: product.name,
                                   price: product.price || 0,
                                   image: product.image || '',
                                   metal: product.metal,
-                                  purity: product.purity
-                                }, 1);
-                                navigate('/checkout');
+                                  purity: product.purity,
+                                  quantity: 1,
+                                  sourceSelector: undefined
+                                }});
+                                window.dispatchEvent(ev);
                               }} 
                               className="bg-orange-600 text-white px-3 py-1 rounded-md text-sm hover:bg-orange-700 transition-colors"
                             >

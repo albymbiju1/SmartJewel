@@ -12,6 +12,9 @@ interface User {
     _id: string;
     role_name: string;
   };
+  // Optional profile fields
+  phone_number?: string;
+  address?: string;
   // New claims shape from backend
   roles?: string[];
   perms?: string[];
@@ -30,6 +33,7 @@ interface AuthContextType {
   loginWithFirebase: (firebaseUser: FirebaseUser) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
+  updateUser: (patch: Partial<User>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -222,6 +226,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const isAuthenticated = !!user;
 
+  const updateUser = (patch: Partial<User>) => {
+    setUser((prev) => {
+      const next = prev ? { ...prev, ...patch } as User : (patch as User);
+      try { localStorage.setItem('user_data', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
   const value: AuthContextType = {
     user,
     isLoading,
@@ -229,6 +241,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     loginWithFirebase,
     logout,
     isAuthenticated,
+    updateUser,
   };
 
   return (

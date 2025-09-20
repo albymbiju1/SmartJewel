@@ -29,9 +29,13 @@ import { WishlistPage } from './pages/products/WishlistPage';
 import { CartPage } from './pages/products/CartPage';
 import { CheckoutPage } from './pages/products/CheckoutPage';
 import { OrderConfirmationPage } from './pages/products/OrderConfirmationPage';
+import { ProfilePage } from './pages/ProfilePage';
+import EventBridge from './components/EventBridge';
 
 export const AppRouter: React.FC = () => (
   <Router>
+    {/* Bridge custom events within Router so useNavigate works */}
+    <EventBridge />
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<App />} />
@@ -77,6 +81,9 @@ export const AppRouter: React.FC = () => (
       <Route path="/cart" element={<CartPage />} />
       <Route path="/checkout" element={<CheckoutPage />} />
       <Route path="/order-confirmation" element={<OrderConfirmationPage />} />
+
+      {/* Profile (protected) */}
+      <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
 
       {/* Inventory Routes (protected) */}
       <Route path="/inventory/dashboard" element={<RequireAuth><InventoryDashboard /></RequireAuth>} />

@@ -255,7 +255,22 @@ export const ProductDetailPage: React.FC = () => {
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 3H3m4 10v6a1 1 0 001 1h1m-4-3h12a2 2 0 002-2V9a2 2 0 00-2-2H9a2 2 0 00-2 2v10z" /></svg>
                         <span>Add to Cart</span>
                       </button>
-                      <button className="flex-1 bg-orange-600 text-white py-3 px-6 rounded-lg hover:bg-orange-700 transition-colors flex items-center justify-center space-x-2">
+                      <button className="flex-1 bg-orange-600 text-white py-3 px-6 rounded-lg hover:bg-orange-700 transition-colors flex items-center justify-center space-x-2"
+                        onClick={()=>{
+                          const ev = new CustomEvent('sj:buyNow', { detail: {
+                            productId: product._id,
+                            name: product.name,
+                            price: product.price,
+                            image: product.image,
+                            metal: product.metal,
+                            purity: product.purity,
+                            size: selectedSize,
+                            style: selectedStyle,
+                            quantity
+                          }});
+                          window.dispatchEvent(ev);
+                        }}
+                      >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                         <span>Buy Now</span>
                       </button>

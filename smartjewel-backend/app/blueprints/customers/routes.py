@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.utils.authz import require_roles, require_permissions
+from app.utils.security import verify_password, hash_password
 from bson import ObjectId
 from datetime import datetime, timedelta
 import logging
@@ -301,3 +302,95 @@ def put_my_cart():
         upsert=True,
     )
     return jsonify({"saved": True})
+
+
+# ---------------- Current user profile ----------------
+
+@bp.get("/me")
+@jwt_required()
+def get_me():
+    """Return current user's profile (safe fields)."""
+    db = current_app.extensions['mongo_db']
+    uid = get_jwt_identity()
+    user_oid = _oid(uid)
+    if not user_oid:
+        return jsonify({"error": "invalid_user"}), 400
+
+    user = db.users.find_one({"_id": user_oid})
+    if not user:
+        return jsonify({"error": "user_not_found"}), 404
+
+    role_info = user.get("role") or {}
+    safe = {
+        "id": str(user.get("_id")),
+        "email": user.get("email"),
+        "full_name": user.get("full_name"),
+        "phone_number": user.get("phone_number"),
+        "address": user.get("address"),
+        "role": {
+            "_id": str(role_info.get("_id")) if role_info.get("_id") else None,
+            "role_name": role_info.get("role_name"),
+        },
+        "roles": user.get("roles", []),
+        "perms": user.get("permissions", []),
+    }
+    return jsonify(safe)
+
+
+@bp.patch("/me")
+@jwt_required()
+def patch_me():
+    """Update current user's basic profile fields."""
+    db = current_app.extensions['mongo_db']
+    uid = get_jwt_identity()
+    user_oid = _oid(uid)
+    if not user_oid:
+        return jsonify({"error": "invalid_user"}), 400
+
+    data = request.get_json() or {}
+    allowed = {"full_name", "phone_number", "address"}
+    update = {k: v for k, v in data.items() if k in allowed}
+    if not update:
+        return jsonify({"error": "no_valid_fields"}), 400
+
+    update["updated_at"] = _now(db)
+    res = db.users.update_one({"_id": user_oid}, {"$set": update})
+    if not res.matched_count:
+        return jsonify({"error": "user_not_found"}), 404
+
+    # Return updated document snippet
+    user = db.users.find_one({"_id": user_oid}, {"full_name": 1, "phone_number": 1, "address": 1})
+    return jsonify({
+        "message": "profile_updated",
+        "full_name": user.get("full_name"),
+        "phone_number": user.get("phone_number"),
+        "address": user.get("address"),
+    })
+
+
+@bp.patch("/me/password")
+@jwt_required()
+def change_password():
+    """Change current user's password, verifying the old password."""
+    db = current_app.extensions['mongo_db']
+    uid = get_jwt_identity()
+    user_oid = _oid(uid)
+    if not user_oid:
+        return jsonify({"error": "invalid_user"}), 400
+
+    data = request.get_json() or {}
+    old_pw = (data.get("old_password") or "").strip()
+    new_pw = (data.get("new_password") or "").strip()
+    if not old_pw or not new_pw:
+        return jsonify({"error": "validation_failed", "details": {"password": ["Both old_password and new_password are required."]}}), 400
+
+    user = db.users.find_one({"_id": user_oid})
+    if not user or not user.get("password_hash"):
+        return jsonify({"error": "user_not_found"}), 404
+
+    if not verify_password(old_pw, user["password_hash"]):
+        return jsonify({"error": "invalid_old_password"}), 400
+
+    new_hash = hash_password(new_pw)
+    db.users.update_one({"_id": user_oid}, {"$set": {"password_hash": new_hash, "updated_at": _now(db)}})
+    return jsonify({"message": "password_updated"})

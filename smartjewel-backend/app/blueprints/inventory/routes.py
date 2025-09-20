@@ -5,6 +5,16 @@ from app.utils.authz import require_permissions, require_any_role
 
 
 bp = Blueprint("inventory", __name__, url_prefix="/inventory")
+# Helper: read latest gold rate per gram (24k) and return float or None
+def _latest_rates(db):
+    try:
+        doc = db.gold_rate.find_one({}, sort=[("updated_at", -1)]) or {}
+        rates = doc.get("rates") or {}
+        # Normalize keys to lower e.g. "24k" -> "24k"
+        norm = {str(k).lower(): float(v) for k, v in rates.items() if v is not None}
+        return norm
+    except Exception:
+        return {}
 
 # -------- Locations --------
 @bp.post("/locations")
@@ -263,27 +273,32 @@ def list_items():
 @bp.get("/products")
 def list_products():
     """Public endpoint for displaying products to customers without authentication."""
-    db = current_app.extensions['mongo_db']
-    q = {"status": "active"}  # Only show active products to customers
-    
-    # Optional filtering by category, metal, etc.
-    for f in ["category", "metal", "purity"]:
-        v = request.args.get(f)
-        if v:
-            q[f] = v
-    
-    cur = db.items.find(q).limit(200)
-    items = []
-    for d in cur:
-        d["_id"] = str(d["_id"])
-        if d.get("default_location_id"):
-            d["default_location_id"] = str(d["default_location_id"])
-        items.append(d)
-    return jsonify({"products": items})
+    try:
+        db = current_app.extensions['mongo_db']
+        q = {"status": "active"}
+        # Optional filtering by category, metal, etc.
+        for f in ["category", "metal", "purity"]:
+            v = request.args.get(f)
+            if v:
+                q[f] = v
+        cur = db.items.find(q).limit(200)
+        items = []
+        for d in cur:
+            d["_id"] = str(d["_id"])
+            if d.get("default_location_id"):
+                d["default_location_id"] = str(d["default_location_id"])
+            items.append(d)
+        return jsonify({"products": items})
+    except Exception as exc:
+        # Fail fast if DB is unavailable so frontend loader doesn't spin
+        current_app.logger.error("catalog_fetch_failed", extra={"error": str(exc)})
+        return jsonify({"products": []}), 200
 
+
+from flask_jwt_extended import jwt_required
 
 @bp.get("/items/<item_id>")
-@require_permissions("inventory.read")
+@jwt_required(optional=True)
 def get_item(item_id):
     db = current_app.extensions['mongo_db']
     oid = _oid(item_id)
@@ -295,6 +310,59 @@ def get_item(item_id):
     d["_id"] = str(d["_id"])
     if d.get("default_location_id"):
         d["default_location_id"] = str(d["default_location_id"])
+    # Compute price using the proper price calculation system
+    try:
+        from app.services.price_calculator import GoldPriceCalculator
+        
+        weight = float(d.get("weight") or 0)
+        unit = (d.get("weight_unit") or 'g').lower()
+        if unit in ('gram', 'grams', 'g'):
+            grams = weight
+        elif unit in ('mg', 'milligram', 'milligrams'):
+            grams = weight / 1000.0
+        elif unit in ('kg', 'kilogram', 'kilograms'):
+            grams = weight * 1000.0
+        else:
+            grams = weight
+            
+        if grams > 0:
+            # Get current gold rates
+            rates = _latest_rates(db)
+            gold_rate_24k = rates.get('24k', 0)
+            
+            if gold_rate_24k > 0:
+                # Use the proper price calculator
+                price_calculator = GoldPriceCalculator(db)
+                price_breakdown = price_calculator.calculate_total_price(d, gold_rate_24k)
+                d["computed_price"] = price_breakdown["total_price"]
+                d["currency"] = "INR"
+                d["price_breakdown"] = price_breakdown
+    except Exception as e:
+        # Fallback to old method if new calculation fails
+        try:
+            weight = float(d.get("weight") or 0)
+            unit = (d.get("weight_unit") or 'g').lower()
+            if unit in ('gram', 'grams', 'g'):
+                grams = weight
+            elif unit in ('mg', 'milligram', 'milligrams'):
+                grams = weight / 1000.0
+            elif unit in ('kg', 'kilogram', 'kilograms'):
+                grams = weight * 1000.0
+            else:
+                grams = weight
+            rates = _latest_rates(db)
+            purity_key = str(d.get("purity") or '').lower()
+            base_rate = rates.get(purity_key) or rates.get('24k')
+            making = float((d.get('making_charges') or 0))
+            gst_rate = float((d.get('gst_percent') or 0)) / 100.0
+            if base_rate:
+                base = grams * base_rate
+                subtotal = base + making
+                total = round(subtotal * (1 + gst_rate), 2)
+                d["computed_price"] = total
+                d["currency"] = "INR"
+        except Exception:
+            pass
     return jsonify({"item": d})
 
 
@@ -574,3 +642,160 @@ def bom_update(product_id):
     update["updated_at"] = _now(db)
     db.bom.update_one({"product_id": oid}, {"$set": update}, upsert=True)
     return jsonify({"updated": True})
+
+
+# -------- Stock Management --------
+@bp.get("/stock")
+@require_permissions("inventory.read")
+def get_stock():
+    """Get all products with stock information"""
+    db = current_app.extensions['mongo_db']
+    
+    # Ensure all items have a quantity field (default 0)
+    db.items.update_many(
+        {"quantity": {"$exists": False}},
+        {"$set": {"quantity": 0}}
+    )
+    
+    # Get all items with their stock info
+    items = list(db.items.find({}, {
+        "sku": 1,
+        "name": 1,
+        "category": 1,
+        "quantity": 1,
+        "status": 1
+    }))
+    
+    # Convert ObjectIds to strings
+    for item in items:
+        item["_id"] = str(item["_id"])
+        # Ensure quantity exists
+        if "quantity" not in item:
+            item["quantity"] = 0
+    
+    return jsonify({"products": items})
+
+
+@bp.put("/stock/<sku>")
+@require_permissions("inventory.update")
+def update_stock(sku):
+    """Update stock quantity for a product by SKU"""
+    db = current_app.extensions['mongo_db']
+    data = request.get_json() or {}
+    
+    if "quantity" not in data:
+        return jsonify({"error": "quantity_required"}), 400
+    
+    try:
+        new_quantity = int(data["quantity"])
+        if new_quantity < 0:
+            return jsonify({"error": "invalid_quantity"}), 400
+    except (ValueError, TypeError):
+        return jsonify({"error": "invalid_quantity"}), 400
+    
+    # Find the current item to get old quantity and name
+    item = db.items.find_one({"sku": sku})
+    if not item:
+        return jsonify({"error": "item_not_found"}), 404
+    
+    old_quantity = item.get("quantity", 0)
+    product_name = item.get("name", "Unknown Product")
+    
+    # Update the item quantity
+    result = db.items.update_one(
+        {"sku": sku},
+        {"$set": {"quantity": new_quantity, "updated_at": _now(db)}}
+    )
+    
+    if result.matched_count == 0:
+        return jsonify({"error": "item_not_found"}), 404
+    
+    # Determine change type
+    if old_quantity == 0 and new_quantity > 0:
+        change_type = "Added"
+    elif old_quantity > 0 and new_quantity == 0:
+        change_type = "Removed"
+    elif old_quantity != new_quantity:
+        change_type = "Updated"
+    else:
+        change_type = "Updated"  # Same quantity but still an update
+    
+    # Get current user info
+    current_user_id = get_jwt_identity()
+    changed_by = "System"
+    try:
+        user = db.users.find_one({"_id": _oid(current_user_id)})
+        if user:
+            changed_by = user.get("name", user.get("email", "Unknown User"))
+    except:
+        pass
+    
+    # Create stock history record
+    history_record = {
+        "sku": sku,
+        "productName": product_name,
+        "changedBy": changed_by,
+        "changeType": change_type,
+        "quantityBefore": old_quantity,
+        "quantityAfter": new_quantity,
+        "timestamp": _now(db)
+    }
+    db.stock_history.insert_one(history_record)
+    
+    return jsonify({
+        "success": True,
+        "quantity": new_quantity
+    })
+
+
+@bp.get("/stock/history")
+@require_permissions("inventory.read")
+def get_stock_history():
+    """Get stock history with filtering and pagination"""
+    db = current_app.extensions['mongo_db']
+    
+    # Get query parameters
+    page = int(request.args.get('page', 1))
+    per_page = int(request.args.get('per_page', 10))
+    change_type = request.args.get('changeType', 'All')
+    
+    # Build filter query
+    query = {}
+    if change_type and change_type != 'All':
+        query['changeType'] = change_type
+    
+    # Calculate skip value for pagination
+    skip = (page - 1) * per_page
+    
+    # Get total count for pagination
+    total_count = db.stock_history.count_documents(query)
+    
+    # Get history records with pagination
+    history_records = list(
+        db.stock_history.find(query)
+        .sort("timestamp", -1)  # Most recent first
+        .skip(skip)
+        .limit(per_page)
+    )
+    
+    # Convert ObjectIds to strings
+    for record in history_records:
+        record["_id"] = str(record["_id"])
+        # Format timestamp for display
+        if record.get("timestamp"):
+            record["formattedTimestamp"] = record["timestamp"].strftime("%d %b %Y, %I:%M %p")
+    
+    # Calculate pagination info
+    total_pages = (total_count + per_page - 1) // per_page
+    
+    return jsonify({
+        "history": history_records,
+        "pagination": {
+            "current_page": page,
+            "per_page": per_page,
+            "total_count": total_count,
+            "total_pages": total_pages,
+            "has_next": page < total_pages,
+            "has_prev": page > 1
+        }
+    })

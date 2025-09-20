@@ -1,6 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RoleBasedNavigation } from '../../components/RoleBasedNavigation';
+import { GoldPriceDisplay } from '../../components/GoldPriceDisplay';
+import { PriceUpdateManager } from '../../components/PriceUpdateManager';
 
 export const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -41,6 +43,12 @@ export const AdminDashboard: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Gold Prices */}
+        <GoldPriceDisplay />
+
+        {/* Price Update Manager */}
+        <PriceUpdateManager />
 
         {/* Quick Actions */}
         <div className="bg-white rounded-lg shadow p-6">
@@ -121,3 +129,5 @@ export const AdminDashboard: React.FC = () => {
     </RoleBasedNavigation>
   );
 };
+
+

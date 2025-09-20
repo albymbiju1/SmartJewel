@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../api';
 
@@ -24,6 +24,12 @@ export const ProductDetailPage: React.FC = () => {
   const [product, setProduct] = useState<Product | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
+  const [activeImage, setActiveImage] = useState<string | null>(null);
+  const [zoomed, setZoomed] = useState(false);
+  const [selectedSize, setSelectedSize] = useState<string | undefined>(undefined);
+  const [selectedStyle, setSelectedStyle] = useState<string | undefined>(undefined);
+  const [rating, setRating] = useState<number>(0);
+  const [reviews, setReviews] = useState<{ user: string; rating: number; comment: string; date: string }[]>([]);
 
   useEffect(() => {
     const loadProduct = async () => {
@@ -31,17 +37,11 @@ export const ProductDetailPage: React.FC = () => {
       
       try {
         setIsLoading(true);
-        // First try to get specific item, if not available get from all items
-        try {
-          const response = await api.get(`/inventory/items/${id}`);
-          setProduct(response.data.item);
-        } catch {
-          // Fallback: get all items and find by ID
-          const allItemsResponse = await api.get('/inventory/items');
-          const items = allItemsResponse.data.items || [];
-          const foundItem = items.find((item: Product) => item._id === id);
-          setProduct(foundItem || null);
-        }
+        // Use the public products endpoint to get all products and find by ID
+        const response = await api.get('/inventory/products');
+        const products = response.data.products || [];
+        const foundProduct = products.find((item: Product) => item._id === id);
+        setProduct(foundProduct || null);
       } catch (error) {
         console.error('Failed to load product:', error);
       } finally {
@@ -106,19 +106,35 @@ export const ProductDetailPage: React.FC = () => {
       <div className="container mx-auto px-6 py-12">
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Product Image */}
-            <div className="aspect-square">
-              {product.image ? (
+            {/* Product Gallery with Zoom */}
+            <div className="p-6">
+              <div className="aspect-square relative overflow-hidden rounded-lg border">
                 <img
-                  src={product.image}
+                  src={(activeImage || (product.image || '')).startsWith('http') ? (activeImage || (product.image || '')) : `http://127.0.0.1:5000${(activeImage || (product.image || ''))}`}
                   alt={product.name}
-                  className="w-full h-full object-cover"
+                  className={`w-full h-full object-cover ${zoomed ? 'scale-150 cursor-zoom-out' : 'cursor-zoom-in'} transition-transform duration-300`}
+                  onClick={() => setZoomed(z => !z)}
+                  onMouseLeave={() => setZoomed(false)}
                 />
-              ) : (
-                <div className="w-full h-full bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center">
-                  <svg className="w-32 h-32 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
+                <button
+                  className="absolute top-3 right-3 bg-white/90 rounded-full p-2 shadow"
+                  title="Add to Wishlist"
+                  onClick={()=>{
+                    const ev = new CustomEvent('sj:toggleWishlist', { detail: { productId: product._id, name: product.name, price: product.price, image: product.image, metal: product.metal, purity: product.purity } });
+                    window.dispatchEvent(ev);
+                  }}
+                >
+                  <svg className="w-5 h-5 text-rose-600" viewBox="0 0 24 24" fill="currentColor"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 3 13.352 3 10.75 3 8.264 4.988 6.5 7.2 6.5c1.278 0 2.516.492 3.445 1.378A4.87 4.87 0 0114.1 6.5c2.212 0 4.1 1.764 4.1 4.25 0 2.602-1.688 4.61-3.99 6.757a25.178 25.178 0 01-4.244 3.17 15.247 15.247 0 01-.383.218l-.022.012-.007.003-.003.002a.75.75 0 01-.66 0l-.003-.002z"/></svg>
+                </button>
+              </div>
+              {/* Thumbnails (if backend adds more images later, wire here) */}
+              {product.image && (
+                <div className="mt-3 grid grid-cols-5 gap-2">
+                  {[product.image].map((img, i) => (
+                    <button key={i} onClick={()=>{ setActiveImage(img); setZoomed(false); }} className={`aspect-square rounded overflow-hidden border ${activeImage===img ? 'ring-2 ring-amber-400' : ''}`}>
+                      <img src={img.startsWith('http') ? img : `http://127.0.0.1:5000${img}`} alt={`thumb-${i}`} className="w-full h-full object-cover" />
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
@@ -155,9 +171,9 @@ export const ProductDetailPage: React.FC = () => {
                   </div>
                 )}
 
-                {/* Specifications */}
+                {/* Details & Specifications */}
                 <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Specifications</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Details</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="bg-gray-50 p-4 rounded-lg">
                       <span className="text-sm font-medium text-gray-500">Metal</span>
@@ -170,17 +186,35 @@ export const ProductDetailPage: React.FC = () => {
                     {product.weight && (
                       <div className="bg-gray-50 p-4 rounded-lg">
                         <span className="text-sm font-medium text-gray-500">Weight</span>
-                        <p className="text-gray-900 font-semibold">
-                          {product.weight} {product.weight_unit}
-                        </p>
+                        <p className="text-gray-900 font-semibold">{product.weight} {product.weight_unit}</p>
                       </div>
                     )}
                     <div className="bg-gray-50 p-4 rounded-lg">
-                      <span className="text-sm font-medium text-gray-500">Status</span>
-                      <p className={`font-semibold ${product.status === 'active' ? 'text-green-600' : 'text-red-600'}`}>
-                        {product.status === 'active' ? 'Available' : 'Out of Stock'}
-                      </p>
+                      <span className="text-sm font-medium text-gray-500">Certification</span>
+                      <p className="text-gray-900 font-semibold">IGI / BIS Hallmark</p>
                     </div>
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <span className="text-sm font-medium text-gray-500">Status</span>
+                      <p className={`font-semibold ${product.status === 'active' ? 'text-green-600' : 'text-red-600'}`}>{product.status === 'active' ? 'Available' : 'Out of Stock'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Size & Style selectors */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Size</label>
+                    <select value={selectedSize} onChange={(e)=>setSelectedSize(e.target.value)} className="w-full border rounded-md px-3 py-2">
+                      <option value="">Select size</option>
+                      {['S','M','L','XL'].map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Style</label>
+                    <select value={selectedStyle} onChange={(e)=>setSelectedStyle(e.target.value)} className="w-full border rounded-md px-3 py-2">
+                      <option value="">Select style</option>
+                      {['Classic','Modern','Antique'].map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
                   </div>
                 </div>
 
@@ -190,58 +224,69 @@ export const ProductDetailPage: React.FC = () => {
                     <div className="flex items-center space-x-4 mb-6">
                       <label className="text-sm font-medium text-gray-700">Quantity:</label>
                       <div className="flex items-center border rounded-md">
-                        <button
-                          onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                          className="p-2 hover:bg-gray-50"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-                          </svg>
+                        <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="p-2 hover:bg-gray-50">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
                         </button>
                         <span className="px-4 py-2 border-x">{quantity}</span>
-                        <button
-                          onClick={() => setQuantity(quantity + 1)}
-                          className="p-2 hover:bg-gray-50"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                          </svg>
+                        <button onClick={() => setQuantity(quantity + 1)} className="p-2 hover:bg-gray-50">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
                         </button>
                       </div>
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-4">
-                      <button className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 3H3m4 10v6a1 1 0 001 1h1m-4-3h12a2 2 0 002-2V9a2 2 0 00-2-2H9a2 2 0 00-2 2v10z" />
-                        </svg>
+                      <button
+                        className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
+                        onClick={()=>{
+                          const ev = new CustomEvent('sj:addToCart', { detail: {
+                            productId: product._id,
+                            name: product.name,
+                            price: product.price,
+                            image: product.image,
+                            metal: product.metal,
+                            purity: product.purity,
+                            size: selectedSize,
+                            style: selectedStyle,
+                            quantity
+                          }});
+                          window.dispatchEvent(ev);
+                        }}
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 3H3m4 10v6a1 1 0 001 1h1m-4-3h12a2 2 0 002-2V9a2 2 0 00-2-2H9a2 2 0 00-2 2v10z" /></svg>
                         <span>Add to Cart</span>
                       </button>
-                      <button className="flex-1 bg-orange-600 text-white py-3 px-6 rounded-lg hover:bg-orange-700 transition-colors flex items-center justify-center space-x-2">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
+                      <button className="flex-1 bg-orange-600 text-white py-3 px-6 rounded-lg hover:bg-orange-700 transition-colors flex items-center justify-center space-x-2"
+                        onClick={()=>{
+                          const ev = new CustomEvent('sj:buyNow', { detail: {
+                            productId: product._id,
+                            name: product.name,
+                            price: product.price,
+                            image: product.image,
+                            metal: product.metal,
+                            purity: product.purity,
+                            size: selectedSize,
+                            style: selectedStyle,
+                            quantity
+                          }});
+                          window.dispatchEvent(ev);
+                        }}
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                         <span>Buy Now</span>
                       </button>
                     </div>
 
                     <div className="mt-4 flex items-center space-x-4 text-sm text-gray-600">
                       <div className="flex items-center space-x-1">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-                        </svg>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg>
                         <span>Certified Quality</span>
                       </div>
                       <div className="flex items-center space-x-1">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
-                        </svg>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" /></svg>
                         <span>Free Shipping</span>
                       </div>
                       <div className="flex items-center space-x-1">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                        </svg>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
                         <span>Lifetime Support</span>
                       </div>
                     </div>

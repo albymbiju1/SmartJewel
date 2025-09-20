@@ -14,6 +14,7 @@ import { InventoryDashboard } from './pages/inventory/InventoryDashboard';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { StaffDirectory } from './pages/admin/StaffDirectory';
 import { StaffSchedulePage } from './pages/admin/StaffSchedulePage';
+import { CustomerManagementDashboard } from './pages/admin/CustomerManagementDashboard';
 import { SalesDashboard } from './pages/sales/SalesDashboard';
 import { ProductsPage } from './pages/products/ProductsPage';
 import { AllJewelleryPage } from './pages/products/AllJewelleryPage';
@@ -24,9 +25,17 @@ import { CollectionsPage } from './pages/products/CollectionsPage';
 import { GiftingPage } from './pages/products/GiftingPage';
 import { ProductDetailPage } from './pages/products/ProductDetailPage';
 import { RequireAuth } from './components/AuthGuard';
+import { WishlistPage } from './pages/products/WishlistPage';
+import { CartPage } from './pages/products/CartPage';
+import { CheckoutPage } from './pages/products/CheckoutPage';
+import { OrderConfirmationPage } from './pages/products/OrderConfirmationPage';
+import { ProfilePage } from './pages/ProfilePage';
+import EventBridge from './components/EventBridge';
 
 export const AppRouter: React.FC = () => (
   <Router>
+    {/* Bridge custom events within Router so useNavigate works */}
+    <EventBridge />
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<App />} />
@@ -40,7 +49,7 @@ export const AppRouter: React.FC = () => (
       <Route path="/admin/staff" element={<RequireAuth><StaffDirectory /></RequireAuth>} />
       <Route path="/admin/staff/:id/schedule" element={<RequireAuth><StaffSchedulePage /></RequireAuth>} />
       <Route path="/admin/sales" element={<RequireAuth><div>Sales Overview</div></RequireAuth>} />
-      <Route path="/admin/customers" element={<RequireAuth><div>Customer Management</div></RequireAuth>} />
+      <Route path="/admin/customers" element={<RequireAuth><CustomerManagementDashboard /></RequireAuth>} />
       <Route path="/admin/engagement" element={<RequireAuth><div>Customer Engagement</div></RequireAuth>} />
       <Route path="/admin/logs" element={<RequireAuth><div>System Logs</div></RequireAuth>} />
 
@@ -57,7 +66,7 @@ export const AppRouter: React.FC = () => (
       <Route path="/sales/pos" element={<RequireAuth><SalesDashboard /></RequireAuth>} />
       <Route path="/sales/customers" element={<RequireAuth><div>Customer Management</div></RequireAuth>} />
       <Route path="/sales/ai-assist" element={<RequireAuth><div>AI Assistant</div></RequireAuth>} />
-      <Route path="/sales/cart" element={<RequireAuth><div>Shopping Cart</div></RequireAuth>} />
+      <Route path="/sales/cart" element={<RequireAuth><CartPage /></RequireAuth>} />
 
       {/* Product Routes (public for customers) */}
       <Route path="/products" element={<ProductsPage />} />
@@ -68,6 +77,13 @@ export const AppRouter: React.FC = () => (
       <Route path="/products/collections" element={<CollectionsPage />} />
       <Route path="/products/gifting" element={<GiftingPage />} />
       <Route path="/product/:id" element={<ProductDetailPage />} />
+      <Route path="/wishlist" element={<WishlistPage />} />
+      <Route path="/cart" element={<CartPage />} />
+      <Route path="/checkout" element={<CheckoutPage />} />
+      <Route path="/order-confirmation" element={<OrderConfirmationPage />} />
+
+      {/* Profile (protected) */}
+      <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
 
       {/* Inventory Routes (protected) */}
       <Route path="/inventory/dashboard" element={<RequireAuth><InventoryDashboard /></RequireAuth>} />

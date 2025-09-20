@@ -34,3 +34,6 @@ export function setAuthToken(token?: string) {
 }
 
 // Removed get_db function as it referenced Flask backend code
+
+// Export normalized API base for asset URL composition
+export const API_BASE_URL = API_BASE;

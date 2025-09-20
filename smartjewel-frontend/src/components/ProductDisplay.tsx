@@ -4,6 +4,8 @@ import { api } from '../api';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QuickViewModal } from './QuickViewModal';
 import { MegaMenuFilter } from './MegaMenuFilter';
+import { useWishlist } from '../contexts/WishlistContext';
+import { useCart } from '../contexts/CartContext';
 
 interface Product {
   _id: string;
@@ -31,6 +33,10 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
   title, 
   description = "Discover our exquisite collection of handcrafted jewelry" 
 }) => {
+  // Access wishlist state to render hearts accurately
+  const { isWishlisted } = useWishlist();
+  // Access cart context for Buy Now functionality
+  const { addToCart } = useCart();
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -60,15 +66,27 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
   }, [searchParams]);
 
   const normalizeCategory = (c: string) => c.toLowerCase().replace(/\s+/g, '-');
+  const toTitleCase = (s: string) => s.replace(/-/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
 
   useEffect(() => {
     const loadProducts = async () => {
       try {
         setIsLoading(true);
-        const response = await api.get('/inventory/products');
+        // Build query params for server-side filtering
+        const params: Record<string, string> = {};
+        if (category && category !== 'all') {
+          const catLower = category.toLowerCase();
+          if (catLower === 'gold' || catLower === 'diamond') {
+            params.metal = toTitleCase(catLower); // e.g., Gold, Diamond
+          } else {
+            params.category = toTitleCase(catLower); // e.g., Earrings, Necklace Set
+          }
+        }
+        const query = new URLSearchParams(params).toString();
+        const response = await api.get(`/inventory/products${query ? `?${query}` : ''}`);
         let filteredProducts = response.data.products || [];
 
-        // Optional single-category pre-filter for existing routes
+        // Optional single-category pre-filter for legacy name-based categories
         if (category && category !== 'all') {
           const categoryLower = category.toLowerCase();
           if (categoryLower === 'bangles') {
@@ -324,10 +342,11 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
               {pageSlice.map((product, idx) => (
                 <motion.div
                   key={product._id}
-                  className={`card overflow-hidden hover:shadow-elevated transition-shadow group ${viewMode==='list' ? 'flex' : ''}`}
+                  className={`card overflow-hidden hover:shadow-elevated transition-shadow group cursor-pointer ${viewMode==='list' ? 'flex' : ''}`}
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: idx * 0.02 }}
+                  onClick={() => navigate(`/product/${product._id}`)}
                 >
                   <div className={`${viewMode==='list' ? 'w-48 flex-shrink-0' : ''} aspect-square overflow-hidden relative`}>
                     {product.image ? (
@@ -349,8 +368,25 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
                     )}
                     {/* Wishlist (always visible like reference) */}
                     <div className="absolute top-2 right-2 flex flex-col gap-2">
-                      <button title="Add to Wishlist" className="p-2 rounded-full bg-white/90 shadow hover:bg-white">
-                        <svg className="w-5 h-5 text-rose-600" viewBox="0 0 24 24" fill="currentColor"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 3 13.352 3 10.75 3 8.264 4.988 6.5 7.2 6.5c1.278 0 2.516.492 3.445 1.378A4.87 4.87 0 0114.1 6.5c2.212 0 4.1 1.764 4.1 4.25 0 2.602-1.688 4.61-3.99 6.757a25.178 25.178 0 01-4.244 3.17 15.247 15.247 0 01-.383.218l-.022.012-.007.003-.003.002a.75.75 0 01-.66 0l-.003-.002z"/></svg>
+                      <button
+                        title="Toggle Wishlist"
+                        className="p-2 rounded-full bg-white/90 shadow hover:bg-white"
+                        onClick={(e)=>{
+                          e.stopPropagation();
+                          const ev = new CustomEvent('sj:toggleWishlist', { detail: { productId: product._id, name: product.name, price: product.price, image: product.image, metal: product.metal, purity: product.purity } });
+                          window.dispatchEvent(ev);
+                        }}
+                      >
+                        {/* Heart reflects wishlist state */}
+                        <svg
+                          className={`w-5 h-5 ${isWishlisted(product._id) ? 'text-rose-600' : 'text-gray-400'}`}
+                          viewBox="0 0 24 24"
+                          fill={isWishlisted(product._id) ? 'currentColor' : 'none'}
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                        >
+                          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                        </svg>
                       </button>
                     </div>
                   </div>
@@ -379,13 +415,32 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
                         <div className="flex items-center justify-between gap-3">
                           <span className="text-lg font-bold text-gray-900">₹{product.price.toLocaleString()}</span>
                           <div className="flex items-center gap-2">
-                            <button onClick={() => { setQuickViewProduct(product); setQuickViewOpen(true); }} className="px-3 py-1 rounded-md border border-gray-200 text-sm hover:bg-gray-50">Quick View</button>
-                            <button onClick={() => navigate(`/product/${product._id}`)} className="bg-blue-600 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-700 transition-colors">View Details</button>
+                            <button onClick={(e) => { e.stopPropagation(); setQuickViewProduct(product); setQuickViewOpen(true); }} className="px-3 py-1 rounded-md border border-gray-200 text-sm hover:bg-gray-50">Quick View</button>
+                            <button 
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                // Emit a global Buy Now event to centralize auth check and navigation
+                                const ev = new CustomEvent('sj:buyNow', { detail: {
+                                  productId: product._id,
+                                  name: product.name,
+                                  price: product.price || 0,
+                                  image: product.image || '',
+                                  metal: product.metal,
+                                  purity: product.purity,
+                                  quantity: 1,
+                                  sourceSelector: undefined
+                                }});
+                                window.dispatchEvent(ev);
+                              }} 
+                              className="bg-orange-600 text-white px-3 py-1 rounded-md text-sm hover:bg-orange-700 transition-colors"
+                            >
+                              Buy Now
+                            </button>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <button className="pill px-3 py-1 text-sm">Similar</button>
-                          <button className="pill px-3 py-1 text-sm">Try it</button>
+                          <button onClick={(e) => e.stopPropagation()} className="pill px-3 py-1 text-sm">Similar</button>
+                          <button onClick={(e) => e.stopPropagation()} className="pill px-3 py-1 text-sm">Try it</button>
                         </div>
                       </div>
                     )}

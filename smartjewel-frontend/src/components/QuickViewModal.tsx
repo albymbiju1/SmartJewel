@@ -87,7 +87,15 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({ open, product, o
                   >
                     View Details
                   </button>
-                  <button className="px-4 py-2.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50">
+                  <button
+                    className="px-4 py-2.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
+                    onClick={(e)=>{
+                      e.stopPropagation();
+                      // fire a simple custom event; ProductDisplay owns the product data and can handle
+                      const ev = new CustomEvent('sj:toggleWishlist', { detail: { productId: product._id, name: product.name, price: product.price, image: product.image, metal: product.metal, purity: product.purity } });
+                      window.dispatchEvent(ev);
+                    }}
+                  >
                     Add to Wishlist
                   </button>
                 </div>

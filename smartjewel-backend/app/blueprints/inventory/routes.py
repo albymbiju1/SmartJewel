@@ -642,3 +642,67 @@ def bom_update(product_id):
     update["updated_at"] = _now(db)
     db.bom.update_one({"product_id": oid}, {"$set": update}, upsert=True)
     return jsonify({"updated": True})
+
+
+# -------- Stock Management --------
+@bp.get("/stock")
+@require_permissions("inventory.read")
+def get_stock():
+    """Get all products with stock information"""
+    db = current_app.extensions['mongo_db']
+    
+    # Ensure all items have a quantity field (default 0)
+    db.items.update_many(
+        {"quantity": {"$exists": False}},
+        {"$set": {"quantity": 0}}
+    )
+    
+    # Get all items with their stock info
+    items = list(db.items.find({}, {
+        "sku": 1,
+        "name": 1,
+        "category": 1,
+        "quantity": 1,
+        "status": 1
+    }))
+    
+    # Convert ObjectIds to strings
+    for item in items:
+        item["_id"] = str(item["_id"])
+        # Ensure quantity exists
+        if "quantity" not in item:
+            item["quantity"] = 0
+    
+    return jsonify({"products": items})
+
+
+@bp.put("/stock/<sku>")
+@require_permissions("inventory.update")
+def update_stock(sku):
+    """Update stock quantity for a product by SKU"""
+    db = current_app.extensions['mongo_db']
+    data = request.get_json() or {}
+    
+    if "quantity" not in data:
+        return jsonify({"error": "quantity_required"}), 400
+    
+    try:
+        new_quantity = int(data["quantity"])
+        if new_quantity < 0:
+            return jsonify({"error": "invalid_quantity"}), 400
+    except (ValueError, TypeError):
+        return jsonify({"error": "invalid_quantity"}), 400
+    
+    # Find and update the item by SKU
+    result = db.items.update_one(
+        {"sku": sku},
+        {"$set": {"quantity": new_quantity, "updated_at": _now(db)}}
+    )
+    
+    if result.matched_count == 0:
+        return jsonify({"error": "item_not_found"}), 404
+    
+    return jsonify({
+        "success": True,
+        "quantity": new_quantity
+    })

@@ -20,13 +20,23 @@ interface StockItem {
 
 interface StockHistory {
   _id: string;
-  item_id: string;
-  old_quantity: number;
-  new_quantity: number;
-  change_type: 'manual_adjustment' | 'increase' | 'decrease';
-  updated_by: string;
-  updated_at: string;
-  notes?: string;
+  sku: string;
+  productName: string;
+  changedBy: string;
+  changeType: 'Added' | 'Removed' | 'Updated';
+  quantityBefore: number;
+  quantityAfter: number;
+  timestamp: string;
+  formattedTimestamp: string;
+}
+
+interface PaginationInfo {
+  current_page: number;
+  per_page: number;
+  total_count: number;
+  total_pages: number;
+  has_next: boolean;
+  has_prev: boolean;
 }
 
 export const StockPage: React.FC = () => {
@@ -38,6 +48,10 @@ export const StockPage: React.FC = () => {
   const [stockHistory, setStockHistory] = useState<StockHistory[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [historyPagination, setHistoryPagination] = useState<PaginationInfo | null>(null);
+  const [currentHistoryPage, setCurrentHistoryPage] = useState(1);
+  const [historyFilter, setHistoryFilter] = useState('All');
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   // Check permissions
   const isAdmin = !!(user?.roles?.includes('admin') || user?.role?.role_name?.toLowerCase() === 'admin');
@@ -143,9 +157,49 @@ export const StockPage: React.FC = () => {
     });
   };
 
-  const loadStockHistory = async (itemId: string) => {
-    // Stock history feature not implemented in simplified version
-    alert('Stock history feature coming soon!');
+  const loadStockHistory = async (page: number = 1, changeType: string = 'All') => {
+    try {
+      setLoadingHistory(true);
+      const params = new URLSearchParams({
+        page: page.toString(),
+        per_page: '10',
+        changeType: changeType
+      });
+      
+      const response = await api.get(`/inventory/stock/history?${params}`);
+      setStockHistory(response.data.history || []);
+      setHistoryPagination(response.data.pagination);
+      setCurrentHistoryPage(page);
+      setHistoryFilter(changeType);
+      setShowHistory(true);
+    } catch (error) {
+      console.error('Failed to load stock history:', error);
+      alert('Failed to load stock history. Please try again.');
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const handleHistoryPageChange = (newPage: number) => {
+    loadStockHistory(newPage, historyFilter);
+  };
+
+  const handleHistoryFilterChange = (newFilter: string) => {
+    setCurrentHistoryPage(1);
+    loadStockHistory(1, newFilter);
+  };
+
+  const getChangeTypeColor = (changeType: string) => {
+    switch (changeType) {
+      case 'Added':
+        return 'bg-green-100 text-green-800';
+      case 'Removed':
+        return 'bg-red-100 text-red-800';
+      case 'Updated':
+        return 'bg-blue-100 text-blue-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
   };
 
   const isLowStock = (item: StockItem) => {
@@ -306,7 +360,7 @@ export const StockPage: React.FC = () => {
                               </>
                             )}
                             <button
-                              onClick={() => loadStockHistory(item._id)}
+                              onClick={() => loadStockHistory()}
                               className="text-purple-600 hover:text-purple-900 p-1"
                               title="View History"
                             >
@@ -337,6 +391,135 @@ export const StockPage: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/* Stock History Modal */}
+        {showHistory && (
+          <div className="fixed inset-0 z-50 overflow-y-auto">
+            <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+              <div className="fixed inset-0 transition-opacity" onClick={() => setShowHistory(false)}>
+                <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
+              </div>
+              <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-6xl sm:w-full">
+                <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-medium text-gray-900">Stock History</h3>
+                    <button
+                      onClick={() => setShowHistory(false)}
+                      className="text-gray-400 hover:text-gray-600"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  {/* Filter Dropdown */}
+                  <div className="mb-4">
+                    <label htmlFor="changeTypeFilter" className="block text-sm font-medium text-gray-700 mb-2">
+                      Filter by Change Type:
+                    </label>
+                    <select
+                      id="changeTypeFilter"
+                      value={historyFilter}
+                      onChange={(e) => handleHistoryFilterChange(e.target.value)}
+                      className="border border-gray-300 rounded-md px-3 py-2 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="All">All</option>
+                      <option value="Added">Added</option>
+                      <option value="Removed">Removed</option>
+                      <option value="Updated">Updated</option>
+                    </select>
+                  </div>
+
+                  {/* History Table */}
+                  <div className="max-h-96 overflow-y-auto">
+                    {loadingHistory ? (
+                      <div className="p-8 text-center">
+                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                        <p className="mt-2 text-gray-600">Loading history...</p>
+                      </div>
+                    ) : stockHistory.length > 0 ? (
+                      <table className="min-w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product Name</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Change Type</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity Before</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity After</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Changed By</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {stockHistory.map(record => (
+                            <tr key={record._id} className="hover:bg-gray-50">
+                              <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                {record.sku}
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {record.productName}
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-sm">
+                                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getChangeTypeColor(record.changeType)}`}>
+                                  {record.changeType}
+                                </span>
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {record.quantityBefore}
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {record.quantityAfter}
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {record.changedBy}
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {record.formattedTimestamp}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <p className="text-center text-gray-500 py-8">No stock history found</p>
+                    )}
+                  </div>
+
+                  {/* Pagination */}
+                  {historyPagination && historyPagination.total_pages > 1 && (
+                    <div className="mt-4 flex items-center justify-between">
+                      <div className="text-sm text-gray-700">
+                        Showing {((historyPagination.current_page - 1) * historyPagination.per_page) + 1} to{' '}
+                        {Math.min(historyPagination.current_page * historyPagination.per_page, historyPagination.total_count)} of{' '}
+                        {historyPagination.total_count} results
+                      </div>
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => handleHistoryPageChange(currentHistoryPage - 1)}
+                          disabled={!historyPagination.has_prev}
+                          className="px-3 py-1 border border-gray-300 rounded-md text-sm bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Previous
+                        </button>
+                        <span className="px-3 py-1 text-sm text-gray-700">
+                          Page {historyPagination.current_page} of {historyPagination.total_pages}
+                        </span>
+                        <button
+                          onClick={() => handleHistoryPageChange(currentHistoryPage + 1)}
+                          disabled={!historyPagination.has_next}
+                          className="px-3 py-1 border border-gray-300 rounded-md text-sm bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </RoleBasedNavigation>

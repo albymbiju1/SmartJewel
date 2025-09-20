@@ -693,7 +693,15 @@ def update_stock(sku):
     except (ValueError, TypeError):
         return jsonify({"error": "invalid_quantity"}), 400
     
-    # Find and update the item by SKU
+    # Find the current item to get old quantity and name
+    item = db.items.find_one({"sku": sku})
+    if not item:
+        return jsonify({"error": "item_not_found"}), 404
+    
+    old_quantity = item.get("quantity", 0)
+    product_name = item.get("name", "Unknown Product")
+    
+    # Update the item quantity
     result = db.items.update_one(
         {"sku": sku},
         {"$set": {"quantity": new_quantity, "updated_at": _now(db)}}
@@ -702,7 +710,92 @@ def update_stock(sku):
     if result.matched_count == 0:
         return jsonify({"error": "item_not_found"}), 404
     
+    # Determine change type
+    if old_quantity == 0 and new_quantity > 0:
+        change_type = "Added"
+    elif old_quantity > 0 and new_quantity == 0:
+        change_type = "Removed"
+    elif old_quantity != new_quantity:
+        change_type = "Updated"
+    else:
+        change_type = "Updated"  # Same quantity but still an update
+    
+    # Get current user info
+    current_user_id = get_jwt_identity()
+    changed_by = "System"
+    try:
+        user = db.users.find_one({"_id": _oid(current_user_id)})
+        if user:
+            changed_by = user.get("name", user.get("email", "Unknown User"))
+    except:
+        pass
+    
+    # Create stock history record
+    history_record = {
+        "sku": sku,
+        "productName": product_name,
+        "changedBy": changed_by,
+        "changeType": change_type,
+        "quantityBefore": old_quantity,
+        "quantityAfter": new_quantity,
+        "timestamp": _now(db)
+    }
+    db.stock_history.insert_one(history_record)
+    
     return jsonify({
         "success": True,
         "quantity": new_quantity
+    })
+
+
+@bp.get("/stock/history")
+@require_permissions("inventory.read")
+def get_stock_history():
+    """Get stock history with filtering and pagination"""
+    db = current_app.extensions['mongo_db']
+    
+    # Get query parameters
+    page = int(request.args.get('page', 1))
+    per_page = int(request.args.get('per_page', 10))
+    change_type = request.args.get('changeType', 'All')
+    
+    # Build filter query
+    query = {}
+    if change_type and change_type != 'All':
+        query['changeType'] = change_type
+    
+    # Calculate skip value for pagination
+    skip = (page - 1) * per_page
+    
+    # Get total count for pagination
+    total_count = db.stock_history.count_documents(query)
+    
+    # Get history records with pagination
+    history_records = list(
+        db.stock_history.find(query)
+        .sort("timestamp", -1)  # Most recent first
+        .skip(skip)
+        .limit(per_page)
+    )
+    
+    # Convert ObjectIds to strings
+    for record in history_records:
+        record["_id"] = str(record["_id"])
+        # Format timestamp for display
+        if record.get("timestamp"):
+            record["formattedTimestamp"] = record["timestamp"].strftime("%d %b %Y, %I:%M %p")
+    
+    # Calculate pagination info
+    total_pages = (total_count + per_page - 1) // per_page
+    
+    return jsonify({
+        "history": history_records,
+        "pagination": {
+            "current_page": page,
+            "per_page": per_page,
+            "total_count": total_count,
+            "total_pages": total_pages,
+            "has_next": page < total_pages,
+            "has_prev": page > 1
+        }
     })

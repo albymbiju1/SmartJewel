@@ -1,13 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../../api';
+import { api, API_BASE_URL } from '../../api';
 import { useAuth } from '../../contexts/AuthContext';
+
+// Safely create absolute image URL for backend-hosted assets
+const toAbsoluteImage = (img?: string) => {
+  if (!img) return '/jewel1.png';
+  if (img.startsWith('http://') || img.startsWith('https://')) return img;
+  const path = img.startsWith('/') ? img : `/${img}`;
+  return `${API_BASE_URL}${path}`;
+};
 
 interface OrderItem {
   id: string;
   name: string;
   qty: number;
   price: number;
+  image?: string; // optional product image path or URL
 }
 
 interface Order {
@@ -36,6 +45,8 @@ export const MyOrdersPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  // Local state for image preview modal (keep all hooks before any conditional returns)
+  const [preview, setPreview] = useState<{ url: string; alt: string } | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -207,9 +218,16 @@ export const MyOrdersPage: React.FC = () => {
                       </p>
                       <div className="mt-1 text-sm text-gray-900">
                         {order.items.slice(0, 2).map((item, index) => (
-                          <span key={index}>
+                          <span key={index} className="inline-flex items-center gap-2 mr-2">
+                            <img
+                              src={toAbsoluteImage(item.image)}
+                              alt={item.name}
+                              className="w-10 h-10 rounded object-cover border cursor-zoom-in"
+                              onClick={() => setPreview({ url: toAbsoluteImage(item.image), alt: item.name })}
+                              onError={(e) => { (e.target as HTMLImageElement).src = '/jewel1.png'; }}
+                            />
                             {item.name} (Qty: {item.qty})
-                            {index < Math.min(order.items.length, 2) - 1 && ', '}
+                            {index < Math.min(order.items.length, 2) - 1 && ','}
                           </span>
                         ))}
                         {order.items.length > 2 && (
@@ -263,12 +281,21 @@ export const MyOrdersPage: React.FC = () => {
                     {/* Order Items */}
                     <div className="p-6">
                       <h4 className="text-sm font-semibold text-gray-900 mb-3">Order Items</h4>
-                      <div className="space-y-3">
+                      <div className="space-y-4">
                         {order.items.map((item, index) => (
-                          <div key={index} className="flex items-center justify-between py-2 border-b border-gray-200 last:border-b-0">
-                            <div className="flex-1">
-                              <p className="text-sm font-medium text-gray-900">{item.name}</p>
-                              <p className="text-xs text-gray-500">Quantity: {item.qty}</p>
+                          <div key={index} className="flex items-center justify-between py-3 border-b border-gray-200 last:border-b-0">
+                            <div className="flex items-center gap-4 flex-1 min-w-0">
+                              <img
+                                src={toAbsoluteImage(item.image)}
+                                alt={item.name}
+                                className="w-20 h-20 rounded-md object-cover border bg-gray-100 shrink-0 cursor-zoom-in"
+                                onClick={() => setPreview({ url: toAbsoluteImage(item.image), alt: item.name })}
+                                onError={(e) => { (e.target as HTMLImageElement).src = '/jewel1.png'; }}
+                              />
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
+                                <p className="text-xs text-gray-500">Quantity: {item.qty}</p>
+                              </div>
                             </div>
                             <div className="text-right">
                               <p className="text-sm font-semibold text-gray-900">
@@ -299,6 +326,18 @@ export const MyOrdersPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Lightbox modal */}
+      {preview && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setPreview(null)}>
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-3" onClick={(e) => e.stopPropagation()}>
+            <img src={preview.url} alt={preview.alt} className="w-full h-auto rounded" />
+            <div className="mt-3 text-right">
+              <button className="px-4 py-2 text-sm rounded border border-gray-300 hover:bg-gray-50" onClick={() => setPreview(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

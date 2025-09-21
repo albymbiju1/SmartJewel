@@ -77,7 +77,35 @@ def create_razorpay_order():
     except Exception:
         pass
     customer = data.get("customer") or {}
+    # Each item should include { id, name, qty, price, image }
     items = data.get("items") or []
+    # Backfill image from product catalog when missing (ensures correct image is persisted with order)
+    try:
+        db_for_img = current_app.extensions.get('mongo_db')
+        if db_for_img is not None and isinstance(items, list):
+            enriched = []
+            for it in items:
+                if isinstance(it, dict) and (not it.get('image')):
+                    prod = None
+                    pid = it.get('id')
+                    if pid:
+                        from bson import ObjectId
+                        try:
+                            prod = db_for_img.items.find_one({"_id": ObjectId(pid)})
+                        except Exception:
+                            prod = db_for_img.items.find_one({"sku": pid})
+                    if not prod and it.get('sku'):
+                        prod = db_for_img.items.find_one({"sku": it.get('sku')})
+                    if prod:
+                        # Accept first available image field
+                        img = prod.get('image') or prod.get('image_url') or prod.get('thumbnail')
+                        if img:
+                            it = {**it, 'image': img}
+                enriched.append(it)
+            items = enriched
+    except Exception as _enrich_err:
+        # Non-fatal; continue without enrichment
+        pass
 
     key_id = os.getenv("RAZORPAY_KEY_ID")
     key_secret = os.getenv("RAZORPAY_KEY_SECRET")
@@ -190,6 +218,32 @@ def verify_razorpay_signature():
                 )
 
                 # Insert comprehensive order record (same shape as verified path)
+                # Ensure each order item persists image field for accurate history
+                def _ensure_item_images(itms):
+                    out = []
+                    try:
+                        dbimg = current_app.extensions.get('mongo_db')
+                        for it in (itms or []):
+                            if isinstance(it, dict) and (not it.get('image')) and dbimg is not None:
+                                prod = None
+                                pid = it.get('id')
+                                if pid:
+                                    from bson import ObjectId
+                                    try:
+                                        prod = dbimg.items.find_one({"_id": ObjectId(pid)})
+                                    except Exception:
+                                        prod = dbimg.items.find_one({"sku": pid})
+                                if not prod and it.get('sku'):
+                                    prod = dbimg.items.find_one({"sku": it.get('sku')})
+                                if prod:
+                                    img = prod.get('image') or prod.get('image_url') or prod.get('thumbnail')
+                                    if img:
+                                        it = {**it, 'image': img}
+                            out.append(it)
+                    except Exception:
+                        return itms or []
+                    return out
+
                 order_record = {
                     "order_id": demo_order_id,
                     "user_id": _oid(uid) if uid else None,
@@ -202,7 +256,7 @@ def verify_razorpay_signature():
                     "amount": order_doc.get("amount", 0),
                     "currency": order_doc.get("currency", "INR"),
                     "customer": order_doc.get("customer", {}),
-                    "items": order_doc.get("items", []),
+                    "items": _ensure_item_images(order_doc.get("items", [])),
                     "created_at": _now(db),
                     "updated_at": _now(db),
                     "notes": {"payment_method": "razorpay", "signature_verified": True}

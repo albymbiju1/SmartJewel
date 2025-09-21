@@ -158,29 +158,36 @@ def get_customer_orders(customer_id):
 @jwt_required()
 def get_my_orders():
     """Get orders for the currently authenticated user"""
+    from datetime import datetime
+
     db = current_app.extensions.get('mongo_db')
     user_id = get_jwt_identity()
-    
+
     if not user_id:
         return jsonify({"error": "authentication_required"}), 401
-    
-    if not db:
-        return jsonify({"orders": [], "message": "Database not available"})
-    
+
+    # PyMongo Database objects don't support truthiness; compare explicitly to None
+    if db is None:
+        return jsonify({"orders": [], "message": "Database not available"}), 503
+
     # Get orders for current user, sorted by creation date (newest first)
     orders_cursor = db.orders.find(
         {"user_id": _oid(user_id)},
         {"provider": 0, "provider_order": 0, "razorpay_order_id": 0, "payment_id": 0, "signature": 0}
     ).sort("created_at", -1)
-    
+
     orders = []
     for order in orders_cursor:
         # Convert ObjectId to string for JSON serialization
         order["_id"] = str(order["_id"])
         if order.get("user_id"):
             order["user_id"] = str(order["user_id"])
+        # Ensure datetime fields are JSON-serializable
+        for key in ("created_at", "updated_at"):
+            if isinstance(order.get(key), datetime):
+                order[key] = order[key].isoformat()
         orders.append(order)
-    
+
     return jsonify({"orders": orders})
 
 @bp.put("/<customer_id>")

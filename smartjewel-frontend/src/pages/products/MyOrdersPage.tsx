@@ -69,17 +69,21 @@ export const MyOrdersPage: React.FC = () => {
     });
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
+  // Map a status text to a badge color; tolerate undefined or unexpected values
+  const getStatusColor = (status?: string) => {
+    const s = (status || '').toString().toLowerCase();
+    switch (s) {
       case 'confirmed':
       case 'paid':
         return 'bg-green-100 text-green-800';
       case 'pending':
+      case 'processing':
         return 'bg-yellow-100 text-yellow-800';
       case 'cancelled':
       case 'failed':
         return 'bg-red-100 text-red-800';
       case 'shipped':
+      case 'in-transit':
         return 'bg-blue-100 text-blue-800';
       case 'delivered':
         return 'bg-emerald-100 text-emerald-800';

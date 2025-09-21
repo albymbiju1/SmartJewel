@@ -80,7 +80,7 @@ export const AppRouter: React.FC = () => (
       <Route path="/product/:id" element={<ProductDetailPage />} />
       <Route path="/wishlist" element={<WishlistPage />} />
       <Route path="/cart" element={<CartPage />} />
-      <Route path="/checkout" element={<CheckoutPage />} />
+      <Route path="/checkout" element={<RequireAuth><CheckoutPage /></RequireAuth>} />
       <Route path="/order-confirmation" element={<OrderConfirmationPage />} />
       <Route path="/my-orders" element={<RequireAuth><MyOrdersPage /></RequireAuth>} />
 

@@ -166,17 +166,51 @@ def verify_razorpay_signature():
 
     # Allow skipping signature verification when using a mock API for local testing
     if os.getenv("RAZORPAY_SKIP_SIGNATURE", "false").lower() in ("1", "true", "yes"):
-        if db is not None:
-            try:
-                db.orders.update_one(
-                    {"provider": "razorpay", "provider_order.id": order_id},
-                    {"$set": {"status": "paid", "payment_id": payment_id, "signature": signature}},
-                )
-                print(f"Order updated in database: {order_id}")
-            except Exception as e:
-                print(f"Failed to update order in database: {e}")
+        # In test mode we still require auth so orders get linked to the user
+        uid = get_jwt_identity()
+        if not uid:
+            return jsonify({"verified": False, "reason": "auth_required_for_order"}), 401
+
         order_doc = db.orders.find_one({"provider": "razorpay", "provider_order.id": order_id}) if db is not None else {}
         demo_order_id = order_doc.get("receipt") if order_doc else f"SJ-{(order_id or '')[-8:].upper()}"
+
+        if db is not None:
+            try:
+                # Update provider order
+                db.orders.update_one(
+                    {"provider": "razorpay", "provider_order.id": order_id},
+                    {"$set": {
+                        "status": "paid",
+                        "payment_id": payment_id,
+                        "signature": signature,
+                        "order_id": demo_order_id,
+                        "user_id": _oid(uid) if uid else None,
+                        "updated_at": _now(db)
+                    }},
+                )
+
+                # Insert comprehensive order record (same shape as verified path)
+                order_record = {
+                    "order_id": demo_order_id,
+                    "user_id": _oid(uid) if uid else None,
+                    "status": "confirmed",
+                    "payment_status": "paid",
+                    "delivery_status": "pending",
+                    "payment_provider": "razorpay",
+                    "payment_id": payment_id,
+                    "razorpay_order_id": order_id,
+                    "amount": order_doc.get("amount", 0),
+                    "currency": order_doc.get("currency", "INR"),
+                    "customer": order_doc.get("customer", {}),
+                    "items": order_doc.get("items", []),
+                    "created_at": _now(db),
+                    "updated_at": _now(db),
+                    "notes": {"payment_method": "razorpay", "signature_verified": True}
+                }
+                db.orders.insert_one(order_record)
+                print(f"Test mode: order persisted for user {uid} with id {demo_order_id}")
+            except Exception as e:
+                print(f"Failed to persist test-mode order: {e}")
         return jsonify({"verified": True, "order_id": demo_order_id, "details": _to_jsonable(order_doc)})
 
     key_secret = os.getenv("RAZORPAY_KEY_SECRET")
@@ -283,6 +317,8 @@ def verify_razorpay_signature():
         try:
             # Get user ID from JWT token
             user_id = get_jwt_identity()
+            if not user_id:
+                return jsonify({"verified": False, "reason": "auth_required_for_order"}), 401
             print(f"Creating order for user_id: {user_id}, order_id: {demo_order_id}")
             
             # Test database connection first

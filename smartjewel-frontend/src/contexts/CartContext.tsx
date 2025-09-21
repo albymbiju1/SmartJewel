@@ -5,6 +5,7 @@ import { productPriceService } from '../services/productPriceService';
 
 export interface CartItem {
   productId: string;
+  sku?: string;
   name: string;
   price?: number;
   currentPrice?: number; // Fresh price from API
@@ -18,9 +19,9 @@ export interface CartItem {
 
 interface CartContextValue {
   items: CartItem[];
-  addToCart: (item: Omit<CartItem, 'quantity'>, quantity?: number) => void;
+  addToCart: (item: Omit<CartItem, 'quantity'>, quantity?: number) => Promise<void>;
   removeFromCart: (productId: string) => void;
-  updateQuantity: (productId: string, quantity: number) => void;
+  updateQuantity: (productId: string, quantity: number) => Promise<void>;
   clearCart: () => void;
   refreshPrices: () => Promise<void>;
   cartCount: number;
@@ -79,19 +80,65 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!authLoading) fetchCart();
   }, [user, authLoading]);
 
-  const addToCart = (item: Omit<CartItem, 'quantity'>, quantity: number = 1) => {
-    setItems(prev => {
-      const idx = prev.findIndex(x => x.productId === item.productId && x.size === item.size && x.style === item.style);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = { ...next[idx], quantity: Math.min(99, next[idx].quantity + quantity) };
+  const addToCart = async (item: Omit<CartItem, 'quantity'>, quantity: number = 1) => {
+    try {
+      // First, check stock availability
+      const response = await api.get('/inventory/products');
+      const products = response.data.products || [];
+      const product = products.find((p: any) => p.sku === item.sku || p._id === item.productId);
+      
+      if (!product) {
+        console.warn('Product not found for stock validation');
+        return;
+      }
+
+      const availableQuantity = product.quantity || 0;
+      const currentCartQuantity = items.find(x => x.productId === item.productId && x.size === item.size && x.style === item.style)?.quantity || 0;
+      const requestedQuantity = currentCartQuantity + quantity;
+
+      if (requestedQuantity > availableQuantity) {
+        if (availableQuantity === 0) {
+          console.warn('Product is out of stock');
+          return;
+        } else {
+          console.warn(`Only ${availableQuantity} items available, requested ${requestedQuantity}`);
+          // Limit to available quantity
+          quantity = Math.max(0, availableQuantity - currentCartQuantity);
+          if (quantity <= 0) {
+            console.warn('Cannot add more items - stock limit reached');
+            return;
+          }
+        }
+      }
+
+      setItems(prev => {
+        const idx = prev.findIndex(x => x.productId === item.productId && x.size === item.size && x.style === item.style);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = { ...next[idx], quantity: Math.min(availableQuantity, next[idx].quantity + quantity) };
+          if (user) { api.put('/customers/me/cart', { items: next }).catch(()=>{}); }
+          return next;
+        }
+        const next = [...prev, { ...item, quantity: Math.max(1, Math.min(availableQuantity, quantity)) }];
         if (user) { api.put('/customers/me/cart', { items: next }).catch(()=>{}); }
         return next;
-      }
-      const next = [...prev, { ...item, quantity: Math.max(1, Math.min(99, quantity)) }];
-      if (user) { api.put('/customers/me/cart', { items: next }).catch(()=>{}); }
-      return next;
-    });
+      });
+    } catch (error) {
+      console.error('Failed to validate stock before adding to cart:', error);
+      // Fallback to original behavior if stock check fails
+      setItems(prev => {
+        const idx = prev.findIndex(x => x.productId === item.productId && x.size === item.size && x.style === item.style);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = { ...next[idx], quantity: Math.min(99, next[idx].quantity + quantity) };
+          if (user) { api.put('/customers/me/cart', { items: next }).catch(()=>{}); }
+          return next;
+        }
+        const next = [...prev, { ...item, quantity: Math.max(1, Math.min(99, quantity)) }];
+        if (user) { api.put('/customers/me/cart', { items: next }).catch(()=>{}); }
+        return next;
+      });
+    }
   };
 
   const removeFromCart = (productId: string) => setItems(prev => {
@@ -99,11 +146,44 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (user) { api.put('/customers/me/cart', { items: next }).catch(()=>{}); }
     return next;
   });
-  const updateQuantity = (productId: string, quantity: number) => setItems(prev => {
-    const next = prev.map(x => x.productId === productId ? { ...x, quantity: Math.max(1, Math.min(99, quantity)) } : x);
-    if (user) { api.put('/customers/me/cart', { items: next }).catch(()=>{}); }
-    return next;
-  });
+  const updateQuantity = async (productId: string, quantity: number) => {
+    try {
+      // Check stock availability before updating quantity
+      const response = await api.get('/inventory/products');
+      const products = response.data.products || [];
+      const product = products.find((p: any) => p._id === productId);
+      
+      if (product) {
+        const availableQuantity = product.quantity || 0;
+        const limitedQuantity = Math.max(1, Math.min(availableQuantity, quantity));
+        
+        if (limitedQuantity !== quantity && availableQuantity > 0) {
+          console.warn(`Limited to ${availableQuantity} items available`);
+        }
+        
+        setItems(prev => {
+          const next = prev.map(x => x.productId === productId ? { ...x, quantity: limitedQuantity } : x);
+          if (user) { api.put('/customers/me/cart', { items: next }).catch(()=>{}); }
+          return next;
+        });
+      } else {
+        // Fallback to original behavior if product not found
+        setItems(prev => {
+          const next = prev.map(x => x.productId === productId ? { ...x, quantity: Math.max(1, Math.min(99, quantity)) } : x);
+          if (user) { api.put('/customers/me/cart', { items: next }).catch(()=>{}); }
+          return next;
+        });
+      }
+    } catch (error) {
+      console.error('Failed to validate stock before updating quantity:', error);
+      // Fallback to original behavior
+      setItems(prev => {
+        const next = prev.map(x => x.productId === productId ? { ...x, quantity: Math.max(1, Math.min(99, quantity)) } : x);
+        if (user) { api.put('/customers/me/cart', { items: next }).catch(()=>{}); }
+        return next;
+      });
+    }
+  };
   const clearCart = () => setItems(prev => {
     const next: CartItem[] = [];
     if (user) { api.put('/customers/me/cart', { items: next }).catch(()=>{}); }

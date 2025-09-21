@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../../contexts/CartContext';
 import { api } from '../../api';
+import { stockService } from '../../services/stockService';
 
 // Customer form now includes phone for Razorpay prefill/contact
 interface CustomerForm {
@@ -19,6 +20,8 @@ export const CheckoutPage: React.FC = () => {
   const [form, setForm] = useState<CustomerForm>({ name: '', email: '', phone: '', address: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stockValidating, setStockValidating] = useState(false);
+  const [stockErrors, setStockErrors] = useState<string[]>([]);
 
   // Pricing: demo taxes and shipping for a clear summary
   const taxRate = 0.03; // 3% GST demo
@@ -37,11 +40,20 @@ export const CheckoutPage: React.FC = () => {
     document.body.appendChild(s);
   }, []);
 
+  // Validate stock availability when cart items change
+  useEffect(() => {
+    if (items.length > 0) {
+      validateStockAvailability();
+    } else {
+      setStockErrors([]);
+    }
+  }, [items]);
+
   const onChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  const disabled = loading || !total || total < 1 || !form.name || !form.email || !form.address || !form.phone;
+  const disabled = loading || stockValidating || !total || total < 1 || !form.name || !form.email || !form.address || !form.phone || stockErrors.length > 0;
 
   const friendlyError = (err: any) => {
     const raw = err?.response?.data?.error || err?.message || '';
@@ -55,10 +67,62 @@ export const CheckoutPage: React.FC = () => {
     return raw || 'Something went wrong. Please try again.';
   };
 
+  // Validate stock availability for all cart items
+  const validateStockAvailability = async () => {
+    if (items.length === 0) return true;
+
+    try {
+      setStockValidating(true);
+      setStockErrors([]);
+
+      // Fetch current product data to get live stock quantities
+      const response = await api.get('/inventory/products');
+      const products = response.data.products || [];
+      
+      const errors: string[] = [];
+      
+      items.forEach(item => {
+        // Find the product by SKU or productId
+        const product = products.find((p: any) => p.sku === item.sku || p._id === item.productId);
+        if (!product) {
+          errors.push(`${item.name}: Product not found`);
+          return;
+        }
+
+        const availableQuantity = product.quantity || 0;
+        if (availableQuantity < item.quantity) {
+          if (availableQuantity === 0) {
+            errors.push(`${item.name}: Out of stock`);
+          } else {
+            errors.push(`${item.name}: Only ${availableQuantity} available (requested: ${item.quantity})`);
+            // Automatically adjust cart quantity to available stock
+            updateQuantity(item.productId, availableQuantity);
+          }
+        }
+      });
+
+      setStockErrors(errors);
+      return errors.length === 0;
+    } catch (error) {
+      console.error('Failed to validate stock:', error);
+      setStockErrors(['Unable to verify stock availability. Please try again.']);
+      return false;
+    } finally {
+      setStockValidating(false);
+    }
+  };
+
   const payNow = async () => {
     try {
       setError(null);
       setLoading(true);
+
+      // First validate stock availability
+      const isStockValid = await validateStockAvailability();
+      if (!isStockValid) {
+        setLoading(false);
+        return;
+      }
 
       // Guard: Razorpay requires INR; backend already uses INR
       const amountRupees = Math.max(1, Math.round(total));
@@ -181,10 +245,41 @@ export const CheckoutPage: React.FC = () => {
                 <div className="mt-4 p-3 rounded-md bg-rose-50 border border-rose-200 text-rose-700 text-sm">{error}</div>
               )}
 
+              {/* Stock Validation Errors */}
+              {stockErrors.length > 0 && (
+                <div className="mt-4 p-3 rounded-md bg-red-50 border border-red-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                    <span className="text-red-800 font-medium text-sm">Stock Issues</span>
+                  </div>
+                  <ul className="text-red-700 text-sm space-y-1">
+                    {stockErrors.map((error, index) => (
+                      <li key={index} className="flex items-start gap-2">
+                        <span className="text-red-500 mt-0.5">•</span>
+                        <span>{error}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-red-600 text-xs mt-2">Please update your cart or try again later.</p>
+                </div>
+              )}
+
+              {/* Stock Validation Loading */}
+              {stockValidating && (
+                <div className="mt-4 p-3 rounded-md bg-blue-50 border border-blue-200">
+                  <div className="flex items-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                    <span className="text-blue-700 text-sm">Checking stock availability...</span>
+                  </div>
+                </div>
+              )}
+
               <div className="mt-5 flex items-center gap-3">
                 <button onClick={() => navigate('/cart')} className="px-5 py-2.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50">Back to Bag</button>
                 <button disabled={disabled} onClick={payNow} className={`px-6 py-2.5 rounded-lg text-white transition-colors ${disabled ? 'bg-amber-300' : 'bg-amber-600 hover:bg-amber-700'}`}>
-                  {loading ? 'Opening Razorpay…' : `Pay Now (₹${total.toLocaleString('en-IN')})`}
+                  {loading ? 'Opening Razorpay…' : stockValidating ? 'Checking Stock…' : stockErrors.length > 0 ? 'Stock Issues - Cannot Proceed' : `Pay Now (₹${total.toLocaleString('en-IN')})`}
                 </button>
               </div>
               <p className="text-xs text-gray-500 mt-2">Test Mode: use Razorpay test cards (e.g., 4111 1111 1111 1111) or dismiss the modal to simulate failure.</p>
@@ -222,7 +317,7 @@ export const CheckoutPage: React.FC = () => {
                             <button
                               aria-label="Increase quantity"
                               className="w-8 h-8 rounded border border-gray-200 text-gray-700 hover:bg-gray-50"
-                              onClick={() => updateQuantity(it.productId, Math.min(99, it.quantity + 1))}
+                              onClick={() => updateQuantity(it.productId, it.quantity + 1)}
                             >
                               +
                             </button>

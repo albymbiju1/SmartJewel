@@ -281,12 +281,24 @@ def list_products():
             v = request.args.get(f)
             if v:
                 q[f] = v
+        
+        # Ensure all items have a quantity field (default 0)
+        db.items.update_many(
+            {"quantity": {"$exists": False}},
+            {"$set": {"quantity": 0}}
+        )
+        
         cur = db.items.find(q).limit(200)
         items = []
         for d in cur:
             d["_id"] = str(d["_id"])
             if d.get("default_location_id"):
                 d["default_location_id"] = str(d["default_location_id"])
+            # Ensure quantity exists and is a number
+            if "quantity" not in d:
+                d["quantity"] = 0
+            else:
+                d["quantity"] = int(d["quantity"]) if d["quantity"] is not None else 0
             items.append(d)
         return jsonify({"products": items})
     except Exception as exc:

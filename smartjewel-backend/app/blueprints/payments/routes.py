@@ -28,6 +28,19 @@ def _to_jsonable(obj):
         return obj.isoformat()
     return obj
 
+
+def _oid(val):
+    """Convert string to ObjectId safely."""
+    try:
+        return ObjectId(val)
+    except Exception:
+        return None
+
+
+def _now(db):
+    """Get current timestamp."""
+    return datetime.utcnow()
+
 # ENV VARS expected (test keys)
 # RAZORPAY_KEY_ID=rzp_test_xxx
 # RAZORPAY_KEY_SECRET=xxxx
@@ -186,6 +199,63 @@ def verify_razorpay_signature():
 
     if not ok:
         return jsonify({"verified": False, "reason": "signature_mismatch"}), 400
+
+    # If payment is successful, validate and update stock
+    if ok:
+        try:
+            order_doc = db.orders.find_one({"provider": "razorpay", "provider_order.id": order_id}) or {}
+            items = order_doc.get("items", [])
+            
+            # Validate stock availability before updating
+            for item in items:
+                product_id = item.get("id")
+                requested_quantity = item.get("qty", 0)
+                
+                if product_id and requested_quantity > 0:
+                    # Find product by ID or SKU
+                    product = db.items.find_one({"_id": _oid(product_id)}) or db.items.find_one({"sku": product_id})
+                    if not product:
+                        return jsonify({"verified": False, "reason": f"Product {product_id} not found"}), 400
+                    
+                    current_quantity = product.get("quantity", 0)
+                    if current_quantity < requested_quantity:
+                        return jsonify({"verified": False, "reason": f"Insufficient stock for {item.get('name', 'product')}. Available: {current_quantity}, Requested: {requested_quantity}"}), 400
+            
+            # Update stock quantities
+            for item in items:
+                product_id = item.get("id")
+                requested_quantity = item.get("qty", 0)
+                
+                if product_id and requested_quantity > 0:
+                    # Find product by ID or SKU
+                    product = db.items.find_one({"_id": _oid(product_id)}) or db.items.find_one({"sku": product_id})
+                    if product:
+                        # Update quantity using atomic operation
+                        result = db.items.update_one(
+                            {"_id": product["_id"]},
+                            {"$inc": {"quantity": -requested_quantity}, "$set": {"updated_at": _now(db)}}
+                        )
+                        
+                        if result.matched_count == 0:
+                            return jsonify({"verified": False, "reason": f"Failed to update stock for {item.get('name', 'product')}"}), 400
+                        
+                        # Create stock movement record
+                        db.stock_movements.insert_one({
+                            "item_id": product["_id"],
+                            "type": "outward",
+                            "quantity": requested_quantity,
+                            "from_location_id": None,
+                            "to_location_id": None,
+                            "ref": {"doc_type": "SALE", "order_id": order_id},
+                            "note": f"Sold {requested_quantity} units",
+                            "created_by": _oid(get_jwt_identity()) if get_jwt_identity() else None,
+                            "created_at": _now(db)
+                        })
+                        
+        except Exception as e:
+            # Log error but don't fail the payment verification
+            print(f"Stock update error: {str(e)}")
+            pass
 
     # Generate a simple demo order_id to show on confirmation page
     order_doc = db.orders.find_one({"provider": "razorpay", "provider_order.id": order_id}) or {}

@@ -6,6 +6,7 @@ import { QuickViewModal } from './QuickViewModal';
 import { MegaMenuFilter } from './MegaMenuFilter';
 import { useWishlist } from '../contexts/WishlistContext';
 import { useCart } from '../contexts/CartContext';
+import { stockService, ProductWithStock } from '../services/stockService';
 
 interface Product {
   _id: string;
@@ -20,6 +21,7 @@ interface Product {
   description?: string;
   image?: string;
   status: string;
+  quantity?: number;
 }
 
 interface ProductDisplayProps {
@@ -39,7 +41,9 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
   const { addToCart } = useCart();
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
+  const [productsWithStock, setProductsWithStock] = useState<ProductWithStock[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [stockLoading, setStockLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMetals, setSelectedMetals] = useState<string[]>((searchParams.get('metal') || '').split(',').filter(Boolean));
   const [priceRanges, setPriceRanges] = useState<string[]>((searchParams.get('price') || '').split(',').filter(Boolean));
@@ -67,6 +71,43 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
 
   const normalizeCategory = (c: string) => c.toLowerCase().replace(/\s+/g, '-');
   const toTitleCase = (s: string) => s.replace(/-/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+
+  // Load stock data for products
+  const loadStockData = async (products: Product[]) => {
+    if (products.length === 0) {
+      setProductsWithStock([]);
+      return;
+    }
+
+    try {
+      setStockLoading(true);
+      
+      // Use the quantity directly from products since it's now included in the API response
+      const productsWithStockData: ProductWithStock[] = products.map(product => {
+        const quantity = product.quantity || 0;
+        return {
+          ...product,
+          quantity: quantity,
+          stockStatus: stockService.getStockStatus(quantity),
+          stockDisplayText: stockService.getStockDisplayText(quantity)
+        };
+      });
+
+      setProductsWithStock(productsWithStockData);
+    } catch (error) {
+      console.error('Failed to load stock data:', error);
+      // Fallback to products without stock data
+      const fallbackProducts: ProductWithStock[] = products.map(product => ({
+        ...product,
+        quantity: product.quantity || 0,
+        stockStatus: stockService.getStockStatus(product.quantity || 0),
+        stockDisplayText: stockService.getStockDisplayText(product.quantity || 0)
+      }));
+      setProductsWithStock(fallbackProducts);
+    } finally {
+      setStockLoading(false);
+    }
+  };
 
   useEffect(() => {
     const loadProducts = async () => {
@@ -143,6 +184,8 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
         }
 
         setProducts(filteredProducts);
+        // Load stock data for the filtered products
+        await loadStockData(filteredProducts);
       } catch (error) {
         console.error('Failed to load products:', error);
       } finally {
@@ -153,7 +196,7 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
     loadProducts();
   }, [category]);
 
-  const filteredProducts = products.filter(product => {
+  const filteredProducts = productsWithStock.filter(product => {
     const matchesSearch = !searchTerm || 
       product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       product.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -184,7 +227,7 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
     return matchesSearch && matchesMetal && matchesPurity && matchesPrice && matchesCategories;
   });
 
-  const uniqueMetals = [...new Set(products.map(p => p.metal))];
+  const uniqueMetals = [...new Set(productsWithStock.map(p => p.metal))];
   const updateParams = (updates: Record<string, string | string[] | null>) => {
     const params = new URLSearchParams(searchParams.toString());
     Object.entries(updates).forEach(([k,v])=>{ 
@@ -208,13 +251,15 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
   const currentPage = Math.min(page, totalPages);
   const pageSlice = sortedProducts.slice((currentPage-1)*perPage, currentPage*perPage);
 
-  if (isLoading) {
+  if (isLoading || stockLoading) {
     return (
       <div className="min-h-screen bg-gray-50 py-12">
         <div className="container mx-auto px-6">
           <div className="text-center">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            <p className="mt-4 text-gray-600">Loading our beautiful collection...</p>
+            <p className="mt-4 text-gray-600">
+              {isLoading ? 'Loading our beautiful collection...' : 'Checking stock availability...'}
+            </p>
           </div>
         </div>
       </div>
@@ -422,6 +467,7 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
                                 // Emit a global Buy Now event to centralize auth check and navigation
                                 const ev = new CustomEvent('sj:buyNow', { detail: {
                                   productId: product._id,
+                                  sku: product.sku,
                                   name: product.name,
                                   price: product.price || 0,
                                   image: product.image || '',
@@ -432,15 +478,22 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
                                 }});
                                 window.dispatchEvent(ev);
                               }} 
-                              className="bg-orange-600 text-white px-3 py-1 rounded-md text-sm hover:bg-orange-700 transition-colors"
+                              disabled={product.stockStatus === 'out_of_stock'}
+                              className={`px-3 py-1 rounded-md text-sm transition-colors ${
+                                product.stockStatus === 'out_of_stock' 
+                                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                                  : 'bg-orange-600 text-white hover:bg-orange-700'
+                              }`}
                             >
-                              Buy Now
+                              {product.stockStatus === 'out_of_stock' ? 'Out of Stock' : 'Buy Now'}
                             </button>
                           </div>
+                        </div>                    
+                        {/* Stock Status Display */}
+                        <div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <button onClick={(e) => e.stopPropagation()} className="pill px-3 py-1 text-sm">Similar</button>
-                          <button onClick={(e) => e.stopPropagation()} className="pill px-3 py-1 text-sm">Try it</button>
+  
                         </div>
                       </div>
                     )}

@@ -67,7 +67,7 @@ export const CartPage: React.FC = () => {
   // Pricing helpers
   const lineItems = useMemo(() => items.map(it => {
     const p = productMap[it.productId];
-    const derived = (p?.computed_price ?? p?.price ?? 0);
+    const derived = (p?.price ?? 0);
     const unitPrice = typeof it.price === 'number' ? it.price : derived;
     const total = unitPrice * it.quantity;
     return { cart: it, product: p, unitPrice, total };
@@ -172,7 +172,7 @@ export const CartPage: React.FC = () => {
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
                             </button>
                             <span className="px-4 py-2 border-x min-w-[3rem] text-center">{it.quantity}</span>
-                            <button className="p-2 hover:bg-gray-50" onClick={() => updateQuantity(it.productId, Math.min(99, it.quantity + 1))} aria-label="Increase quantity">
+                            <button className="p-2 hover:bg-gray-50" onClick={() => updateQuantity(it.productId, it.quantity + 1)} aria-label="Increase quantity">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
                             </button>
                           </div>

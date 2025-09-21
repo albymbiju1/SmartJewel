@@ -6,6 +6,7 @@ from flask import request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.blueprints.payments import bp
 from app.extensions import db
+from flask import current_app
 from datetime import datetime
 try:
     from bson import ObjectId  # Mongo ObjectId for safe serialization
@@ -116,19 +117,24 @@ def create_razorpay_order():
         return jsonify({"error": "razorpay_order_exception", "details": str(e)}), 500
 
     # Persist a minimal order doc for demo (optional)
-    try:
-        db.orders.insert_one({
-            "provider": "razorpay",
-            "provider_order": order,
-            "status": "created",
-            "amount": amount,
-            "currency": currency,
-            "receipt": receipt,
-            "customer": customer,
-            "items": items,
-        })
-    except Exception:
-        pass
+    db = current_app.extensions.get('mongo_db')
+    if db is not None:
+        try:
+            db.orders.insert_one({
+                "provider": "razorpay",
+                "provider_order": order,
+                "status": "created",
+                "amount": amount,
+                "currency": currency,
+                "receipt": receipt,
+                "customer": customer,
+                "items": items,
+            })
+            print(f"Order saved to database: {receipt}")
+        except Exception as e:
+            print(f"Failed to save order to database: {e}")
+    else:
+        print("Database not available - order not persisted")
 
     return jsonify({
         "order": order,
@@ -155,17 +161,22 @@ def verify_razorpay_signature():
     payment_id = data.get("razorpay_payment_id")
     signature = data.get("razorpay_signature")
 
+    # Get database from Flask app context
+    db = current_app.extensions.get('mongo_db')
+
     # Allow skipping signature verification when using a mock API for local testing
     if os.getenv("RAZORPAY_SKIP_SIGNATURE", "false").lower() in ("1", "true", "yes"):
-        try:
-            db.orders.update_one(
-                {"provider": "razorpay", "provider_order.id": order_id},
-                {"$set": {"status": "paid", "payment_id": payment_id, "signature": signature}},
-            )
-        except Exception:
-            pass
-        order_doc = db.orders.find_one({"provider": "razorpay", "provider_order.id": order_id}) or {}
-        demo_order_id = order_doc.get("receipt") or f"SJ-{(order_id or '')[-8:].upper()}"
+        if db is not None:
+            try:
+                db.orders.update_one(
+                    {"provider": "razorpay", "provider_order.id": order_id},
+                    {"$set": {"status": "paid", "payment_id": payment_id, "signature": signature}},
+                )
+                print(f"Order updated in database: {order_id}")
+            except Exception as e:
+                print(f"Failed to update order in database: {e}")
+        order_doc = db.orders.find_one({"provider": "razorpay", "provider_order.id": order_id}) if db is not None else {}
+        demo_order_id = order_doc.get("receipt") if order_doc else f"SJ-{(order_id or '')[-8:].upper()}"
         return jsonify({"verified": True, "order_id": demo_order_id, "details": _to_jsonable(order_doc)})
 
     key_secret = os.getenv("RAZORPAY_KEY_SECRET")
@@ -189,19 +200,23 @@ def verify_razorpay_signature():
         ok = False
 
     # Update order status in DB for demo purposes
-    try:
-        db.orders.update_one(
-            {"provider": "razorpay", "provider_order.id": order_id},
-            {"$set": {"status": "paid" if ok else "failed", "payment_id": payment_id, "signature": signature}},
-        )
-    except Exception:
-        pass
+    if db is not None:
+        try:
+            db.orders.update_one(
+                {"provider": "razorpay", "provider_order.id": order_id},
+                {"$set": {"status": "paid" if ok else "failed", "payment_id": payment_id, "signature": signature}},
+            )
+            print(f"Order status updated in database: {order_id}")
+        except Exception as e:
+            print(f"Failed to update order status in database: {e}")
+    else:
+        print("Database not available - order status not updated")
 
     if not ok:
         return jsonify({"verified": False, "reason": "signature_mismatch"}), 400
 
     # If payment is successful, validate and update stock
-    if ok:
+    if ok and db is not None:
         try:
             order_doc = db.orders.find_one({"provider": "razorpay", "provider_order.id": order_id}) or {}
             items = order_doc.get("items", [])
@@ -256,9 +271,97 @@ def verify_razorpay_signature():
             # Log error but don't fail the payment verification
             print(f"Stock update error: {str(e)}")
             pass
+    elif ok and db is None:
+        print("Database not available - skipping stock validation and updates")
 
     # Generate a simple demo order_id to show on confirmation page
-    order_doc = db.orders.find_one({"provider": "razorpay", "provider_order.id": order_id}) or {}
-    demo_order_id = order_doc.get("receipt") or f"SJ-{order_id[-8:].upper()}"
+    order_doc = db.orders.find_one({"provider": "razorpay", "provider_order.id": order_id}) if db is not None else {}
+    demo_order_id = order_doc.get("receipt") if order_doc else f"SJ-{order_id[-8:].upper()}"
+
+    # If payment is successful, create a proper order record
+    if ok and db is not None:
+        try:
+            # Get user ID from JWT token
+            user_id = get_jwt_identity()
+            print(f"Creating order for user_id: {user_id}, order_id: {demo_order_id}")
+            
+            # Test database connection first
+            try:
+                test_result = db.orders.find_one()
+                print(f"Database connection test successful: {test_result is not None}")
+            except Exception as db_test_error:
+                print(f"Database connection test failed: {db_test_error}")
+                raise db_test_error
+            
+            # Create comprehensive order record
+            order_record = {
+                "order_id": demo_order_id,
+                "user_id": _oid(user_id) if user_id else None,
+                "status": "confirmed",
+                "payment_status": "paid",
+                "delivery_status": "pending",
+                "payment_provider": "razorpay",
+                "payment_id": payment_id,
+                "razorpay_order_id": order_id,
+                "amount": order_doc.get("amount", 0),
+                "currency": order_doc.get("currency", "INR"),
+                "customer": order_doc.get("customer", {}),
+                "items": order_doc.get("items", []),
+                "created_at": _now(db),
+                "updated_at": _now(db),
+                "notes": {
+                    "payment_method": "razorpay",
+                    "signature_verified": True
+                }
+            }
+            
+            print(f"Order record to insert: {order_record}")
+            
+            # Insert the order record
+            result = db.orders.insert_one(order_record)
+            print(f"Order inserted with ID: {result.inserted_id}")
+            
+            # Verify the order was actually inserted
+            inserted_order = db.orders.find_one({"_id": result.inserted_id})
+            print(f"Verification - inserted order found: {inserted_order is not None}")
+            
+            # Update the existing razorpay order record with the new order_id
+            update_result = db.orders.update_one(
+                {"provider": "razorpay", "provider_order.id": order_id},
+                {"$set": {"order_id": demo_order_id, "user_id": _oid(user_id) if user_id else None}}
+            )
+            print(f"Updated existing order: {update_result.modified_count} documents modified")
+            
+        except Exception as e:
+            print(f"Order creation error: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            # Don't fail the payment verification if order creation fails
+    elif ok and db is None:
+        print("Database not available - order not persisted to database")
 
     return jsonify({"verified": True, "order_id": demo_order_id, "details": _to_jsonable(order_doc)})
+
+
+@bp.post("/test-order-creation")
+@jwt_required()
+def test_order_creation():
+    """Test endpoint to verify order creation works"""
+    try:
+        user_id = get_jwt_identity()
+        test_order = {
+            "order_id": f"TEST-{uuid4().hex[:8]}",
+            "user_id": _oid(user_id) if user_id else None,
+            "status": "test",
+            "payment_status": "test",
+            "delivery_status": "test",
+            "amount": 100,
+            "currency": "INR",
+            "created_at": _now(db),
+            "updated_at": _now(db)
+        }
+        
+        result = db.orders.insert_one(test_order)
+        return jsonify({"success": True, "inserted_id": str(result.inserted_id)})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500

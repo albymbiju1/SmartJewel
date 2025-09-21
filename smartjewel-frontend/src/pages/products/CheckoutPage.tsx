@@ -169,11 +169,15 @@ export const CheckoutPage: React.FC = () => {
         retry: { enabled: true, max_count: 2 },
         handler: async (response) => {
           try {
+            console.log('Payment response received:', response);
             // 3) Verify signature on backend
             const verify = await api.post('/payments/razorpay/verify', response);
+            console.log('Payment verification response:', verify.data);
             const { order_id } = verify.data;
+            console.log('Navigating to order confirmation with order_id:', order_id);
             navigate('/order-confirmation', { state: { orderId: order_id, amount: amountRupees } });
           } catch (e: any) {
+            console.error('Payment verification failed:', e);
             const msg = e?.response?.data?.reason || e?.response?.data?.error || e?.message || 'Payment verification failed.';
             setError(String(msg));
           }

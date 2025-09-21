@@ -1,12 +1,26 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useCart } from '../../contexts/CartContext';
 
 export const OrderConfirmationPage: React.FC = () => {
   const navigate = useNavigate();
+  const { clearCart } = useCart();
   const { state } = useLocation() as { state?: { orderId?: string; amount?: number; details?: any } };
 
   const orderId = state?.orderId || 'DEMO-ORDER';
   const amount = state?.amount || 0;
+
+  // Debug logging
+  console.log('OrderConfirmationPage - state:', state);
+  console.log('OrderConfirmationPage - orderId:', orderId);
+  console.log('OrderConfirmationPage - amount:', amount);
+
+  // Clear cart after successful order
+  useEffect(() => {
+    clearCart().catch(error => {
+      console.error('Failed to clear cart:', error);
+    });
+  }, [clearCart]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -38,8 +52,33 @@ export const OrderConfirmationPage: React.FC = () => {
           </div>
 
           <div className="mt-8 flex items-center justify-center gap-3">
-            <button onClick={() => navigate('/products/all')} className="px-5 py-2.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50">Continue Shopping</button>
-            <button onClick={() => navigate('/')} className="px-5 py-2.5 rounded-lg bg-gray-900 text-white hover:opacity-90">Go to Home</button>
+            <button 
+              onClick={() => {
+                console.log('View My Orders clicked');
+                navigate('/my-orders');
+              }} 
+              className="px-5 py-2.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
+            >
+              View My Orders
+            </button>
+            <button 
+              onClick={() => {
+                console.log('Continue Shopping clicked');
+                navigate('/products/all');
+              }} 
+              className="px-5 py-2.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
+            >
+              Continue Shopping
+            </button>
+            <button 
+              onClick={() => {
+                console.log('Go to Home clicked');
+                navigate('/');
+              }} 
+              className="px-5 py-2.5 rounded-lg bg-gray-900 text-white hover:opacity-90"
+            >
+              Go to Home
+            </button>
           </div>
         </div>
       </div>

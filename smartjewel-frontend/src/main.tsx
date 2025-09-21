@@ -7,17 +7,20 @@ import './index.css';
 import { CartProvider } from './contexts/CartContext';
 import { WishlistProvider } from './contexts/WishlistContext';
 import { ToastProvider } from './components/Toast';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <AuthProvider>
-    <WishlistProvider>
-      <CartProvider>
-        <ToastProvider>
-          {/* Global cart anchor for fly-to-cart fallback (positioned top-right, off-screen) */}
-          <div data-cart-anchor style={{ position: 'fixed', top: 8, right: 8, width: 24, height: 24, pointerEvents: 'none', zIndex: 999 }} />
-          <AppRouter />
-        </ToastProvider>
-      </CartProvider>
-    </WishlistProvider>
-  </AuthProvider>
+  <ErrorBoundary>
+    <AuthProvider>
+      <WishlistProvider>
+        <CartProvider>
+          <ToastProvider>
+            {/* Global cart anchor for fly-to-cart fallback (positioned top-right, off-screen) */}
+            <div data-cart-anchor style={{ position: 'fixed', top: 8, right: 8, width: 24, height: 24, pointerEvents: 'none', zIndex: 999 }} />
+            <AppRouter />
+          </ToastProvider>
+        </CartProvider>
+      </WishlistProvider>
+    </AuthProvider>
+  </ErrorBoundary>
 );

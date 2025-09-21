@@ -154,6 +154,7 @@ export const LandingPage: React.FC = () => {
                 <div className="text-xs text-gray-500">{user?.role?.role_name}</div>
               </div>
               <button className="w-full text-left bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={()=>{ setShowUserMenu(false); navigate('/profile'); }}>My Profile</button>
+              <button className="w-full text-left bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={()=>{ setShowUserMenu(false); navigate('/my-orders'); }}>My Orders</button>
               <button className="w-full text-left bg-white px-4 py-2 text-sm text-red-700 hover:bg-red-50" onClick={()=>{ setShowUserMenu(false); logout(); navigate('/login', { replace: true }); }}>Sign Out</button>
             </div>
           )}

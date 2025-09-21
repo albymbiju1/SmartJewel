@@ -138,8 +138,48 @@ def get_customer_orders(customer_id):
     if not customer:
         return jsonify({"error": "customer_not_found"}), 404
     
-    # Orders will be empty until ordering system is implemented
+    # Get orders for this customer, sorted by creation date (newest first)
+    orders_cursor = db.orders.find(
+        {"user_id": customer_oid},
+        {"provider": 0, "provider_order": 0, "razorpay_order_id": 0, "payment_id": 0, "signature": 0}
+    ).sort("created_at", -1)
+    
     orders = []
+    for order in orders_cursor:
+        # Convert ObjectId to string for JSON serialization
+        order["_id"] = str(order["_id"])
+        if order.get("user_id"):
+            order["user_id"] = str(order["user_id"])
+        orders.append(order)
+    
+    return jsonify({"orders": orders})
+
+@bp.get("/me/orders")
+@jwt_required()
+def get_my_orders():
+    """Get orders for the currently authenticated user"""
+    db = current_app.extensions.get('mongo_db')
+    user_id = get_jwt_identity()
+    
+    if not user_id:
+        return jsonify({"error": "authentication_required"}), 401
+    
+    if not db:
+        return jsonify({"orders": [], "message": "Database not available"})
+    
+    # Get orders for current user, sorted by creation date (newest first)
+    orders_cursor = db.orders.find(
+        {"user_id": _oid(user_id)},
+        {"provider": 0, "provider_order": 0, "razorpay_order_id": 0, "payment_id": 0, "signature": 0}
+    ).sort("created_at", -1)
+    
+    orders = []
+    for order in orders_cursor:
+        # Convert ObjectId to string for JSON serialization
+        order["_id"] = str(order["_id"])
+        if order.get("user_id"):
+            order["user_id"] = str(order["user_id"])
+        orders.append(order)
     
     return jsonify({"orders": orders})
 

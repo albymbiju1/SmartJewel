@@ -190,6 +190,51 @@ def get_my_orders():
 
     return jsonify({"orders": orders})
 
+@bp.get("/me/orders/<order_id>")
+@jwt_required()
+def get_my_order_details(order_id):
+    """Get details for a specific order for the currently authenticated user"""
+    from datetime import datetime
+
+    db = current_app.extensions.get('mongo_db')
+    user_id = get_jwt_identity()
+
+    if not user_id:
+        return jsonify({"error": "authentication_required"}), 401
+
+    # PyMongo Database objects don't support truthiness; compare explicitly to None
+    if db is None:
+        return jsonify({"error": "Database not available"}), 503
+
+    # Validate order_id format
+    try:
+        order_oid = _oid(order_id)
+        if not order_oid:
+            return jsonify({"error": "invalid_order_id"}), 400
+    except:
+        return jsonify({"error": "invalid_order_id"}), 400
+
+    # Get the specific order for current user
+    order = db.orders.find_one({
+        "_id": order_oid,
+        "user_id": _oid(user_id)
+    }, {"provider": 0, "provider_order": 0, "razorpay_order_id": 0, "payment_id": 0, "signature": 0})
+
+    if not order:
+        return jsonify({"error": "order_not_found"}), 404
+
+    # Convert ObjectId to string for JSON serialization
+    order["_id"] = str(order["_id"])
+    if order.get("user_id"):
+        order["user_id"] = str(order["user_id"])
+    
+    # Ensure datetime fields are JSON-serializable
+    for key in ("created_at", "updated_at"):
+        if isinstance(order.get(key), datetime):
+            order[key] = order[key].isoformat()
+
+    return jsonify({"order": order})
+
 @bp.put("/<customer_id>")
 @jwt_required()
 @require_permissions("*")

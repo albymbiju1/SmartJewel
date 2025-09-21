@@ -30,6 +30,7 @@ import { CartPage } from './pages/products/CartPage';
 import { CheckoutPage } from './pages/products/CheckoutPage';
 import { OrderConfirmationPage } from './pages/products/OrderConfirmationPage';
 import { MyOrdersPage } from './pages/products/MyOrdersPage';
+import { OrderDetailsPage } from './pages/products/OrderDetailsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import EventBridge from './components/EventBridge';
 
@@ -83,6 +84,7 @@ export const AppRouter: React.FC = () => (
       <Route path="/checkout" element={<RequireAuth><CheckoutPage /></RequireAuth>} />
       <Route path="/order-confirmation" element={<OrderConfirmationPage />} />
       <Route path="/my-orders" element={<RequireAuth><MyOrdersPage /></RequireAuth>} />
+      <Route path="/order-details/:orderId" element={<RequireAuth><OrderDetailsPage /></RequireAuth>} />
 
       {/* Profile (protected) */}
       <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />

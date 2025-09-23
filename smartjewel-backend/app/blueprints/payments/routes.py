@@ -54,6 +54,52 @@ def inr_paise(amount_rupees: float) -> int:
         return 0
 
 
+def _validate_and_update_stock(db, items, order_id, user_id=None):
+    """Validate availability and decrement stock for purchased items.
+    Creates stock movement records for audit trail.
+    Returns (True, None) on success or (False, reason) on failure.
+    """
+    try:
+        # Validate stock availability first
+        for item in items or []:
+            product_id = item.get("id")
+            requested_quantity = item.get("qty", 0)
+            if product_id and requested_quantity > 0:
+                product = db.items.find_one({"_id": _oid(product_id)}) or db.items.find_one({"sku": product_id})
+                if not product:
+                    return False, f"Product {product_id} not found"
+                current_quantity = product.get("quantity", 0)
+                if current_quantity < requested_quantity:
+                    return False, f"Insufficient stock for {item.get('name', 'product')}. Available: {current_quantity}, Requested: {requested_quantity}"
+
+        # Perform atomic decrements and record movements
+        for item in items or []:
+            product_id = item.get("id")
+            requested_quantity = item.get("qty", 0)
+            if product_id and requested_quantity > 0:
+                product = db.items.find_one({"_id": _oid(product_id)}) or db.items.find_one({"sku": product_id})
+                if product:
+                    result = db.items.update_one(
+                        {"_id": product["_id"]},
+                        {"$inc": {"quantity": -requested_quantity}, "$set": {"updated_at": _now(db)}}
+                    )
+                    if result.matched_count == 0:
+                        return False, f"Failed to update stock for {item.get('name', 'product')}"
+                    db.stock_movements.insert_one({
+                        "item_id": product["_id"],
+                        "type": "outward",
+                        "quantity": requested_quantity,
+                        "from_location_id": None,
+                        "to_location_id": None,
+                        "ref": {"doc_type": "SALE", "order_id": order_id},
+                        "note": f"Sold {requested_quantity} units",
+                        "created_by": _oid(user_id) if user_id else None,
+                        "created_at": _now(db)
+                    })
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
 @bp.post("/razorpay/order")
 @jwt_required()
 def create_razorpay_order():
@@ -263,6 +309,11 @@ def verify_razorpay_signature():
                 }
                 db.orders.insert_one(order_record)
                 print(f"Test mode: order persisted for user {uid} with id {demo_order_id}")
+
+                # Decrement stock in test/skip-signature path as well
+                ok_stock, reason = _validate_and_update_stock(db, order_record.get("items", []), demo_order_id, uid)
+                if not ok_stock:
+                    print(f"Stock update warning (test mode): {reason}")
             except Exception as e:
                 print(f"Failed to persist test-mode order: {e}")
         return jsonify({"verified": True, "order_id": demo_order_id, "details": _to_jsonable(order_doc)})
@@ -308,55 +359,10 @@ def verify_razorpay_signature():
         try:
             order_doc = db.orders.find_one({"provider": "razorpay", "provider_order.id": order_id}) or {}
             items = order_doc.get("items", [])
-            
-            # Validate stock availability before updating
-            for item in items:
-                product_id = item.get("id")
-                requested_quantity = item.get("qty", 0)
-                
-                if product_id and requested_quantity > 0:
-                    # Find product by ID or SKU
-                    product = db.items.find_one({"_id": _oid(product_id)}) or db.items.find_one({"sku": product_id})
-                    if not product:
-                        return jsonify({"verified": False, "reason": f"Product {product_id} not found"}), 400
-                    
-                    current_quantity = product.get("quantity", 0)
-                    if current_quantity < requested_quantity:
-                        return jsonify({"verified": False, "reason": f"Insufficient stock for {item.get('name', 'product')}. Available: {current_quantity}, Requested: {requested_quantity}"}), 400
-            
-            # Update stock quantities
-            for item in items:
-                product_id = item.get("id")
-                requested_quantity = item.get("qty", 0)
-                
-                if product_id and requested_quantity > 0:
-                    # Find product by ID or SKU
-                    product = db.items.find_one({"_id": _oid(product_id)}) or db.items.find_one({"sku": product_id})
-                    if product:
-                        # Update quantity using atomic operation
-                        result = db.items.update_one(
-                            {"_id": product["_id"]},
-                            {"$inc": {"quantity": -requested_quantity}, "$set": {"updated_at": _now(db)}}
-                        )
-                        
-                        if result.matched_count == 0:
-                            return jsonify({"verified": False, "reason": f"Failed to update stock for {item.get('name', 'product')}"}), 400
-                        
-                        # Create stock movement record
-                        db.stock_movements.insert_one({
-                            "item_id": product["_id"],
-                            "type": "outward",
-                            "quantity": requested_quantity,
-                            "from_location_id": None,
-                            "to_location_id": None,
-                            "ref": {"doc_type": "SALE", "order_id": order_id},
-                            "note": f"Sold {requested_quantity} units",
-                            "created_by": _oid(get_jwt_identity()) if get_jwt_identity() else None,
-                            "created_at": _now(db)
-                        })
-                        
+            ok_stock, reason = _validate_and_update_stock(db, items, order_id, get_jwt_identity())
+            if not ok_stock:
+                return jsonify({"verified": False, "reason": reason}), 400
         except Exception as e:
-            # Log error but don't fail the payment verification
             print(f"Stock update error: {str(e)}")
             pass
     elif ok and db is None:

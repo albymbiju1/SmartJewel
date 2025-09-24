@@ -14,7 +14,7 @@ interface CustomerForm {
 
 export const CheckoutPage: React.FC = () => {
   const navigate = useNavigate();
-  const { items, cartTotal, updateQuantity, removeFromCart } = useCart();
+  const { items, cartTotal, updateQuantity, removeFromCart, clearCart } = useCart();
 
   // Form + UI state
   const [form, setForm] = useState<CustomerForm>({ name: '', email: '', phone: '', address: '' });
@@ -175,6 +175,12 @@ export const CheckoutPage: React.FC = () => {
             console.log('Payment verification response:', verify.data);
             const { order_id } = verify.data;
             console.log('Navigating to order confirmation with order_id:', order_id);
+            // Clear the cart after successful purchase
+            try {
+              await clearCart();
+            } catch (err) {
+              console.error('Failed to clear cart after purchase:', err);
+            }
             navigate('/order-confirmation', { state: { orderId: order_id, amount: amountRupees } });
           } catch (e: any) {
             console.error('Payment verification failed:', e);

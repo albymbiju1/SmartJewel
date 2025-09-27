@@ -13,5 +13,7 @@ class Config:
     RATE_LIMIT_DEFAULT = os.getenv("RATE_LIMIT_DEFAULT", "100 per hour")
     ADMIN_EMAILS = [e.strip().lower() for e in (os.getenv("ADMIN_EMAILS") or "admin@smartjewel.com").split(",") if e.strip()]
     GOLDAPI_KEY = os.getenv("GOLDAPI_KEY", "your-gold-api-key-here")
+    # Enable/disable APScheduler background jobs
+    SCHEDULER_ENABLED = os.getenv("SCHEDULER_ENABLED", "true").lower() in ("1", "true", "yes", "on")
     
 

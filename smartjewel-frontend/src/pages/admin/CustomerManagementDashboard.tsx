@@ -21,12 +21,10 @@ interface Customer {
 interface CustomerDetails extends Customer {
   purchase_history: Array<{
     order_id: string;
-    date: string;
-    items: Array<{
-      name: string;
-      quantity: number;
-      price: number;
-    }>;
+    date?: string; // fallback
+    createdAt_ist?: string;
+    items?: Array<{ name: string; quantity: number; price: number }>; // optional for count fallback
+    items_count?: number;
     total_amount: number;
     status: string;
   }>;
@@ -452,14 +450,10 @@ export const CustomerManagementDashboard: React.FC = () => {
                               {order.order_id}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {formatDate(order.date)}
+                              {formatDate(order.createdAt_ist || order.date || '')}
                             </td>
-                            <td className="px-6 py-4 text-sm text-gray-900">
-                              {order.items.map((item, index) => (
-                                <div key={index}>
-                                  {item.name} x{item.quantity}
-                                </div>
-                              ))}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {order.items_count ?? (order.items ? order.items.reduce((acc, it) => acc + (it.quantity || 0), 0) : 0)}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                               {formatCurrency(order.total_amount)}

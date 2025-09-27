@@ -8,7 +8,7 @@ import { firebaseAuthService } from '../services/firebaseAuth';
 type FormValues = RegistrationFormValues;
 
 interface Props {
-  onSuccess: () => void;
+  onSuccess: (email: string) => void;
   switchToLogin: () => void;
 }
 
@@ -32,46 +32,29 @@ export const RegisterForm: React.FC<Props> = ({ onSuccess, switchToLogin }) => {
     try {
       setRegisterError(null);
       
-      // First, create Firebase user to ensure consistency
-      let firebaseUser = null;
-      try {
-        const firebaseResult = await firebaseAuthService.createAccountWithEmail(
-          values.email, 
-          values.password
-        );
-        firebaseUser = firebaseResult.user;
-        
-        // Update Firebase user profile with display name
-        if (firebaseUser && values.name) {
-          await firebaseAuthService.updateUserProfile({ displayName: values.name });
-        }
-      } catch (firebaseError: any) {
-        // If Firebase user creation fails, still try backend registration
-        // This ensures the system works even if Firebase is temporarily unavailable
-        console.warn('Firebase user creation failed, continuing with backend registration:', firebaseError);
-      }
-      
-      // Backend expects: name, email, password, phone
-      // The backend will also create a Firebase user if it doesn't exist
+      // Register only via backend; backend will handle Firebase linking/creation
       const response = await api.post('/auth/register', {
         name: values.name,
         email: values.email,
         password: values.password,
         phone: values.phone
       });
-      
-      // If we successfully created a Firebase user, sign out to let the user sign in normally
-      if (firebaseUser) {
-        await firebaseAuthService.signOut();
-      }
-      
-      onSuccess();
+
+      // Redirect to OTP verification with email prefilled
+      onSuccess(values.email);
     } catch (error: any) {
       const errorData = error.response?.data;
       if (errorData?.error === 'validation_failed' && errorData?.details) {
         // Handle validation errors
         const validationMessages = Object.values(errorData.details).flat().join(', ');
         setRegisterError(validationMessages);
+      } else if (errorData?.error === 'account_unverified') {
+        // Redirect to OTP verification with email prefilled and request resend
+        try {
+          await api.post('/auth/request-otp', { email: values.email });
+        } catch {}
+        onSuccess(values.email);
+        return;
       } else if (errorData?.error === 'email_in_use') {
         setRegisterError('This email is already registered. Please use a different email or try logging in.');
       } else {

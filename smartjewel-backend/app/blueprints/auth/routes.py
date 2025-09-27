@@ -9,6 +9,10 @@ from flask import current_app
 from .schemas import LoginSchema, RegistrationSchema, StaffCreateSchema
 from app.utils.security import verify_password, hash_password
 from app.utils.authz import require_roles
+from datetime import timedelta
+from app.utils.mailer import send_email
+from app.utils.email_templates import otp_email
+from pymongo.errors import DuplicateKeyError
 try:
     import firebase_admin
     from firebase_admin import auth as fb_auth
@@ -32,6 +36,9 @@ def register():
     
     existing = db.users.find_one({"email": data["email"].lower()})
     if existing:
+        # If the account exists but is not verified, guide client to OTP flow
+        if existing.get("status") != "active":
+            return jsonify({"error": "account_unverified"}), 409
         return jsonify({"error": "email_in_use"}), 409
     
     # Create Firebase user if Firebase is available
@@ -62,6 +69,13 @@ def register():
     if not role_doc:
         return jsonify({"error": "role_not_found"}), 500
     
+    # Prepare OTP
+    import random
+    cfg = current_app.config
+    otp_length = int(cfg.get("OTP_LENGTH", 6))
+    ttl_minutes = int(cfg.get("OTP_TTL_MINUTES", 10))
+    otp_code = ''.join(str(random.randint(0, 9)) for _ in range(otp_length))
+
     user_doc = {
         "full_name": data["name"],
         "email": data["email"].lower(),
@@ -71,23 +85,41 @@ def register():
             "_id": role_doc["_id"],
             "role_name": role_doc["role_name"]
         },
-        "status": "active",
-        "created_at": _now(db)
+        "status": "pending_verification",
+        "created_at": _now(db),
+        "otp": {
+            "code_hash": hash_password(otp_code),
+            "expires_at": _now(db) + timedelta(minutes=ttl_minutes),
+            "attempts": 0
+        }
     }
-    
+
     # Add Firebase UID if available
     if firebase_uid:
         user_doc["firebase_uid"] = firebase_uid
         user_doc["uid"] = firebase_uid  # Also store as uid for compatibility
-    
-    inserted = db.users.insert_one(user_doc)
+
+    try:
+        inserted = db.users.insert_one(user_doc)
+    except DuplicateKeyError:
+        # Email unique index caught a race; return 409 consistent with pre-check
+        return jsonify({"error": "email_in_use"}), 409
+
     log.info("auth.register.user_created", user_id=str(inserted.inserted_id), email=data["email"], firebase_uid=firebase_uid)
-    
+
+    # Send OTP email
+    try:
+        subject, text_body, html_body = otp_email(data["name"], otp_code, ttl_minutes)
+        send_email(user_doc["email"], subject, text_body, html_body)
+        log.info("auth.register.otp_sent", email=user_doc["email"]) 
+    except Exception as e:
+        log.error("auth.register.otp_send_failed", email=user_doc["email"], error=str(e))
+
     return jsonify({
-        "id": str(inserted.inserted_id), 
-        "email": user_doc["email"], 
+        "id": str(inserted.inserted_id),
+        "email": user_doc["email"],
         "full_name": user_doc["full_name"],
-        "firebase_uid": firebase_uid
+        "requires_verification": True
     }), 201
 
 
@@ -155,10 +187,12 @@ def login():
         log.warning("auth.login.validation_failed", details=err.messages)
         return jsonify({"error": "validation_failed", "details": err.messages}), 400
     
-    user = db.users.find_one({"email": data["email"].lower(), "status": "active"})
+    user = db.users.find_one({"email": data["email"].lower()})
     if not user or not verify_password(data["password"], user["password_hash"]):
         log.info("auth.login.invalid_credentials", email=data.get("email"))
         return jsonify({"error": "invalid_credentials"}), 401
+    if user.get("status") != "active":
+        return jsonify({"error": "account_unverified"}), 403
 
     # Fetch full role info
     role_doc = db.roles.find_one({"_id": user["role"]["_id"]}) if user.get("role") else None
@@ -208,6 +242,89 @@ def me():
         "branch_id": claims.get("branch_id"),
         "perms": claims.get("perms", []),
     }), 200
+
+
+@limiter.limit("5 per minute")
+@bp.post("/verify-otp")
+def verify_otp():
+    db = current_app.extensions['mongo_db']
+    payload = request.get_json() or {}
+    email = (payload.get("email") or "").strip().lower()
+    otp = (payload.get("otp") or "").strip()
+
+    if not email or not otp:
+        return jsonify({"error": "validation_failed", "details": {"email": ["Email is required"], "otp": ["OTP is required"]}}), 400
+
+    user = db.users.find_one({"email": email})
+    if not user:
+        return jsonify({"error": "not_found"}), 404
+    if user.get("status") == "active":
+        return jsonify({"message": "already_verified"}), 200
+
+    otp_info = (user or {}).get("otp") or {}
+    if not otp_info:
+        return jsonify({"error": "no_otp"}), 400
+
+    # Check expiration
+    now = _now(db)
+    if otp_info.get("expires_at") and now > otp_info["expires_at"]:
+        return jsonify({"error": "otp_expired"}), 400
+
+    # Check attempts
+    max_attempts = int(current_app.config.get("OTP_MAX_ATTEMPTS", 5))
+    attempts = int(otp_info.get("attempts", 0))
+    if attempts >= max_attempts:
+        return jsonify({"error": "otp_attempts_exceeded"}), 429
+
+    # Verify code
+    if not verify_password(otp, otp_info.get("code_hash", "")):
+        db.users.update_one({"_id": user["_id"]}, {"$inc": {"otp.attempts": 1}})
+        return jsonify({"error": "otp_invalid"}), 400
+
+    # Success: mark user active and clear otp
+    db.users.update_one({"_id": user["_id"]}, {"$set": {"status": "active"}, "$unset": {"otp": ""}})
+    return jsonify({"message": "verified"}), 200
+
+
+@limiter.limit("3 per minute")
+@bp.post("/request-otp")
+def request_otp():
+    import random
+    db = current_app.extensions['mongo_db']
+    payload = request.get_json() or {}
+    email = (payload.get("email") or "").strip().lower()
+
+    if not email:
+        return jsonify({"error": "validation_failed", "details": {"email": ["Email is required"]}}), 400
+
+    user = db.users.find_one({"email": email})
+    if not user:
+        return jsonify({"error": "not_found"}), 404
+
+    if user.get("status") == "active":
+        return jsonify({"message": "already_verified"}), 200
+
+    cfg = current_app.config
+    otp_length = int(cfg.get("OTP_LENGTH", 6))
+    ttl_minutes = int(cfg.get("OTP_TTL_MINUTES", 10))
+    otp_code = ''.join(str(random.randint(0, 9)) for _ in range(otp_length))
+
+    db.users.update_one({"_id": user["_id"]}, {
+        "$set": {
+            "otp.code_hash": hash_password(otp_code),
+            "otp.expires_at": _now(db) + timedelta(minutes=ttl_minutes),
+            "otp.attempts": 0
+        }
+    })
+
+    try:
+        subject, text_body, html_body = otp_email(user.get("full_name") or "there", otp_code, ttl_minutes)
+        send_email(email, subject, text_body, html_body)
+        log.info("auth.request_otp.sent", email=email)
+    except Exception as e:
+        log.error("auth.request_otp.send_failed", email=email, error=str(e))
+
+    return jsonify({"message": "otp_sent"}), 200
 
 @bp.post("/refresh")
 @jwt_required(refresh=True)
@@ -457,17 +574,35 @@ def firebase_login():
             except Exception as e:
                 log.error("auth.firebase_login.role_autocreate_failed", error=str(e))
                 return jsonify({"error": "role_not_found"}), 500
+        # New Google user: create as pending verification and send OTP
+        import random
+        cfg = current_app.config
+        otp_length = int(cfg.get("OTP_LENGTH", 6))
+        ttl_minutes = int(cfg.get("OTP_TTL_MINUTES", 10))
+        otp_code = ''.join(str(random.randint(0, 9)) for _ in range(otp_length))
+
         user_doc = {
             "full_name": name,
             "email": email,
             "firebase_uid": firebase_uid,
             "uid": firebase_uid,
             "role": {"_id": role_doc["_id"], "role_name": role_doc["role_name"]},
-            "status": "active",
-            "created_at": _now(db)
+            "status": "pending_verification",
+            "created_at": _now(db),
+            "otp": {
+                "code_hash": hash_password(otp_code),
+                "expires_at": _now(db) + timedelta(minutes=ttl_minutes),
+                "attempts": 0
+            }
         }
         ins = db.users.insert_one(user_doc)
         log.info("auth.firebase_login.user_created", user_id=str(ins.inserted_id), email=email)
+        try:
+            subject, text_body, html_body = otp_email(name or "there", otp_code, ttl_minutes)
+            send_email(email, subject, text_body, html_body)
+            log.info("auth.firebase_login.otp_sent", email=email)
+        except Exception as e:
+            log.error("auth.firebase_login.otp_send_failed", email=email, error=str(e))
         user = db.users.find_one({"_id": ins.inserted_id})
     else:
         # Ensure firebase_uid is stored on primary user
@@ -486,6 +621,11 @@ def firebase_login():
                         user = db.users.find_one({"_id": user["_id"]})
             except Exception:
                 pass
+
+    # Enforce verification for existing users before issuing tokens
+    if user and user.get("status") != "active":
+        log.info("auth.firebase_login.account_unverified", email=user.get("email"))
+        return jsonify({"error": "account_unverified"}), 403
 
     # Prepare role/claims similar to password login
     role_info = {}

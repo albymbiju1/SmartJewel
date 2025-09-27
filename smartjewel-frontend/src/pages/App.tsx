@@ -70,7 +70,7 @@ export const App: React.FC = () => {
         )}
         {view === 'register' && (
           <RegisterForm
-            onSuccess={() => navigate('/login')}
+            onSuccess={(email) => navigate('/verify-otp', { state: { email } })}
             switchToLogin={() => navigate('/login')}
           />
         )}

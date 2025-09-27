@@ -34,6 +34,7 @@ import { MyOrdersPage } from './pages/products/MyOrdersPage';
 import { OrderDetailsPage } from './pages/products/OrderDetailsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import EventBridge from './components/EventBridge';
+import { VerifyOtp } from './pages/VerifyOtp';
 
 export const AppRouter: React.FC = () => (
   <Router>
@@ -43,6 +44,7 @@ export const AppRouter: React.FC = () => (
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<App />} />
       <Route path="/register" element={<App />} />
+      <Route path="/verify-otp" element={<VerifyOtp />} />
       <Route path="/logout" element={<Logout />} />
 
       {/* Admin Routes (protected) */}

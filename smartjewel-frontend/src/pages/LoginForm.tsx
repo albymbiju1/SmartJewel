@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { firebaseAuthService } from '../services/firebaseAuth';
 import { ForgotPasswordModal } from '../components/ForgotPasswordModal';
@@ -20,6 +21,7 @@ export const LoginForm: React.FC<Props> = ({ onSuccess, switchToRegister }) => {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [isGoogleSigningIn, setIsGoogleSigningIn] = useState(false);
   const { loginWithFirebase } = useAuth();
+  const navigate = useNavigate();
   
   const { register, handleSubmit, formState: { errors, isSubmitting, isValid, touchedFields }, getValues } = useForm<FormValues>({ 
     resolver: zodResolver(loginSchema),
@@ -54,6 +56,11 @@ export const LoginForm: React.FC<Props> = ({ onSuccess, switchToRegister }) => {
       if (errorData?.error === 'validation_failed' && errorData?.details) {
         const validationMessages = Object.values(errorData.details).flat().join(', ');
         setLoginError(validationMessages);
+      } else if (errorData?.error === 'account_unverified') {
+        setLoginError('Please verify your email before signing in.');
+        // Route to OTP verification with email prefilled
+        const email = getValues('email');
+        setTimeout(() => navigate('/verify-otp', { state: { email } }), 300);
       } else if (error?.response?.status === 401 || errorData?.error === 'invalid_credentials') {
         setLoginError('Invalid email or password. Please try again.');
       } else {

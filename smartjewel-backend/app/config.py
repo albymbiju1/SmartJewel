@@ -15,5 +15,18 @@ class Config:
     GOLDAPI_KEY = os.getenv("GOLDAPI_KEY", "your-gold-api-key-here")
     # Enable/disable APScheduler background jobs
     SCHEDULER_ENABLED = os.getenv("SCHEDULER_ENABLED", "true").lower() in ("1", "true", "yes", "on")
+
+    # SMTP configuration for email sending
+    SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
+    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+    SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() in ("1", "true", "yes", "on")
+    SMTP_FROM = os.getenv("SMTP_FROM", os.getenv("SMTP_USERNAME", "no-reply@smartjewel.local"))
+
+    # OTP configuration
+    OTP_LENGTH = int(os.getenv("OTP_LENGTH", "6"))
+    OTP_TTL_MINUTES = int(os.getenv("OTP_TTL_MINUTES", "10"))
+    OTP_MAX_ATTEMPTS = int(os.getenv("OTP_MAX_ATTEMPTS", "5"))
     
 

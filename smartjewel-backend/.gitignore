@@ -5,7 +5,6 @@ __pycache__/
 .qodo
 # C extensions
 *.so
-
 # Distribution / packaging
 .Python
 build/
@@ -230,3 +229,5 @@ dumps/
 config.local.py
 settings.local.py
 local_config.py
+
+README.md

@@ -33,10 +33,35 @@ def register():
     existing = db.users.find_one({"email": data["email"].lower()})
     if existing:
         return jsonify({"error": "email_in_use"}), 409
+    
+    # Create Firebase user if Firebase is available
+    firebase_uid = None
+    if fb_auth is not None:
+        try:
+            # Initialize Firebase app if not already initialized
+            try:
+                firebase_admin.get_app()
+            except ValueError:
+                _initialize_firebase_app()
+            
+            # Create Firebase user
+            firebase_user = fb_auth.create_user(
+                email=data["email"].lower(),
+                password=data["password"],
+                display_name=data["name"]
+            )
+            firebase_uid = firebase_user.uid
+            log.info("auth.register.firebase_user_created", firebase_uid=firebase_uid, email=data["email"])
+        except Exception as e:
+            log.error("auth.register.firebase_user_creation_failed", error=str(e), email=data["email"])
+            # Continue with MongoDB user creation even if Firebase fails
+            # This ensures the registration doesn't fail completely
+    
     # Assign default role (customer) by looking up roles collection
     role_doc = db.roles.find_one({"role_name": "Customer"})
     if not role_doc:
         return jsonify({"error": "role_not_found"}), 500
+    
     user_doc = {
         "full_name": data["name"],
         "email": data["email"].lower(),
@@ -47,10 +72,23 @@ def register():
             "role_name": role_doc["role_name"]
         },
         "status": "active",
-        "created_at": db.command("isMaster")['localTime'] if 'localTime' in db.command("isMaster") else None
+        "created_at": _now(db)
     }
+    
+    # Add Firebase UID if available
+    if firebase_uid:
+        user_doc["firebase_uid"] = firebase_uid
+        user_doc["uid"] = firebase_uid  # Also store as uid for compatibility
+    
     inserted = db.users.insert_one(user_doc)
-    return jsonify({"id": str(inserted.inserted_id), "email": user_doc["email"], "full_name": user_doc["full_name"]}), 201
+    log.info("auth.register.user_created", user_id=str(inserted.inserted_id), email=data["email"], firebase_uid=firebase_uid)
+    
+    return jsonify({
+        "id": str(inserted.inserted_id), 
+        "email": user_doc["email"], 
+        "full_name": user_doc["full_name"],
+        "firebase_uid": firebase_uid
+    }), 201
 
 
 # Role -> default permissions (extend as system grows)
@@ -490,6 +528,104 @@ def _now(db):
     except Exception:
         from datetime import datetime
         return datetime.utcnow()
+
+
+def _initialize_firebase_app():
+    """Initialize Firebase Admin SDK with proper credentials."""
+    if fb_auth is None:
+        return
+    
+    try:
+        from firebase_admin import credentials
+        import os, json
+
+        # 1) Prefer GOOGLE_APPLICATION_CREDENTIALS if provided (points to JSON file)
+        creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        if creds_path and os.path.exists(creds_path):
+            # Try to read project_id from the JSON, fallback to env
+            project_id_env = os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
+            try:
+                with open(creds_path, "r", encoding="utf-8") as fh:
+                    sa_data = json.load(fh)
+                    project_id_file = sa_data.get("project_id")
+            except Exception:
+                project_id_file = None
+            project_id_opt = project_id_file or project_id_env
+            cred = credentials.Certificate(creds_path)
+            if project_id_opt:
+                firebase_admin.initialize_app(cred, {"projectId": project_id_opt})
+            else:
+                firebase_admin.initialize_app(cred)
+        else:
+            # Try common paths if GOOGLE_APPLICATION_CREDENTIALS not set
+            possible_paths = [
+                os.path.join(os.getcwd(), "service-account.json"),
+                os.path.join(os.path.dirname(__file__), "..", "..", "service-account.json"),
+                os.path.join(os.path.dirname(__file__), "..", "..", "..", "service-account.json"),
+            ]
+            creds_path = None
+            for path in possible_paths:
+                abs_path = os.path.abspath(path)
+                if os.path.exists(abs_path):
+                    creds_path = abs_path
+                    break
+            
+            if creds_path:
+                log.info("auth.firebase_init.found_service_account", path=creds_path)
+                try:
+                    with open(creds_path, "r", encoding="utf-8") as fh:
+                        sa_data = json.load(fh)
+                        project_id_file = sa_data.get("project_id")
+                except Exception:
+                    project_id_file = None
+                project_id_env = os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
+                project_id_opt = project_id_file or project_id_env
+                cred = credentials.Certificate(creds_path)
+                if project_id_opt:
+                    firebase_admin.initialize_app(cred, {"projectId": project_id_opt})
+                else:
+                    firebase_admin.initialize_app(cred)
+            else:
+                # 2) Try full JSON blob in env (FIREBASE_CREDENTIALS_JSON)
+                creds_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
+                if creds_json:
+                    try:
+                        data = json.loads(creds_json)
+                        # Normalize possible \n in private_key
+                        if isinstance(data, dict) and data.get("private_key"):
+                            data["private_key"] = data["private_key"].replace("\\n", "\n")
+                        cred = credentials.Certificate(data)
+                        project_id_opt = data.get("project_id") or os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
+                        if project_id_opt:
+                            firebase_admin.initialize_app(cred, {"projectId": project_id_opt})
+                        else:
+                            firebase_admin.initialize_app(cred)
+                    except Exception as e:
+                        raise RuntimeError(f"Invalid FIREBASE_CREDENTIALS_JSON: {e}")
+                else:
+                    # 3) Fallback to split envs (PROJECT_ID, CLIENT_EMAIL, PRIVATE_KEY)
+                    project_id = os.getenv("FIREBASE_PROJECT_ID")
+                    client_email = os.getenv("FIREBASE_CLIENT_EMAIL")
+                    private_key = os.getenv("FIREBASE_PRIVATE_KEY")
+                    if project_id and client_email and private_key:
+                        private_key = private_key.replace("\\n", "\n")
+                        cred = credentials.Certificate({
+                            "project_id": project_id,
+                            "client_email": client_email,
+                            "private_key": private_key,
+                            "type": "service_account",
+                        })
+                        firebase_admin.initialize_app(cred, {"projectId": project_id})
+                    else:
+                        # 4) Last resort: Application Default Credentials (may work in GCP)
+                        adc_project = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("FIREBASE_PROJECT_ID")
+                        if adc_project:
+                            firebase_admin.initialize_app(options={"projectId": adc_project})
+                        else:
+                            firebase_admin.initialize_app()
+    except Exception as exc:
+        log.error("auth.firebase_init.failed", error=str(exc))
+        raise exc
 
 
 def _merge_users(db, primary_id, duplicate_id):

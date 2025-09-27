@@ -4,6 +4,7 @@ import {
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
   signOut,
+  updateProfile,
   User as FirebaseUser,
   AuthError
 } from 'firebase/auth';
@@ -105,6 +106,22 @@ class FirebaseAuthService {
     } catch (error) {
       console.error('Error getting user token:', error);
       return null;
+    }
+  }
+
+  /**
+   * Update current user's profile
+   */
+  async updateUserProfile(updates: { displayName?: string; photoURL?: string }): Promise<void> {
+    const user = this.getCurrentUser();
+    if (!user) {
+      throw new Error('No user is currently signed in');
+    }
+    
+    try {
+      await updateProfile(user, updates);
+    } catch (error) {
+      throw this.handleAuthError(error as AuthError);
     }
   }
 

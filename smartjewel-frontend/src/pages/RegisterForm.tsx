@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { api } from '../api';
 import { registrationSchema, RegistrationFormValues } from '../utils/validation';
+import { firebaseAuthService } from '../services/firebaseAuth';
 
 type FormValues = RegistrationFormValues;
 
@@ -30,13 +31,40 @@ export const RegisterForm: React.FC<Props> = ({ onSuccess, switchToLogin }) => {
   const onSubmit = async (values: FormValues) => {
     try {
       setRegisterError(null);
+      
+      // First, create Firebase user to ensure consistency
+      let firebaseUser = null;
+      try {
+        const firebaseResult = await firebaseAuthService.createAccountWithEmail(
+          values.email, 
+          values.password
+        );
+        firebaseUser = firebaseResult.user;
+        
+        // Update Firebase user profile with display name
+        if (firebaseUser && values.name) {
+          await firebaseAuthService.updateUserProfile({ displayName: values.name });
+        }
+      } catch (firebaseError: any) {
+        // If Firebase user creation fails, still try backend registration
+        // This ensures the system works even if Firebase is temporarily unavailable
+        console.warn('Firebase user creation failed, continuing with backend registration:', firebaseError);
+      }
+      
       // Backend expects: name, email, password, phone
-      await api.post('/auth/register', {
+      // The backend will also create a Firebase user if it doesn't exist
+      const response = await api.post('/auth/register', {
         name: values.name,
         email: values.email,
         password: values.password,
         phone: values.phone
       });
+      
+      // If we successfully created a Firebase user, sign out to let the user sign in normally
+      if (firebaseUser) {
+        await firebaseAuthService.signOut();
+      }
+      
       onSuccess();
     } catch (error: any) {
       const errorData = error.response?.data;

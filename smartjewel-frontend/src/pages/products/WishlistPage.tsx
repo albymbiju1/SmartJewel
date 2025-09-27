@@ -5,20 +5,17 @@ import { useCart } from '../../contexts/CartContext';
 import { API_BASE_URL } from '../../api';
 import { useToast } from '../../components/Toast';
 import { flyToCart } from '../../utils/flyToCart';
-import { priceUpdateService } from '../../services/priceUpdateService';
 
 export const WishlistPage: React.FC = () => {
   const navigate = useNavigate();
-  const { items, remove, clear, count, refreshPrices } = useWishlist();
+  const { items, remove, clear, count } = useWishlist();
   const { addToCart } = useCart();
   const toast = useToast();
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [isUpdatingPrices, setIsUpdatingPrices] = useState(false);
 
   const allSelected = useMemo(() => items.length > 0 && selectedIds.length === items.length, [items, selectedIds]);
   const anySelected = selectedIds.length > 0;
-
   const toAbsoluteImage = (img?: string) => {
     if (!img) return '/jewel1.png';
     if (img.startsWith('http://') || img.startsWith('https://')) return img;
@@ -81,35 +78,7 @@ export const WishlistPage: React.FC = () => {
     setSelectedIds([]);
   };
 
-  const handleUpdateAllPrices = async () => {
-    try {
-      setIsUpdatingPrices(true);
-      toast.info('Updating all product prices...', { description: 'This may take a moment' });
-      
-      // Trigger product price update to recalculate with new making cost
-      const result = await priceUpdateService.updateProductPrices(false);
-      
-      if (result.success) {
-        toast.success('Prices updated successfully!', { 
-          description: `${result.updated_count} products updated with new prices` 
-        });
-        
-        // Refresh wishlist prices after update
-        await refreshPrices();
-      } else {
-        toast.error('Failed to update prices', { 
-          description: 'Please try again or contact support' 
-        });
-      }
-    } catch (error) {
-      console.error('Price update failed:', error);
-      toast.error('Failed to update prices', { 
-        description: 'Please try again or contact support' 
-      });
-    } finally {
-      setIsUpdatingPrices(false);
-    }
-  };
+  
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -127,44 +96,9 @@ export const WishlistPage: React.FC = () => {
         <div className="container mx-auto px-6 text-center">
           <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">Your Wishlist</h1>
           <p className="text-gray-600">Saved items for later • {count} item{count !== 1 ? 's' : ''}</p>
-          {items.length > 0 && (
-            <div className="mt-4 flex gap-3 justify-center">
-              <button
-                onClick={refreshPrices}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Refresh Prices
-              </button>
-              <button
-                onClick={handleUpdateAllPrices}
-                disabled={isUpdatingPrices}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isUpdatingPrices ? (
-                  <>
-                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Updating...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    Update All Prices
-                  </>
-                )}
-              </button>
-            </div>
-          )}
+          {/* Price refresh and update buttons removed as requested */}
         </div>
       </div>
-
       <div className="container mx-auto px-6 py-8">
         {/* Bulk actions */}
         {items.length > 0 && (

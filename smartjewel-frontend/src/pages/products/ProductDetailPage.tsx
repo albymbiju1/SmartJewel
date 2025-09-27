@@ -248,7 +248,21 @@ export const ProductDetailPage: React.FC = () => {
                     </div>
                     <div className="bg-gray-50 p-4 rounded-lg">
                       <span className="text-sm font-medium text-gray-500">Status</span>
-                      <p className={`font-semibold ${product.status === 'active' ? 'text-green-600' : 'text-red-600'}`}>{product.status === 'active' ? 'Available' : 'Out of Stock'}</p>
+                      <p
+                        className={`font-semibold ${
+                          productWithStock.stockStatus === 'out_of_stock'
+                            ? 'text-red-600'
+                            : productWithStock.stockStatus === 'limited'
+                              ? 'text-yellow-600'
+                              : 'text-green-600'
+                        }`}
+                      >
+                        {productWithStock.stockStatus === 'out_of_stock'
+                          ? 'Out of Stock'
+                          : productWithStock.stockStatus === 'limited'
+                            ? 'Limited Stock'
+                            : 'Available'}
+                      </p>
                     </div>
                   </div>
                 </div>

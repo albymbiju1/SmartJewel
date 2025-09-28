@@ -1,9 +1,12 @@
 import requests
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
+import pytz
 
 from app.config import Config
 from app.services.price_calculator import GoldPriceCalculator
+
+IST = pytz.timezone("Asia/Kolkata")
 
 
 class GoldRateService:
@@ -64,7 +67,7 @@ class GoldRateService:
 
     @staticmethod
     def persist_rates(db, rates_payload: Dict[str, Any]) -> Dict[str, Any]:
-        payload = {"updated_at": datetime.now(timezone.utc), "rates": rates_payload.get("rates", {})}
+        payload = {"updated_at": datetime.now(IST), "rates": rates_payload.get("rates", {})}
         db.gold_rate.update_one({}, {"$set": payload}, upsert=True)
         return payload
 

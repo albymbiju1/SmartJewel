@@ -10,6 +10,7 @@ from flask_jwt_extended import jwt_required
 from . import bp
 from app.services.price_calculator import GoldPriceCalculator
 from app.services.gold_rate_service import GoldRateService
+from app.scheduler import trigger_gold_rate_refresh
 
 
 def _now():
@@ -44,7 +45,7 @@ def get_gold_rate():
 
     return jsonify({
         "rates": rates,
-        "updated_at": updated_at.isoformat() if hasattr(updated_at, 'isoformat') else updated_at
+        "updated_at": updated_at.isoformat() + '+05:30' if hasattr(updated_at, 'isoformat') else updated_at
     })
 
 
@@ -59,7 +60,7 @@ def refresh_gold_rate():
 
     # Build response
     upd_at = result.get("updated_at")
-    updated_at = upd_at.isoformat() if hasattr(upd_at, 'isoformat') else upd_at
+    updated_at = upd_at.isoformat() + '+05:30' if hasattr(upd_at, 'isoformat') else upd_at
     return jsonify({
         "rates": result.get("rates", {}),
         "updated_at": updated_at,
@@ -115,18 +116,32 @@ def get_price_update_history():
 def get_last_price_update():
     """Get information about the last successful price update."""
     db = current_app.extensions['mongo_db']
-    
+
     try:
         price_calculator = GoldPriceCalculator(db)
         last_update = price_calculator.get_last_successful_update()
-        
+
         if last_update:
             return jsonify({"last_update": last_update}), 200
         else:
             return jsonify({"last_update": None}), 200
-            
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@bp.post("/trigger-scheduler-job")
+@jwt_required()  # require auth; admin only
+def trigger_scheduler_job():
+    """Manually trigger the scheduled gold rate refresh job for testing."""
+    try:
+        result = trigger_gold_rate_refresh(current_app)
+        if result["success"]:
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 500
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @bp.post("/calculate-gold-price")

@@ -60,6 +60,10 @@ def create_app():
     from app.blueprints.market import bp as market_bp
     app.register_blueprint(market_bp)
 
+    # Catalog (advanced search & suggestions) blueprint
+    from app.blueprints.catalog.routes import bp as catalog_bp
+    app.register_blueprint(catalog_bp)
+
     @app.route("/")
     def index():
         # List all routes for debugging

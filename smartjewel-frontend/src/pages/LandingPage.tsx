@@ -8,6 +8,7 @@ import { useCart } from '../contexts/CartContext';
 import { MENU as MEGA_MENU, NAV_TABS } from '../menuConfig';
 import { getRoleBasedRedirectPath } from '../utils/roleRedirect';
 import { MegaMenuFilter } from '../components/MegaMenuFilter';
+import { SearchBar } from '../components/SearchBar';
 
 
 export const LandingPage: React.FC = () => {
@@ -162,22 +163,8 @@ export const LandingPage: React.FC = () => {
 
         {/* Search bar row */}
         <div className={`${showSearch ? 'block' : 'hidden'} border-y border-gray-100 bg-white`} role="search">
-          <div className="max-w-[900px] mx-auto px-6 py-2.5 flex items-center gap-3">
-            <svg className="text-gray-500" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
-            <input className="flex-1 h-10 bg-white border border-gray-200 rounded-md px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-gold/40" type="text" placeholder="Search for rings, necklaces, designs and more" aria-label="Search products" />
-            <button className="inline-flex items-center gap-1.5 text-gray-700 hover:text-brand-burgundy" title="Search with image" aria-label="Search with image">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 7h3l2-3h6l2 3h3v12H4z"></path><circle cx="12" cy="13" r="4"></circle></svg>
-              <span className="text-sm">Image</span>
-            </button>
-          </div>
-          {/* Autocomplete dropdown (static sample) */}
-          <div className="max-w-[900px] mx-auto px-6 pb-3" role="listbox" aria-label="Search suggestions">
-            <div className="text-xs uppercase tracking-wide text-gray-500 mb-2">Popular searches</div>
-            <div className="flex gap-2 flex-wrap">
-              <button role="option" className="px-3 py-1.5 rounded-full bg-gray-100 text-gray-700 text-sm hover:bg-gray-200">Diamond rings</button>
-              <button role="option" className="px-3 py-1.5 rounded-full bg-gray-100 text-gray-700 text-sm hover:bg-gray-200">Bridal sets</button>
-              <button role="option" className="px-3 py-1.5 rounded-full bg-gray-100 text-gray-700 text-sm hover:bg-gray-200">Gold chains</button>
-            </div>
+          <div className="max-w-[900px] mx-auto px-6 py-3">
+            <SearchBar placeholder="Search for rings, necklaces, designs and more" />
           </div>
         </div>
 

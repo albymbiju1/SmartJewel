@@ -35,6 +35,7 @@ import { OrderDetailsPage } from './pages/products/OrderDetailsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import EventBridge from './components/EventBridge';
 import { VerifyOtp } from './pages/VerifyOtp';
+import { AdvancedSearchPage } from './pages/products/AdvancedSearchPage';
 
 export const AppRouter: React.FC = () => (
   <Router>
@@ -75,6 +76,7 @@ export const AppRouter: React.FC = () => (
 
       {/* Product Routes (public for customers) */}
       <Route path="/products" element={<ProductsPage />} />
+      <Route path="/search" element={<AdvancedSearchPage />} />
       <Route path="/products/all" element={<AllJewelleryPage />} />
       <Route path="/products/gold" element={<GoldCollectionPage />} />
       <Route path="/products/diamond" element={<DiamondCollectionPage />} />

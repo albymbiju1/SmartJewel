@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, API_BASE_URL } from '../../api';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../components/Toast';
 
 // Safely create absolute image URL for backend-hosted assets
 const toAbsoluteImage = (img?: string) => {
@@ -34,30 +35,28 @@ interface OrderItem {
   size?: string;
 }
 
+interface StatusEntry { status: string; timestamp?: string; at?: string; notes?: string; note?: string }
+
 interface Order {
-  _id: string;
-  order_id: string;
-  status: string;
-  payment_status: string;
-  delivery_status: string;
-  amount: number;
-  currency: string;
-  customer: {
-    name: string;
-    email: string;
-    phone: string;
-    address: string;
-  };
+  orderId: string;
   items: OrderItem[];
-  created_at: string;
-  updated_at: string;
-  delivery_date?: string;
-  payment_method?: string;
-  mrp?: number;
-  discount?: number;
-  tax?: number;
-  tracking_number?: string;
-  estimated_delivery?: string;
+  statusHistory: StatusEntry[];
+  shipping?: { address?: string; method?: string | null; trackingId?: string | null; status?: string | null };
+  amount: number;
+  payment?: { provider?: string; status?: string; currency?: string; amount?: number; receipt?: string; transactionId?: string };
+  createdAt?: string;
+  updatedAt?: string;
+  customer?: { name?: string; email?: string; phone?: string; address?: string };
+  cancellation?: {
+    requested?: boolean;
+    reason?: string;
+    requestedAt?: string;
+    approved?: boolean;
+    approvedAt?: string;
+    rejectedAt?: string;
+    refundProcessed?: boolean;
+    refundDetails?: any;
+  };
 }
 
 interface TimelineStep {
@@ -73,10 +72,12 @@ export const OrderDetailsPage: React.FC = () => {
   const navigate = useNavigate();
   const { orderId } = useParams<{ orderId: string }>();
   const { isAuthenticated } = useAuth();
+  const toast = useToast();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ url: string; alt: string } | null>(null);
+  const [cancelModal, setCancelModal] = useState<{ open: boolean; reason: string; loading: boolean }>({ open: false, reason: '', loading: false });
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -92,11 +93,9 @@ export const OrderDetailsPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await api.get(`/customers/me/orders/${orderId}`);
-      const orderData = response.data.order;
-      
-      // Ensure the order has a valid created_at date
-      if (orderData && orderData.created_at && orderData.created_at.trim() !== '') {
+      const response = await api.get(`/api/orders/${orderId}`);
+      const orderData: Order = response.data.order;
+      if (orderData && (orderData.createdAt || orderData.orderId)) {
         setOrder(orderData);
       } else {
         setError('Order not found or invalid order data');
@@ -105,6 +104,39 @@ export const OrderDetailsPage: React.FC = () => {
       setError(err?.response?.data?.error || 'Failed to fetch order details');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const getLastStatus = (ord?: Order | null) => {
+    const hist = ord?.statusHistory || [];
+    return (hist[hist.length - 1]?.status || '').toLowerCase();
+  };
+
+  const isEligibleForCancellation = (ord?: Order | null) => {
+    if (!ord) return false;
+    const last = getLastStatus(ord);
+    const allowed = ['created','pending','paid'];
+    const alreadyRequested = !!ord.cancellation?.requested;
+    return allowed.includes(last) && !alreadyRequested && last !== 'cancelled';
+  };
+
+  const openCancelModal = () => setCancelModal({ open: true, reason: '', loading: false });
+  const closeCancelModal = () => setCancelModal({ open: false, reason: '', loading: false });
+  const submitCancellation = async () => {
+    if (!orderId) return;
+    if (!cancelModal.reason.trim()) {
+      toast.info('Please enter a reason');
+      return;
+    }
+    try {
+      setCancelModal((m) => ({ ...m, loading: true }));
+      await api.post(`/api/orders/${orderId}/cancel`, { reason: cancelModal.reason.trim() });
+      toast.success('Cancellation requested');
+      await fetchOrderDetails();
+      closeCancelModal();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.response?.data?.error || 'Failed to request cancellation');
+      setCancelModal((m) => ({ ...m, loading: false }));
     }
   };
 
@@ -140,43 +172,23 @@ export const OrderDetailsPage: React.FC = () => {
     }
   };
 
-  const getOrderTimeline = (order: Order): TimelineStep[] => {
-    const timeline: TimelineStep[] = [
-      {
-        id: 'confirmed',
-        title: 'Order Confirmed',
-        description: 'Your order has been confirmed and payment received',
-        status: 'completed',
-        date: order.created_at,
-        icon: '✅'
-      },
-      {
-        id: 'packed',
-        title: 'Packed',
-        description: 'Your jewelry is being carefully packed',
-        status: order.status === 'shipped' || order.status === 'delivered' ? 'completed' : 
-                order.status === 'processing' ? 'current' : 'upcoming',
-        icon: '📦'
-      },
-      {
-        id: 'shipped',
-        title: 'Shipped',
-        description: order.tracking_number ? `Shipped with tracking: ${order.tracking_number}` : 'Your order is on its way',
-        status: order.status === 'delivered' ? 'completed' : 
-                order.status === 'shipped' ? 'current' : 'upcoming',
-        icon: '🚚'
-      },
-      {
-        id: 'delivered',
-        title: 'Delivered',
-        description: order.delivery_date ? `Delivered on ${formatDate(order.delivery_date)}` : 'Your order will be delivered soon',
-        status: order.status === 'delivered' ? 'completed' : 'upcoming',
-        date: order.delivery_date,
-        icon: '🏠'
-      }
-    ];
-
-    return timeline;
+  const getOrderTimeline = (ord: Order): TimelineStep[] => {
+    const hist = ord.statusHistory || [];
+    const steps = ['created','paid','shipped','delivered'];
+    const last = (hist[hist.length-1]?.status || '').toLowerCase();
+    return steps.map((s) => {
+      const entry = hist.find(h => (h.status || '').toLowerCase() === s);
+      const idx = steps.indexOf(s);
+      const lastIdx = steps.indexOf(last);
+      return {
+        id: s,
+        title: s.charAt(0).toUpperCase() + s.slice(1),
+        description: s === 'paid' ? 'Payment confirmed' : s === 'shipped' ? 'Order shipped' : s === 'delivered' ? 'Order delivered' : 'Order created',
+        status: lastIdx > idx ? 'completed' : lastIdx === idx ? 'current' : 'upcoming',
+        date: entry?.timestamp || entry?.at || ord.createdAt,
+        icon: s === 'shipped' ? '🚚' : s === 'delivered' ? '🏠' : '✅',
+      } as TimelineStep;
+    });
   };
 
   const handleDownloadInvoice = () => {
@@ -248,7 +260,7 @@ export const OrderDetailsPage: React.FC = () => {
           <span>/</span>
           <button onClick={() => navigate('/my-orders')} className="hover:text-amber-600 transition-colors">My Orders</button>
           <span>/</span>
-          <span className="text-gray-900 font-medium">Order #{order.order_id}</span>
+          <span className="text-gray-900 font-medium">Order #{order.orderId}</span>
         </div>
       </div>
 
@@ -258,13 +270,13 @@ export const OrderDetailsPage: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-3">Order Details</h1>
-              <p className="text-gray-600 text-lg">Order #{order.order_id}</p>
+              <p className="text-gray-600 text-lg">Order #{order.orderId}</p>
             </div>
             <div className="text-right">
               <div className="text-3xl font-bold text-gray-900">
-                ₹{order.amount.toLocaleString('en-IN')}
+                ₹{(order.amount || 0).toLocaleString('en-IN')}
               </div>
-              <div className="text-sm text-gray-500">{order.currency}</div>
+              <div className="text-sm text-gray-500">{order.payment?.currency || 'INR'}</div>
             </div>
           </div>
         </div>
@@ -277,17 +289,103 @@ export const OrderDetailsPage: React.FC = () => {
             {/* Order Status */}
             <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
               <h2 className="text-xl font-bold text-gray-900 mb-6">Order Status</h2>
-              <div className="flex items-center gap-4 mb-6">
-                <span className={`px-4 py-2 rounded-full text-sm font-medium border ${getStatusColor(order.status)}`}>
-                  {order.status}
-                </span>
-                <span className={`px-4 py-2 rounded-full text-sm font-medium border ${getStatusColor(order.payment_status)}`}>
-                  💳 {order.payment_status}
-                </span>
-                <span className={`px-4 py-2 rounded-full text-sm font-medium border ${getStatusColor(order.delivery_status)}`}>
-                  🚚 {order.delivery_status}
-                </span>
+              <div className="flex items-center gap-4 mb-6 text-sm text-gray-700">
+                <div className={`px-4 py-2 rounded-full font-medium border ${getStatusColor(order.statusHistory?.[order.statusHistory.length-1]?.status)}`}>
+                  {(order.statusHistory?.[order.statusHistory.length-1]?.status || 'created').toString()}
+                </div>
+                {order.payment?.status && (
+                  <div className={`px-4 py-2 rounded-full font-medium border ${getStatusColor(order.payment?.status)}`}>
+                    💳 {order.payment?.status}
+                  </div>
+                )}
+                {order.shipping?.status && (
+                  <div className={`px-4 py-2 rounded-full font-medium border ${getStatusColor(order.shipping?.status || '')}`}>
+                    🚚 {order.shipping?.status}
+                  </div>
+                )}
+                {order.cancellation?.requested && !order.cancellation?.approved && !order.cancellation?.rejectedAt && (
+                  <div className="px-4 py-2 rounded-full font-medium border bg-yellow-100 text-yellow-800 border-yellow-200">
+                    ⛔ Cancellation Requested
+                  </div>
+                )}
+                {order.cancellation?.approved && (
+                  <div className="px-4 py-2 rounded-full font-medium border bg-red-100 text-red-800 border-red-200">
+                    ❌ Cancelled
+                  </div>
+                )}
+                {order.cancellation?.rejectedAt && (
+                  <div className="px-4 py-2 rounded-full font-medium border bg-gray-100 text-gray-800 border-gray-200">
+                    ⚠️ Cancellation Rejected
+                  </div>
+                )}
               </div>
+
+              {/* Refund Information */}
+              {order.cancellation?.approved && order.cancellation?.refundDetails && (
+                <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <h3 className="text-lg font-semibold text-blue-900 mb-3">💰 Refund Information</h3>
+                  <div className="space-y-2 text-sm">
+                    {order.cancellation.refundDetails.refundId && (
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Refund ID:</span>
+                          <span className="font-mono text-blue-800">{order.cancellation.refundDetails.refundId}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Amount:</span>
+                          <span className="font-semibold text-green-700">
+                            ₹{((order.cancellation.refundDetails.amount || 0) / 100).toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Status:</span>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            order.cancellation.refundDetails.status === 'processed' ? 'bg-green-100 text-green-800' :
+                            order.cancellation.refundDetails.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {order.cancellation.refundDetails.status || 'Processing'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Speed:</span>
+                          <span className="text-gray-800">{order.cancellation.refundDetails.speed || 'Standard'}</span>
+                        </div>
+                      </>
+                    )}
+                    {order.cancellation.refundDetails.failed && (
+                      <div className="p-3 bg-red-50 border border-red-200 rounded">
+                        <div className="text-red-800 font-medium">❌ Refund Failed</div>
+                        <div className="text-red-700 text-xs mt-1">
+                          {order.cancellation.refundDetails.message || 'Please contact support for assistance'}
+                        </div>
+                      </div>
+                    )}
+                    {order.cancellation.refundDetails.manualRefundRequired && (
+                      <div className="p-3 bg-orange-50 border border-orange-200 rounded">
+                        <div className="text-orange-800 font-medium">⚠️ Manual Refund Required</div>
+                        <div className="text-orange-700 text-xs mt-1">
+                          Our team will process your refund manually. Please contact support if you have questions.
+                        </div>
+                      </div>
+                    )}
+                    {order.cancellation.refundDetails.noRefundRequired && (
+                      <div className="p-3 bg-gray-50 border border-gray-200 rounded">
+                        <div className="text-gray-800 font-medium">ℹ️ No Refund Required</div>
+                        <div className="text-gray-700 text-xs mt-1">
+                          {order.cancellation.refundDetails.reason || 'Order was not paid'}
+                        </div>
+                      </div>
+                    )}
+                    {order.cancellation.refundDetails.processedAt && (
+                      <div className="flex justify-between text-xs text-gray-500 mt-2 pt-2 border-t border-blue-200">
+                        <span>Processed:</span>
+                        <span>{formatDate(order.cancellation.refundDetails.processedAt)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
               
               {/* Timeline */}
               <div className="space-y-4">
@@ -386,7 +484,7 @@ export const OrderDetailsPage: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                      {order.status === 'delivered' && (
+                      {(order.statusHistory?.[order.statusHistory.length-1]?.status || '').toLowerCase() === 'delivered' && (
                         <div className="mt-3">
                           <button
                             onClick={() => handleRateReview(item.id)}
@@ -405,56 +503,54 @@ export const OrderDetailsPage: React.FC = () => {
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Customer Details */}
+            {/* Customer & Shipping Details */}
             <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Customer Details</h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-4">Customer & Shipping</h2>
               <div className="space-y-3 text-sm">
                 <div>
                   <span className="text-gray-600">Name:</span>
-                  <span className="ml-2 text-gray-900 font-medium">{order.customer.name}</span>
+                  <span className="ml-2 text-gray-900 font-medium">{order.customer?.name}</span>
                 </div>
                 <div>
                   <span className="text-gray-600">Email:</span>
-                  <span className="ml-2 text-gray-900">{order.customer.email}</span>
+                  <span className="ml-2 text-gray-900">{order.customer?.email}</span>
                 </div>
                 <div>
                   <span className="text-gray-600">Phone:</span>
-                  <span className="ml-2 text-gray-900">{order.customer.phone}</span>
+                  <span className="ml-2 text-gray-900">{order.customer?.phone}</span>
                 </div>
                 <div>
                   <span className="text-gray-600">Address:</span>
-                  <span className="ml-2 text-gray-900">{order.customer.address}</span>
+                  <span className="ml-2 text-gray-900">{order.shipping?.address || order.customer?.address}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <span className="text-gray-600">Shipping Provider:</span>
+                    <span className="ml-2 text-gray-900">{order.payment?.provider || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Tracking ID:</span>
+                    <span className="ml-2 text-gray-900">{order.shipping?.trackingId || '—'}</span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Price Breakdown */}
+            {/* Payment Summary */}
             <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Price Breakdown</h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-4">Payment Summary</h2>
               <div className="space-y-3 text-sm">
-                {order.mrp && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">MRP:</span>
-                    <span className="text-gray-900">₹{order.mrp.toLocaleString('en-IN')}</span>
-                  </div>
-                )}
-                {order.discount && (
-                  <div className="flex justify-between text-green-600">
-                    <span>Discount:</span>
-                    <span>-₹{order.discount.toLocaleString('en-IN')}</span>
-                  </div>
-                )}
-                {order.tax && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Tax:</span>
-                    <span className="text-gray-900">₹{order.tax.toLocaleString('en-IN')}</span>
-                  </div>
-                )}
                 <div className="border-t border-gray-200 pt-3">
                   <div className="flex justify-between text-lg font-bold">
-                    <span className="text-gray-900">Final Price:</span>
-                    <span className="text-gray-900">₹{order.amount.toLocaleString('en-IN')}</span>
+                    <span className="text-gray-900">Amount Paid:</span>
+                    <span className="text-gray-900">₹{(order.amount || 0).toLocaleString('en-IN')}</span>
                   </div>
+                  {order.payment?.receipt && (
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                      <span>Receipt</span>
+                      <span>{order.payment.receipt}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -467,7 +563,7 @@ export const OrderDetailsPage: React.FC = () => {
                 <p>• Items must be in original condition</p>
                 <p>• Original packaging and certificates required</p>
                 <p>• Refund processed within 5-7 business days</p>
-                {order.status === 'delivered' && (
+                {getLastStatus(order) === 'delivered' && (
                   <div className="mt-4 pt-4 border-t border-gray-200">
                     <button className="w-full px-4 py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors">
                       Request Return
@@ -481,6 +577,15 @@ export const OrderDetailsPage: React.FC = () => {
             <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
               <h2 className="text-xl font-bold text-gray-900 mb-4">Actions</h2>
               <div className="space-y-3">
+                {isEligibleForCancellation(order) && (
+                  <button
+                    onClick={openCancelModal}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-red-700 border border-red-300 rounded-lg hover:bg-red-50 transition-colors"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    Request Cancellation
+                  </button>
+                )}
                 <button
                   onClick={handleDownloadInvoice}
                   className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
@@ -522,6 +627,39 @@ export const OrderDetailsPage: React.FC = () => {
               </button>
             </div>
             <img src={preview.url} alt={preview.alt} className="w-full h-auto rounded-lg" />
+          </div>
+        </div>
+      )}
+
+      {/* Cancellation Modal */}
+      {cancelModal.open && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={closeCancelModal}>
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Request Cancellation</h3>
+              <button 
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                onClick={closeCancelModal}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">Please provide a reason for cancelling your order.</p>
+            <textarea
+              value={cancelModal.reason}
+              onChange={(e) => setCancelModal((m) => ({ ...m, reason: e.target.value }))}
+              placeholder="Reason for cancellation..."
+              className="w-full p-3 border border-gray-300 rounded-lg resize-none mb-4"
+              rows={3}
+            />
+            <div className="flex justify-end gap-2">
+              <button onClick={closeCancelModal} className="px-4 py-2 border rounded">Close</button>
+              <button onClick={submitCancellation} disabled={cancelModal.loading || !cancelModal.reason.trim()} className="px-4 py-2 bg-amber-600 text-white rounded disabled:opacity-50">
+                {cancelModal.loading ? 'Submitting...' : 'Submit Request'}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1,0 +1,687 @@
+from flask import Blueprint, request, jsonify, current_app
+from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
+from app.utils.authz import require_any_role
+from bson import ObjectId
+from datetime import datetime
+
+bp = Blueprint("admin_orders", __name__, url_prefix="/api/admin/orders")
+
+
+def _oid(id_str):
+    try:
+        return ObjectId(id_str)
+    except Exception:
+        return None
+
+
+def _normalize_order(order: dict) -> dict:
+    if not order:
+        return None
+    created_at = order.get("createdAt") or order.get("created_at") or order.get("_computedCreatedAt")
+    updated_at = order.get("updatedAt") or order.get("updated_at")
+    if isinstance(created_at, datetime):
+        created_at = created_at.isoformat()
+    if isinstance(updated_at, datetime):
+        updated_at = updated_at.isoformat()
+    amount_val = order.get("totalAmount")
+    if amount_val is None:
+        amount_val = order.get("amount", 0)
+    payment = {
+        "provider": order.get("provider"),
+        "status": order.get("payment_status") or order.get("status"),  # Use our system status, not provider_order.status
+        "currency": (order.get("provider_order") or {}).get("currency"),
+        "amount": (order.get("provider_order") or {}).get("amount"),
+        "receipt": (order.get("provider_order") or {}).get("receipt"),
+        "transactionId": (order.get("provider_order") or {}).get("transactionId") or order.get("payment_id"),
+    }
+    shipping = order.get("shipping") if isinstance(order.get("shipping"), dict) else None
+    if not shipping:
+        shipping = {
+            "address": (order.get("customer") or {}).get("address"),
+            "method": None,
+            "trackingId": order.get("tracking_number") or None,
+            "status": order.get("delivery_status") or None,
+        }
+    return {
+        "orderId": str(order.get("_id")),
+        "items": order.get("items", []),
+        "statusHistory": order.get("statusHistory", []),
+        "shipping": shipping,
+        "amount": amount_val,
+        "payment": payment,
+        "createdAt": created_at,
+        "updatedAt": updated_at,
+        "customer": order.get("customer"),
+        "status": (order.get("statusHistory") or [{}])[-1].get("status") if order.get("statusHistory") else order.get("status"),
+        "cancellation": order.get("cancellation") or {},
+    }
+
+
+def _maybe_auto_mark_paid(db, order: dict):
+    """Auto-mark Razorpay orders as paid if they have a payment_id (indicating successful payment).
+    We ignore provider_order.status since Razorpay keeps it as 'created' even after payment.
+    """
+    if not order:
+        return order
+    
+    # Only process Razorpay orders that have a payment_id (successful payment indicator)
+    is_razorpay = order.get("provider") == "razorpay" or order.get("payment_provider") == "razorpay"
+    has_payment_id = bool(order.get("payment_id") or order.get("razorpay_payment_id"))
+    
+    if not (is_razorpay and has_payment_id):
+        return order
+    
+    # Check if already marked paid in our system status
+    current_status = (order.get("status") or "").lower()
+    if current_status == "paid":
+        return order
+    
+    # Also check statusHistory for paid status
+    hist = order.get("statusHistory") or []
+    already_paid = any((h.get("status") or "").lower() == "paid" for h in hist)
+    if already_paid:
+        return order
+    
+    now = datetime.utcnow()
+    try:
+        db.orders.update_one({"_id": order.get("_id")}, {
+            "$push": {"statusHistory": {"status": "paid", "timestamp": now, "by": "system:auto", "notes": "Razorpay payment confirmed via payment_id"}},
+            "$set": {"status": "paid", "payment_status": "paid", "updatedAt": now}
+        })
+        # Reflect in-memory for current response
+        (order.setdefault("statusHistory", [])).append({"status": "paid", "timestamp": now})
+        order["status"] = "paid"
+        order["payment_status"] = "paid"
+        print(f"Auto-marked order {order.get('_id')} as paid (had payment_id: {order.get('payment_id')})")
+    except Exception as e:
+        print(f"Failed to auto-mark order {order.get('_id')} as paid: {e}")
+    
+    return order
+
+
+@bp.route("", methods=["OPTIONS"])  # preflight
+def options_root():
+    return ("", 204)
+
+
+@bp.route("", methods=["GET"])
+@require_any_role("Admin", "Staff_L3")
+@jwt_required()
+def list_orders():
+    """List orders with pagination, sorting, and filtering."""
+    db = current_app.extensions.get('mongo_db')
+    if db is None:
+        return jsonify({"orders": [], "message": "Database not available"}), 503
+
+    # Pagination
+    page = max(int(request.args.get("page", 1)), 1)
+    limit = min(max(int(request.args.get("limit", 20)), 1), 100)
+    skip = (page - 1) * limit
+
+    # Sorting: newest first by default (createdAt/created_at desc)
+    sort_by = request.args.get("sortBy")
+    sort_dir = -1 if (request.args.get("sortDir") or "desc").lower() in ("desc", "-1") else 1
+
+    # Filters
+    status = (request.args.get("status") or "").strip().lower()  # created/paid/shipped/delivered/cancelled
+    q = (request.args.get("q") or "").strip().lower()  # customer search name/email/phone/orderId
+    date_from = request.args.get("from")
+    date_to = request.args.get("to")
+
+    query = {}
+    ands = []
+
+    if status:
+        # Match last status in statusHistory or legacy status
+        ands.append({
+            "$or": [
+                {"statusHistory": {"$elemMatch": {"status": {"$regex": f"^{status}$", "$options": "i"}}}},
+                {"status": {"$regex": f"^{status}$", "$options": "i"}}
+            ]
+        })
+
+    if q:
+        try:
+            maybe_oid = ObjectId(q)
+        except Exception:
+            maybe_oid = None
+        ors = [
+            {"customer.name": {"$regex": q, "$options": "i"}},
+            {"customer.email": {"$regex": q, "$options": "i"}},
+            {"customer.phone": {"$regex": q, "$options": "i"}},
+        ]
+        if maybe_oid:
+            ors.append({"_id": maybe_oid})
+        ands.append({"$or": ors})
+
+    # Date range on createdAt/created_at
+    dr_or = []
+    rng = {}
+    if date_from:
+        try:
+            rng["$gte"] = datetime.fromisoformat(date_from)
+        except Exception:
+            pass
+    if date_to:
+        try:
+            rng["$lte"] = datetime.fromisoformat(date_to)
+        except Exception:
+            pass
+    if rng:
+        dr_or.append({"createdAt": rng})
+        dr_or.append({"created_at": rng})
+        ands.append({"$or": dr_or})
+
+    if ands:
+        query["$and"] = ands
+    else:
+        query = {}
+    # Exclude logical deletions globally
+    query = {"$and": [query, {"deleted": {"$ne": True}}]}
+
+    # Build aggregation to compute a consistent created date for sorting and display
+    total = db.orders.count_documents(query)
+    pipeline = [
+        {"$match": query},
+        {"$addFields": {
+            "_createdAtConv": {"$convert": {"input": "$createdAt", "to": "date", "onError": None, "onNull": None}},
+            "_created_atConv": {"$convert": {"input": "$created_at", "to": "date", "onError": None, "onNull": None}},
+        }},
+        {"$addFields": {
+            "_sortDate": {"$ifNull": ["$_createdAtConv", {"$ifNull": ["$_created_atConv", {"$toDate": "$_id"}]}]},
+            "_computedCreatedAt": {"$ifNull": ["$_createdAtConv", {"$ifNull": ["$_created_atConv", {"$toDate": "$_id"}]}]},
+        }},
+    ]
+    # Sorting
+    if sort_by:
+        if sort_by in ("createdAt", "created_at"):
+            pipeline.append({"$sort": {"_sortDate": sort_dir}})
+        else:
+            pipeline.append({"$sort": {sort_by: sort_dir, "_sortDate": -1}})
+    else:
+        pipeline.append({"$sort": {"_sortDate": -1}})
+
+    pipeline.extend([{"$skip": skip}, {"$limit": limit}])
+
+    cursor = db.orders.aggregate(pipeline)
+    orders = []
+    for doc in cursor:
+        # best-effort: try to fetch full order for payment/provider fields not in pipeline
+        full = db.orders.find_one({"_id": doc.get("_id")}) or doc
+        full = _maybe_auto_mark_paid(db, full)
+        orders.append(_normalize_order(full))
+
+    return jsonify({
+        "orders": orders,
+        "pagination": {"page": page, "limit": limit, "total": total, "pages": (total + limit - 1) // limit},
+        "sort": {"by": sort_by or ["createdAt","created_at"], "dir": "desc" if sort_dir == -1 else "asc"},
+        "filters": {"status": status or None, "q": q or None, "from": date_from, "to": date_to}
+    })
+
+
+@bp.route("/<order_id>", methods=["GET"]) 
+@require_any_role("Admin", "Staff_L3")
+@jwt_required()
+def get_order(order_id: str):
+    db = current_app.extensions.get('mongo_db')
+    if db is None:
+        return jsonify({"error": "db_unavailable"}), 503
+    try:
+        oid = ObjectId(order_id)
+    except Exception:
+        return jsonify({"error": "invalid_order_id"}), 400
+    doc = db.orders.find_one({"_id": oid})
+    doc = _maybe_auto_mark_paid(db, doc)
+    if not doc:
+        return jsonify({"error": "not_found"}), 404
+    return jsonify({"order": _normalize_order(doc)})
+
+
+@bp.route("/<order_id>/status", methods=["OPTIONS"])  # preflight
+def options_update_status(order_id):
+    return ("", 204)
+
+
+@bp.route("/<order_id>/status", methods=["PATCH"])
+@require_any_role("Admin", "Staff_L3")
+@jwt_required()
+def update_status(order_id: str):
+    db = current_app.extensions.get('mongo_db')
+    if db is None:
+        return jsonify({"error": "db_unavailable"}), 503
+    try:
+        oid = ObjectId(order_id)
+    except Exception:
+        return jsonify({"error": "invalid_order_id"}), 400
+
+    body = request.get_json() or {}
+    new_status = (body.get("status") or "").strip()
+    note = (body.get("note") or "").strip() or None
+    if not new_status:
+        return jsonify({"error": "validation_failed", "details": {"status": ["status is required"]}}), 400
+
+    claims = get_jwt() or {}
+    actor = get_jwt_identity()
+
+    # Get current order to check for status change
+    current_order = db.orders.find_one({"_id": oid})
+    if not current_order:
+        return jsonify({"error": "not_found"}), 404
+
+    # Determine old status for notification logic
+    old_status = None
+    hist = current_order.get("statusHistory") or []
+    if hist:
+        old_status = (hist[-1].get("status") or "").lower()
+    if not old_status:
+        old_status = (current_order.get("status") or "").lower()
+
+    # push into statusHistory and set status for convenience if you store it
+    now = datetime.utcnow()
+    update = {
+        "$push": {"statusHistory": {"status": new_status.lower(), "timestamp": now, "by": actor, "notes": note}},
+        "$set": {"updatedAt": now}
+    }
+    # also mirror a top-level status field for easier filtering if exists
+    update["$set"]["status"] = new_status.lower()
+
+    res = db.orders.update_one({"_id": oid}, update)
+    if not res.matched_count:
+        return jsonify({"error": "not_found"}), 404
+
+    # Send notification if status changed to a notify-worthy status
+    from app.services.notification_service import send_order_status_notification
+    if old_status != new_status.lower():
+        send_order_status_notification(current_order, new_status.lower())
+
+    doc = db.orders.find_one({"_id": oid})
+    return jsonify({"order": _normalize_order(doc)})
+
+
+# Maintenance: deduplicate orders by Razorpay order/payment identifiers
+@bp.route("/maintenance/dedupe", methods=["POST"]) 
+@require_any_role("Admin", "Staff_L3")
+@jwt_required()
+def maintenance_dedupe():
+    db = current_app.extensions.get('mongo_db')
+    if db is None:
+        return jsonify({"error": "db_unavailable"}), 503
+
+    # Ensure unique partial indexes to prevent future duplicates (best-effort)
+    def ensure_index(keys, name, field, type_name="string"):
+        try:
+            db.orders.create_index(keys, name=name, unique=True, partialFilterExpression={field: {"$type": type_name}})
+        except Exception:
+            pass
+
+    ensure_index([("provider_order.id", 1)], "uniq_provider_order_id", "provider_order.id")
+    ensure_index([("payment_id", 1)], "uniq_payment_id", "payment_id")
+    ensure_index([("provider_order.transactionId", 1)], "uniq_provider_txnId", "provider_order.transactionId")
+    ensure_index([("provider_order.receipt", 1)], "uniq_provider_receipt", "provider_order.receipt")
+
+    # Group duplicates and mark older ones as logically deleted
+    def handle_group(key_field: str):
+        total_groups = 0
+        total_removed = 0
+        pipeline = [
+            {"$match": {key_field: {"$exists": True, "$ne": None}, "deleted": {"$ne": True}}},
+            {"$group": {"_id": f"${key_field}", "ids": {"$push": "$_id"}, "count": {"$sum": 1}}},
+            {"$match": {"count": {"$gt": 1}}}
+        ]
+        for group in db.orders.aggregate(pipeline):
+            total_groups += 1
+            ids = group.get("ids", [])
+            if not ids:
+                continue
+            keep = max(ids)  # keep the newest ObjectId
+            dupes = [i for i in ids if i != keep]
+            if not dupes:
+                continue
+            now = datetime.utcnow()
+            db.orders.update_many(
+                {"_id": {"$in": dupes}},
+                {"$set": {"deleted": True, "updatedAt": now}, "$push": {"statusHistory": {"status": "deleted duplicate", "timestamp": now, "by": "system:dedupe"}}}
+            )
+            total_removed += len(dupes)
+        return total_groups, total_removed
+
+    g1, r1 = handle_group("provider_order.id")
+    g2, r2 = handle_group("payment_id")
+    g3, r3 = handle_group("provider_order.transactionId")
+    g4, r4 = handle_group("provider_order.receipt")
+
+    return jsonify({
+        "ok": True,
+        "providerOrderIdGroups": g1, "providerOrderIdRemoved": r1,
+        "paymentIdGroups": g2, "paymentIdRemoved": r2,
+        "txnIdGroups": g3, "txnIdRemoved": r3,
+        "receiptGroups": g4, "receiptIdRemoved": r4,
+    })
+
+
+# Maintenance: fix existing orders with successful Razorpay payments stuck in "created"/"confirmed"
+@bp.route("/maintenance/fix-paid-status", methods=["POST"]) 
+@require_any_role("Admin", "Staff_L3")
+@jwt_required()
+def maintenance_fix_paid_status():
+    db = current_app.extensions.get('mongo_db')
+    if db is None:
+        return jsonify({"error": "db_unavailable"}), 503
+    
+    # Find Razorpay orders that have payment_id (successful payment) but status is not "paid"
+    query = {
+        "deleted": {"$ne": True},
+        "$and": [
+            {
+                "$or": [
+                    {"provider": "razorpay"},
+                    {"payment_provider": "razorpay"}
+                ]
+            },
+            {
+                "$or": [
+                    {"payment_id": {"$exists": True, "$ne": None}},
+                    {"razorpay_payment_id": {"$exists": True, "$ne": None}}
+                ]
+            },
+            {
+                "status": {"$ne": "paid"}
+            }
+        ]
+    }
+    
+    count_checked = 0
+    count_updated = 0
+    now = datetime.utcnow()
+    
+    for order in db.orders.find(query):
+        count_checked += 1
+        payment_id = order.get("payment_id") or order.get("razorpay_payment_id")
+        
+        # If there's a payment_id, it means payment was successful
+        if payment_id:
+            # Update to paid status
+            hist = order.get("statusHistory") or []
+            already_paid = any((h.get("status") or "").lower() == "paid" for h in hist)
+            
+            update_doc = {
+                "$set": {
+                    "status": "paid",
+                    "payment_status": "paid",
+                    "updatedAt": now
+                }
+            }
+            
+            if not already_paid:
+                update_doc["$push"] = {
+                    "statusHistory": {
+                        "status": "paid",
+                        "timestamp": now,
+                        "by": "system:maintenance",
+                        "notes": f"Fixed: Razorpay payment successful (payment_id: {payment_id}) but status was not updated"
+                    }
+                }
+            
+            db.orders.update_one({"_id": order["_id"]}, update_doc)
+            count_updated += 1
+            print(f"Fixed order {order['_id']} - had payment_id {payment_id} but status was {order.get('status')}")
+    
+    return jsonify({
+        "ok": True,
+        "checked": count_checked,
+        "updated": count_updated,
+        "message": f"Fixed {count_updated} orders out of {count_checked} checked"
+    })
+
+
+# Quick test endpoint to force auto-mark paid on all orders
+@bp.route("/maintenance/force-auto-mark", methods=["POST"]) 
+@require_any_role("Admin", "Staff_L3")
+@jwt_required()
+def maintenance_force_auto_mark():
+    db = current_app.extensions.get('mongo_db')
+    if db is None:
+        return jsonify({"error": "db_unavailable"}), 503
+    
+    count_processed = 0
+    count_updated = 0
+    
+    # Process all non-deleted orders
+    for order in db.orders.find({"deleted": {"$ne": True}}):
+        count_processed += 1
+        original_status = order.get("status")
+        updated_order = _maybe_auto_mark_paid(db, order)
+        if updated_order.get("status") != original_status:
+            count_updated += 1
+    
+    return jsonify({
+        "ok": True,
+        "processed": count_processed,
+        "updated": count_updated,
+        "message": f"Auto-marked {count_updated} orders out of {count_processed} processed"
+    })
+
+
+@bp.route("/<order_id>/cancel", methods=["OPTIONS"])  # preflight
+def options_cancel(order_id):
+    return ("", 204)
+
+
+@bp.route("/<order_id>/cancel", methods=["PATCH"]) 
+@require_any_role("Admin", "Staff_L3")
+@jwt_required()
+def admin_handle_cancellation(order_id: str):
+    """Approve or reject a cancellation request with Razorpay refund integration.
+
+    Body: { action: 'approve' | 'reject', notes?: string }
+    If approved: set status to 'cancelled', update cancellation fields, and process Razorpay refund if payment captured.
+    If rejected: set cancellation.rejectedAt and keep order status as-is.
+    """
+    db = current_app.extensions.get('mongo_db')
+    if db is None:
+        return jsonify({"error": "db_unavailable"}), 503
+    try:
+        oid = ObjectId(order_id)
+    except Exception:
+        return jsonify({"error": "invalid_order_id"}), 400
+
+    from flask import request
+    body = request.get_json() or {}
+    action = (body.get("action") or "").strip().lower()
+    notes = (body.get("notes") or "").strip() or None
+    if action not in ("approve", "reject"):
+        return jsonify({"error": "validation_failed", "details": {"action": ["must be 'approve' or 'reject'"]}}), 400
+
+    order = db.orders.find_one({"_id": oid})
+    if not order:
+        return jsonify({"error": "not_found"}), 404
+
+    cancellation = order.get("cancellation") or {}
+    if not cancellation.get("requested"):
+        return jsonify({"error": "no_request"}), 400
+
+    actor = get_jwt_identity()
+    now = datetime.utcnow()
+
+    update = {"$set": {"updatedAt": now}}
+    push_hist = []
+
+    if action == "approve":
+        # Update cancellation
+        update["$set"].update({
+            "cancellation.requested": True,
+            "cancellation.approved": True,
+            "cancellation.approvedAt": now,
+            "cancellation.adminNotes": notes,
+        })
+        
+        # Check if this is a paid Razorpay order that needs refund
+        is_razorpay = order.get("provider") == "razorpay" or order.get("payment_provider") == "razorpay"
+        payment_id = order.get("payment_id") or order.get("razorpay_payment_id")
+        is_paid = (order.get("status") or "").lower() == "paid" or (order.get("payment_status") or "").lower() == "paid"
+        
+        refund_details = {}
+        
+        if is_razorpay and payment_id and is_paid:
+            # Process actual Razorpay refund
+            try:
+                from app.utils.razorpay_utils import process_refund, inr_paise
+                
+                # Get refund amount - try different amount fields
+                amount_rupees = (
+                    order.get("totalAmount") or 
+                    order.get("amount") or 
+                    (order.get("provider_order") or {}).get("amount", 0)
+                )
+                
+                # If provider_order.amount is in paise, convert to rupees first
+                if (order.get("provider_order") or {}).get("amount"):
+                    provider_amount = order.get("provider_order").get("amount")
+                    if provider_amount > 1000:  # Likely in paise
+                        amount_rupees = provider_amount / 100
+                    else:
+                        amount_rupees = provider_amount
+                
+                amount_paise = inr_paise(amount_rupees)
+                
+                refund_result = process_refund(
+                    payment_id=payment_id,
+                    amount_paise=amount_paise,
+                    notes=f"Order cancellation: {notes}" if notes else "Order cancellation"
+                )
+                
+                if refund_result["success"]:
+                    refund_details = {
+                        "provider": "razorpay",
+                        "refundId": refund_result["refund"]["id"],
+                        "amount": refund_result["refund"]["amount"],
+                        "currency": refund_result["refund"]["currency"],
+                        "status": refund_result["refund"]["status"],
+                        "speed": refund_result["refund"].get("speed", "normal"),  # Speed may not be present
+                        "processedAt": refund_result["processed_at"],
+                        "notes": notes,
+                        "razorpayResponse": refund_result["refund"]
+                    }
+                    update["$set"]["cancellation.refundProcessed"] = True
+                    push_hist.append({"status": "refund processed", "timestamp": now, "by": actor, "notes": f"Razorpay refund ID: {refund_result['refund']['id']}"})
+                else:
+                    # Refund failed - still approve cancellation but mark refund as failed
+                    refund_details = {
+                        "provider": "razorpay",
+                        "failed": True,
+                        "error": refund_result.get("error"),
+                        "message": refund_result.get("message"),
+                        "processedAt": now.isoformat(),
+                        "notes": notes
+                    }
+                    update["$set"]["cancellation.refundProcessed"] = False
+                    push_hist.append({"status": "refund failed", "timestamp": now, "by": actor, "notes": f"Refund error: {refund_result.get('message')}"})
+                    
+            except Exception as e:
+                # Refund processing failed - still approve cancellation
+                refund_details = {
+                    "provider": "razorpay",
+                    "failed": True,
+                    "error": "processing_error",
+                    "message": str(e),
+                    "processedAt": now.isoformat(),
+                    "notes": notes
+                }
+                update["$set"]["cancellation.refundProcessed"] = False
+                push_hist.append({"status": "refund failed", "timestamp": now, "by": actor, "notes": f"Refund processing error: {str(e)}"})
+                
+        elif is_paid:
+            # Non-Razorpay paid order - manual refund required
+            refund_details = {
+                "provider": order.get("provider") or "manual",
+                "manualRefundRequired": True,
+                "amount": order.get("totalAmount") or order.get("amount") or 0,
+                "currency": "INR",
+                "processedAt": now.isoformat(),
+                "notes": f"Manual refund required for {order.get('provider', 'unknown')} payment. {notes}" if notes else f"Manual refund required for {order.get('provider', 'unknown')} payment"
+            }
+            update["$set"]["cancellation.refundProcessed"] = False
+            push_hist.append({"status": "manual refund required", "timestamp": now, "by": actor, "notes": "Manual refund processing required"})
+        else:
+            # Unpaid order - no refund needed
+            refund_details = {
+                "provider": order.get("provider") or "none",
+                "noRefundRequired": True,
+                "reason": "Order was not paid",
+                "processedAt": now.isoformat(),
+                "notes": notes
+            }
+            update["$set"]["cancellation.refundProcessed"] = True
+            
+        if refund_details:
+            update["$set"]["cancellation.refundDetails"] = refund_details
+
+        # Push status history entries
+        push_hist.append({"status": "cancellation approved", "timestamp": now, "by": actor, "notes": notes})
+        push_hist.append({"status": "cancelled", "timestamp": now, "by": actor})
+        update["$set"]["status"] = "cancelled"
+    else:
+        # reject
+        update["$set"].update({
+            "cancellation.requested": False,
+            "cancellation.rejectedAt": now,
+            "cancellation.adminNotes": notes,
+        })
+        push_hist.append({"status": "cancellation rejected", "timestamp": now, "by": actor, "notes": notes})
+
+    if push_hist:
+        update.setdefault("$push", {}).setdefault("statusHistory", {"$each": push_hist})
+
+    db.orders.update_one({"_id": oid}, update)
+
+    doc = db.orders.find_one({"_id": oid})
+    return jsonify({"order": _normalize_order(doc)})
+
+
+@bp.route("/<order_id>/refund-status", methods=["GET"])
+@require_any_role("Admin", "Staff_L3")
+@jwt_required()
+def get_refund_status(order_id: str):
+    """Get current refund status from Razorpay for an order"""
+    db = current_app.extensions.get('mongo_db')
+    if db is None:
+        return jsonify({"error": "db_unavailable"}), 503
+    
+    try:
+        oid = ObjectId(order_id)
+    except Exception:
+        return jsonify({"error": "invalid_order_id"}), 400
+
+    order = db.orders.find_one({"_id": oid})
+    if not order:
+        return jsonify({"error": "not_found"}), 404
+
+    refund_details = (order.get("cancellation") or {}).get("refundDetails")
+    if not refund_details or not refund_details.get("refundId"):
+        return jsonify({"error": "no_refund_found"}), 404
+
+    try:
+        from app.utils.razorpay_utils import get_refund_status
+        
+        refund_id = refund_details["refundId"]
+        status_result = get_refund_status(refund_id)
+        
+        if status_result["success"]:
+            # Update our database with latest status
+            db.orders.update_one(
+                {"_id": oid},
+                {"$set": {
+                    "cancellation.refundDetails.status": status_result["refund"]["status"],
+                    "cancellation.refundDetails.lastChecked": datetime.utcnow().isoformat()
+                }}
+            )
+            
+            return jsonify({
+                "refund": status_result["refund"],
+                "updated": True
+            })
+        else:
+            return jsonify({"error": status_result["error"]}), 400
+            
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

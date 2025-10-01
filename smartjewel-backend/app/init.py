@@ -64,6 +64,18 @@ def create_app():
     from app.blueprints.catalog.routes import bp as catalog_bp
     app.register_blueprint(catalog_bp)
 
+    # Orders API (customer-facing)
+    from app.blueprints.orders.routes import bp as orders_bp
+    app.register_blueprint(orders_bp)
+
+    # Admin Orders API
+    from app.blueprints.admin_orders.routes import bp as admin_orders_bp
+    app.register_blueprint(admin_orders_bp)
+
+    # Webhooks (Razorpay, etc.)
+    from app.blueprints.webhooks.razorpay_webhook import bp as webhooks_bp
+    app.register_blueprint(webhooks_bp)
+
     @app.route("/")
     def index():
         # List all routes for debugging

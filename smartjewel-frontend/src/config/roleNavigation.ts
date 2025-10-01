@@ -41,7 +41,7 @@ export const ROLE_NAVIGATION: Record<string, RoleNavigation> = {
       { label: 'Stock', key: 'stock', href: '/inventory/stock' },
       { label: 'Tags', key: 'tags', href: '/inventory/tags' },
       { label: 'Locations', key: 'locations', href: '/inventory/locations' },
-      { label: 'BOM', key: 'bom', href: '/inventory/bom' },
+      { label: 'View Orders', key: 'view_orders', href: '/admin/orders' },
     ]
   },
 

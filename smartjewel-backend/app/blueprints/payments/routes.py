@@ -60,31 +60,63 @@ def _validate_and_update_stock(db, items, order_id, user_id=None):
     Returns (True, None) on success or (False, reason) on failure.
     """
     try:
+        print(f"[STOCK UPDATE] Starting stock update for order {order_id}")
+        print(f"[STOCK UPDATE] Items to process: {len(items or [])}")
+        
+        if not items:
+            print("[STOCK UPDATE] No items to process")
+            return True, None
+        
         # Validate stock availability first
         for item in items or []:
             product_id = item.get("id")
             requested_quantity = item.get("qty", 0)
+            print(f"[STOCK UPDATE] Validating item: id={product_id}, qty={requested_quantity}, name={item.get('name')}")
+            
             if product_id and requested_quantity > 0:
-                product = db.items.find_one({"_id": _oid(product_id)}) or db.items.find_one({"sku": product_id})
+                # Try multiple ways to find the product
+                oid = _oid(product_id)
+                print(f"[STOCK UPDATE] Converted ID to ObjectId: {oid}")
+                product = db.items.find_one({"_id": oid})
                 if not product:
+                    print(f"[STOCK UPDATE] Not found by _id, trying sku...")
+                    product = db.items.find_one({"sku": product_id})
+                if not product:
+                    print(f"[STOCK UPDATE] Not found by sku, trying as string _id...")
+                    product = db.items.find_one({"_id": product_id})
+                if not product:
+                    print(f"[STOCK UPDATE] ERROR: Product {product_id} not found in database")
                     return False, f"Product {product_id} not found"
                 current_quantity = product.get("quantity", 0)
+                print(f"[STOCK UPDATE] Product found: {product.get('name')}, current stock: {current_quantity}")
                 if current_quantity < requested_quantity:
+                    print(f"[STOCK UPDATE] ERROR: Insufficient stock")
                     return False, f"Insufficient stock for {item.get('name', 'product')}. Available: {current_quantity}, Requested: {requested_quantity}"
 
         # Perform atomic decrements and record movements
+        updated_count = 0
         for item in items or []:
             product_id = item.get("id")
             requested_quantity = item.get("qty", 0)
             if product_id and requested_quantity > 0:
-                product = db.items.find_one({"_id": _oid(product_id)}) or db.items.find_one({"sku": product_id})
+                # Try multiple ways to find the product (same as validation)
+                oid = _oid(product_id)
+                product = db.items.find_one({"_id": oid})
+                if not product:
+                    product = db.items.find_one({"sku": product_id})
+                if not product:
+                    product = db.items.find_one({"_id": product_id})
                 if product:
+                    print(f"[STOCK UPDATE] Updating stock for {product.get('name')}: -{requested_quantity}")
                     result = db.items.update_one(
                         {"_id": product["_id"]},
                         {"$inc": {"quantity": -requested_quantity}, "$set": {"updated_at": _now(db)}}
                     )
                     if result.matched_count == 0:
+                        print(f"[STOCK UPDATE] ERROR: Failed to update stock")
                         return False, f"Failed to update stock for {item.get('name', 'product')}"
+                    
+                    print(f"[STOCK UPDATE] Stock updated successfully, creating movement record")
                     db.stock_movements.insert_one({
                         "item_id": product["_id"],
                         "type": "outward",
@@ -96,8 +128,14 @@ def _validate_and_update_stock(db, items, order_id, user_id=None):
                         "created_by": _oid(user_id) if user_id else None,
                         "created_at": _now(db)
                     })
+                    updated_count += 1
+        
+        print(f"[STOCK UPDATE] Completed: {updated_count} items updated")
         return True, None
     except Exception as e:
+        print(f"[STOCK UPDATE] EXCEPTION: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return False, str(e)
 
 @bp.post("/razorpay/order")
@@ -190,21 +228,25 @@ def create_razorpay_order():
     except Exception as e:
         return jsonify({"error": "razorpay_order_exception", "details": str(e)}), 500
 
-    # Persist a minimal order doc for demo (optional)
+    # Persist a minimal order doc for demo (optional) — use upsert to avoid duplicates
     db = current_app.extensions.get('mongo_db')
     if db is not None:
         try:
-            db.orders.insert_one({
-                "provider": "razorpay",
-                "provider_order": order,
-                "status": "created",
-                "amount": amount,
-                "currency": currency,
-                "receipt": receipt,
-                "customer": customer,
-                "items": items,
-            })
-            print(f"Order saved to database: {receipt}")
+            db.orders.update_one(
+                {"provider": "razorpay", "provider_order.id": order.get("id")},
+                {"$set": {
+                    "provider": "razorpay",
+                    "provider_order": order,
+                    "amount": amount,
+                    "currency": currency,
+                    "receipt": receipt,
+                    "customer": customer,
+                    "items": items,
+                    "updated_at": _now(db),
+                }, "$setOnInsert": {"status": "created", "created_at": _now(db)}},
+                upsert=True
+            )
+            print(f"Order upserted to database: {receipt}")
         except Exception as e:
             print(f"Failed to save order to database: {e}")
     else:
@@ -230,6 +272,7 @@ def verify_razorpay_signature():
     """
     Verify Razorpay payment signature on success callback.
     """
+    print("🔥 [PAYMENT VERIFY] Payment verification started!")
     data = request.get_json(silent=True) or {}
     order_id = data.get("razorpay_order_id")
     payment_id = data.get("razorpay_payment_id")
@@ -250,20 +293,23 @@ def verify_razorpay_signature():
 
         if db is not None:
             try:
-                # Update provider order
+                # Update provider order - mark as paid since payment was successful
                 db.orders.update_one(
                     {"provider": "razorpay", "provider_order.id": order_id},
                     {"$set": {
                         "status": "paid",
+                        "payment_status": "paid", 
                         "payment_id": payment_id,
                         "signature": signature,
                         "order_id": demo_order_id,
                         "user_id": _oid(uid) if uid else None,
                         "updated_at": _now(db)
+                    }, "$push": {
+                        "statusHistory": {"status": "paid", "timestamp": _now(db), "by": "system:razorpay", "notes": "Payment verified in test mode"}
                     }},
                 )
 
-                # Insert comprehensive order record (same shape as verified path)
+                # Insert comprehensive order record (same shape as verified path) — upsert to avoid duplicates
                 # Ensure each order item persists image field for accurate history
                 def _ensure_item_images(itms):
                     out = []
@@ -290,10 +336,11 @@ def verify_razorpay_signature():
                         return itms or []
                     return out
 
+                now_time = _now(db)
                 order_record = {
                     "order_id": demo_order_id,
                     "user_id": _oid(uid) if uid else None,
-                    "status": "confirmed",
+                    "status": "paid",
                     "payment_status": "paid",
                     "delivery_status": "pending",
                     "payment_provider": "razorpay",
@@ -303,12 +350,17 @@ def verify_razorpay_signature():
                     "currency": order_doc.get("currency", "INR"),
                     "customer": order_doc.get("customer", {}),
                     "items": _ensure_item_images(order_doc.get("items", [])),
-                    "created_at": _now(db),
-                    "updated_at": _now(db),
+                    "statusHistory": [{"status": "created", "timestamp": now_time}, {"status": "paid", "timestamp": now_time, "by": "system:razorpay", "notes": "Payment verified"}],
+                    "created_at": now_time,
+                    "updated_at": now_time,
                     "notes": {"payment_method": "razorpay", "signature_verified": True}
                 }
-                db.orders.insert_one(order_record)
-                print(f"Test mode: order persisted for user {uid} with id {demo_order_id}")
+                db.orders.update_one(
+                    {"$or": [{"payment_id": payment_id}, {"razorpay_order_id": order_id}]},
+                    {"$setOnInsert": order_record, "$set": {"updatedAt": now_time}},  # Use different field name to avoid conflict
+                    upsert=True
+                )
+                print(f"Test mode: order upserted for user {uid} with id {demo_order_id}")
 
                 # Decrement stock in test/skip-signature path as well
                 ok_stock, reason = _validate_and_update_stock(db, order_record.get("items", []), demo_order_id, uid)
@@ -341,11 +393,26 @@ def verify_razorpay_signature():
     # Update order status in DB for demo purposes
     if db is not None:
         try:
+            update_data = {
+                "status": "paid" if ok else "failed", 
+                "payment_status": "paid" if ok else "failed",
+                "payment_id": payment_id, 
+                "signature": signature,
+                "updated_at": _now(db)
+            }
+            push_data = {}
+            if ok:
+                push_data["statusHistory"] = {"status": "paid", "timestamp": _now(db), "by": "system:razorpay", "notes": "Payment verified"}
+            
+            update_query = {"$set": update_data}
+            if push_data:
+                update_query["$push"] = push_data
+                
             db.orders.update_one(
                 {"provider": "razorpay", "provider_order.id": order_id},
-                {"$set": {"status": "paid" if ok else "failed", "payment_id": payment_id, "signature": signature}},
+                update_query
             )
-            print(f"Order status updated in database: {order_id}")
+            print(f"Order status updated in database: {order_id} -> {'paid' if ok else 'failed'}")
         except Exception as e:
             print(f"Failed to update order status in database: {e}")
     else:
@@ -354,23 +421,14 @@ def verify_razorpay_signature():
     if not ok:
         return jsonify({"verified": False, "reason": "signature_mismatch"}), 400
 
-    # If payment is successful, validate and update stock
-    if ok and db is not None:
-        try:
-            order_doc = db.orders.find_one({"provider": "razorpay", "provider_order.id": order_id}) or {}
-            items = order_doc.get("items", [])
-            ok_stock, reason = _validate_and_update_stock(db, items, order_id, get_jwt_identity())
-            if not ok_stock:
-                return jsonify({"verified": False, "reason": reason}), 400
-        except Exception as e:
-            print(f"Stock update error: {str(e)}")
-            pass
-    elif ok and db is None:
-        print("Database not available - skipping stock validation and updates")
-
-    # Generate a simple demo order_id to show on confirmation page
+    # Get order document first (created during order creation)
     order_doc = db.orders.find_one({"provider": "razorpay", "provider_order.id": order_id}) if db is not None else {}
     demo_order_id = order_doc.get("receipt") if order_doc else f"SJ-{order_id[-8:].upper()}"
+    items = order_doc.get("items", [])
+    
+    print(f"[DEBUG] Order document found: {order_doc is not None and bool(order_doc)}")
+    print(f"[DEBUG] Items from order: {items}")
+    print(f"[DEBUG] Number of items: {len(items)}")
 
     # If payment is successful, create a proper order record
     if ok and db is not None:
@@ -393,7 +451,7 @@ def verify_razorpay_signature():
             order_record = {
                 "order_id": demo_order_id,
                 "user_id": _oid(user_id) if user_id else None,
-                "status": "confirmed",
+                "status": "paid",
                 "payment_status": "paid",
                 "delivery_status": "pending",
                 "payment_provider": "razorpay",
@@ -403,6 +461,7 @@ def verify_razorpay_signature():
                 "currency": order_doc.get("currency", "INR"),
                 "customer": order_doc.get("customer", {}),
                 "items": order_doc.get("items", []),
+                "statusHistory": [{"status": "created", "timestamp": _now(db)}, {"status": "paid", "timestamp": _now(db), "by": "system:razorpay", "notes": "Payment verified"}],
                 "created_at": _now(db),
                 "updated_at": _now(db),
                 "notes": {
@@ -413,13 +472,18 @@ def verify_razorpay_signature():
             
             print(f"Order record to insert: {order_record}")
             
-            # Insert the order record
-            result = db.orders.insert_one(order_record)
-            print(f"Order inserted with ID: {result.inserted_id}")
+            # Upsert the order record by payment_id/razorpay_order_id
+            result = db.orders.update_one(
+                {"$or": [{"payment_id": payment_id}, {"razorpay_order_id": order_id}]},
+                {"$setOnInsert": order_record, "$set": {"updated_at": _now(db)}},
+                upsert=True
+            )
+            print(f"Order upserted (matched: {result.matched_count}, upserted_id: {getattr(result, 'upserted_id', None)})")
             
             # Verify the order was actually inserted
-            inserted_order = db.orders.find_one({"_id": result.inserted_id})
-            print(f"Verification - inserted order found: {inserted_order is not None}")
+            # Verify the order exists by either key
+            inserted_order = db.orders.find_one({"$or": [{"payment_id": payment_id}, {"razorpay_order_id": order_id}]})
+            print(f"Verification - order found: {inserted_order is not None}")
             
             # Update the existing razorpay order record with the new order_id
             update_result = db.orders.update_one(
@@ -427,6 +491,20 @@ def verify_razorpay_signature():
                 {"$set": {"order_id": demo_order_id, "user_id": _oid(user_id) if user_id else None}}
             )
             print(f"Updated existing order: {update_result.modified_count} documents modified")
+            
+            # NOW update stock after order is confirmed
+            print(f"[DEBUG] About to update stock")
+            print(f"[DEBUG] Items for stock update: {items}")
+            print(f"[DEBUG] Order ID: {demo_order_id}")
+            print(f"[DEBUG] User ID: {user_id}")
+            print(f"Updating stock for {len(items)} items")
+            ok_stock, reason = _validate_and_update_stock(db, items, demo_order_id, user_id)
+            if not ok_stock:
+                print(f"Stock update failed: {reason}")
+                # Log the error but don't fail the payment - order is already paid
+                # Admin can manually adjust stock if needed
+            else:
+                print(f"Stock updated successfully for order {demo_order_id}")
             
         except Exception as e:
             print(f"Order creation error: {str(e)}")
@@ -438,6 +516,40 @@ def verify_razorpay_signature():
 
     return jsonify({"verified": True, "order_id": demo_order_id, "details": _to_jsonable(order_doc)})
 
+
+@bp.post("/test-stock-update")
+@jwt_required()
+def test_stock_update():
+    """Test endpoint to manually trigger stock update"""
+    try:
+        db = current_app.extensions.get('mongo_db')
+        if not db:
+            return jsonify({"error": "db_unavailable"}), 503
+        
+        # Test with the order you showed me
+        test_items = [
+            {
+                "id": "68bd7f94dd4c0084afd36eda",
+                "name": "Geometric Pattern Diamond Pendant",
+                "qty": 1,
+                "price": 11966.16
+            }
+        ]
+        
+        print("[TEST] Testing stock update manually")
+        ok_stock, reason = _validate_and_update_stock(db, test_items, "TEST-ORDER", get_jwt_identity())
+        
+        return jsonify({
+            "success": ok_stock,
+            "reason": reason,
+            "message": "Stock update test completed"
+        })
+        
+    except Exception as e:
+        print(f"Test stock update error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 @bp.post("/test-order-creation")
 @jwt_required()

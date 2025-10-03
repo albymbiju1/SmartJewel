@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { XCircle, Package } from 'lucide-react';
 import { api, API_BASE_URL } from '../../api';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -201,201 +202,97 @@ export const MyOrdersPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Breadcrumb */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="container mx-auto px-6 py-3 text-sm text-gray-600 flex items-center gap-2">
-          <button onClick={() => navigate('/')} className="hover:text-amber-600 transition-colors">Home</button>
-          <span>/</span>
-          <span className="text-gray-900 font-medium">My Orders</span>
-        </div>
-      </div>
-
+    <div className="min-h-screen bg-gray-100">
       {/* Header */}
-      <div className="bg-gradient-to-r from-amber-50 via-rose-50 to-amber-50 py-12">
-        <div className="container mx-auto px-6 text-center">
-          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-3">My Orders</h1>
-          <p className="text-gray-600 text-lg">Track and manage your jewelry orders</p>
+      <div className="bg-white border-b border-gray-200">
+        <div className="container mx-auto px-4 py-4">
+          <h1 className="text-xl font-medium text-gray-900">My Orders</h1>
         </div>
       </div>
 
-      <div className="container mx-auto px-6 py-8">
+      <div className="container mx-auto px-4 py-6">
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-            <div className="flex items-center">
-              <svg className="w-5 h-5 text-red-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span className="text-red-800">{error}</span>
-            </div>
+            <span className="text-red-800 text-sm">{error}</span>
           </div>
         )}
 
         {orders.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-200 p-16 text-center shadow-sm">
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-amber-50 text-amber-600 mb-6">
-              <svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
+          <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Package className="w-8 h-8 text-gray-400" />
             </div>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-3">No orders yet</h2>
-            <p className="text-gray-600 mb-8 text-lg">Start shopping to see your orders here.</p>
-            <button 
-              onClick={() => navigate('/products/all')} 
-              className="inline-flex items-center gap-3 px-8 py-4 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 text-white hover:from-amber-700 hover:to-amber-800 transition-all duration-200 shadow-lg hover:shadow-xl"
+            <h2 className="text-lg font-medium text-gray-900 mb-2">No orders yet</h2>
+            <p className="text-gray-600 mb-6">Start shopping to see your orders here</p>
+            <button
+              onClick={() => navigate('/products/all')}
+              className="px-6 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
             >
               Start Shopping
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-              </svg>
             </button>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-4">
             {orders.map((order) => (
-              <div key={order._id} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-200">
-                {/* Order Header */}
-                <div className="p-6 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-4 mb-3">
-                        <h3 className="text-xl font-bold text-gray-900">Order #{order.order_id}</h3>
+              <div key={order._id} className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-shadow">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-4 flex-1">
+                    {/* Product Image */}
+                    <img
+                      src={toAbsoluteImage(order.items[0]?.image)}
+                      alt={order.items[0]?.name}
+                      className="w-16 h-16 object-cover rounded-lg border border-gray-200"
+                      onError={(e) => { (e.target as HTMLImageElement).src = '/jewel1.png'; }}
+                    />
+
+                    {/* Order Details */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <h3 className="text-base font-medium text-gray-900 truncate">{order.items[0]?.name}</h3>
+                          <p className="text-sm text-gray-600">Order #{order.order_id}</p>
+                        </div>
+                        <div className="text-right ml-4">
+                          <div className="text-lg font-bold text-gray-900">₹{order.amount.toLocaleString('en-IN')}</div>
+                          <div className="text-xs text-gray-500">{order.currency}</div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
+                            {order.status}
+                          </div>
+                          <span className="text-sm text-gray-600">{formatDate(order.created_at)}</span>
+                        </div>
+
                         <div className="flex items-center gap-2">
-                          <span className={`px-3 py-1.5 rounded-full text-sm font-medium border ${getStatusColor(order.status)}`}>
-                            {getStatusIcon(order.status)} {order.status}
-                          </span>
-                          <span className={`px-3 py-1.5 rounded-full text-sm font-medium border ${getStatusColor(order.payment_status)}`}>
-                            💳 {order.payment_status}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-6 text-sm text-gray-600">
-                        <span>📅 Placed on {formatDate(order.created_at)}</span>
-                        {order.delivery_date && (
-                          <span>🚚 Delivered on {formatDate(order.delivery_date)}</span>
-                        )}
-                        {order.payment_method && (
-                          <span>💳 {order.payment_method}</span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-2xl font-bold text-gray-900">
-                        ₹{order.amount.toLocaleString('en-IN')}
-                      </div>
-                      <div className="text-sm text-gray-500">{order.currency}</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Order Items */}
-                <div className="p-6">
-                  <div className="space-y-4">
-                    {order.items.map((item, index) => (
-                      <div key={index} className="flex items-start gap-4 p-4 border border-gray-100 rounded-xl hover:border-gray-200 transition-colors">
-                        {/* Product Image */}
-                        <div className="relative">
-                          <img
-                            src={toAbsoluteImage(item.image)}
-                            alt={item.name}
-                            className="w-20 h-20 rounded-lg object-cover border-2 border-gray-100 cursor-zoom-in hover:border-amber-200 transition-colors"
-                            onClick={() => setPreview({ url: toAbsoluteImage(item.image), alt: item.name })}
-                            onError={(e) => { (e.target as HTMLImageElement).src = '/jewel1.png'; }}
-                          />
-                          <div className="absolute -top-1 -right-1 w-6 h-6 bg-amber-100 rounded-full flex items-center justify-center text-xs">
-                            {getCategoryIcon(item.category || '')}
-                          </div>
-                        </div>
-
-                        {/* Product Details */}
-                        <div className="flex-1 min-w-0">
-                          <h4 className="text-lg font-semibold text-gray-900 mb-2">{item.name}</h4>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm text-gray-600 mb-3">
-                            {item.category && (
-                              <div>
-                                <span className="font-medium">Category:</span>
-                                <span className="ml-1">{item.category}</span>
-                              </div>
-                            )}
-                            {item.metal && (
-                              <div>
-                                <span className="font-medium">Metal:</span>
-                                <span className="ml-1">{item.metal}</span>
-                              </div>
-                            )}
-                            {item.weight && (
-                              <div>
-                                <span className="font-medium">Weight:</span>
-                                <span className="ml-1">{item.weight}</span>
-                              </div>
-                            )}
-                            {item.size && (
-                              <div>
-                                <span className="font-medium">Size:</span>
-                                <span className="ml-1">{item.size}</span>
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-4 text-sm">
-                            <span className="text-gray-600">Quantity: <span className="font-medium">{item.qty}</span></span>
-                            <span className="text-gray-600">Price: <span className="font-bold text-gray-900">₹{(item.price * item.qty).toLocaleString('en-IN')}</span></span>
-                          </div>
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex flex-col gap-2">
                           <button
                             onClick={() => handleViewOrderDetails(order._id)}
-                            className="px-4 py-2 text-sm font-medium text-amber-600 border border-amber-200 rounded-lg hover:bg-amber-50 transition-colors"
+                            className="text-sm text-blue-600 hover:text-blue-700 font-medium"
                           >
-                            View Details
+                            View details
                           </button>
-                          {order.status === 'delivered' && (
+                          {order.status.toLowerCase() === 'shipped' && (
                             <button
-                              onClick={() => handleRateReview(order._id, item.id)}
-                              className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 transition-colors"
+                              onClick={() => handleTrackOrder(order._id)}
+                              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
                             >
-                              Rate & Review
+                              Track order
                             </button>
                           )}
                         </div>
                       </div>
-                    ))}
-                  </div>
-
-                  {/* Order Actions */}
-                  <div className="mt-6 pt-6 border-t border-gray-100">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <button
-                          onClick={() => handleTrackOrder(order._id)}
-                          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                          </svg>
-                          Track Order
-                        </button>
-                        <button
-                          onClick={() => handleViewInvoice(order._id)}
-                          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
-                          View Invoice
-                        </button>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-sm text-gray-600">Total Amount</div>
-                        <div className="text-xl font-bold text-gray-900">
-                          ₹{order.amount.toLocaleString('en-IN')}
-                        </div>
-                      </div>
                     </div>
                   </div>
                 </div>
+
+                {/* Additional Items Indicator */}
+                {order.items.length > 1 && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <span className="text-sm text-gray-600">+{order.items.length - 1} more item{order.items.length > 2 ? 's' : ''}</span>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -404,20 +301,18 @@ export const MyOrdersPage: React.FC = () => {
 
       {/* Image Preview Modal */}
       {preview && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setPreview(null)}>
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">{preview.alt}</h3>
-              <button 
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPreview(null)}>
+          <div className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl max-w-4xl w-full p-8 border border-white/20" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-8">
+              <h3 className="text-2xl font-serif font-bold text-slate-900">{preview.alt}</h3>
+              <button
+                className="p-3 hover:bg-slate-100/80 rounded-2xl transition-all duration-300 hover:scale-110"
                 onClick={() => setPreview(null)}
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <XCircle className="w-7 h-7 text-slate-600" />
               </button>
             </div>
-            <img src={preview.url} alt={preview.alt} className="w-full h-auto rounded-lg" />
+            <img src={preview.url} alt={preview.alt} className="w-full h-auto rounded-2xl shadow-xl shadow-slate-900/20" />
           </div>
         </div>
       )}

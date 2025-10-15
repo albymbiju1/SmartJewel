@@ -95,8 +95,8 @@ def _build_match_from_args(args):
     metals = _split_csv(args.get('metal'))
     if metals:
         match["metal"] = {"$in": metals}
-    # Purity filter (comma-separated; normalize to lowercase like '24k')
-    purities = [p.lower() for p in _split_csv(args.get('purity'))]
+    # Purity filter (comma-separated)
+    purities = _split_csv(args.get('purity'))
     if purities:
         match["purity"] = {"$in": purities}
     # Price range
@@ -119,10 +119,58 @@ def _build_match_from_args(args):
         if max_weight is not None:
             wr["$lte"] = max_weight
         match["weight"] = wr
-    # Category (optional)
-    category = args.get('category')
-    if category:
-        match['category'] = category
+    # Category filter - handle both single category and multiple categories
+    categories = _split_csv(args.get('categories')) or _split_csv(args.get('category'))
+    if categories:
+        # Create case-insensitive variations for each category
+        category_variations = []
+        for cat in categories:
+            category_variations.append(cat)  # Original case
+            category_variations.append(cat.lower())  # Lowercase
+            category_variations.append(cat.upper())  # Uppercase
+            category_variations.append(cat.capitalize())  # Capitalized
+        
+        # Remove duplicates while preserving order
+        unique_variations = []
+        seen = set()
+        for var in category_variations:
+            if var not in seen:
+                unique_variations.append(var)
+                seen.add(var)
+        
+        match["category"] = {"$in": unique_variations}
+    # Color filter (comma-separated)
+    colors = _split_csv(args.get('color'))
+    if colors:
+        match["color"] = {"$in": colors}
+    # Style filter (comma-separated)
+    styles = _split_csv(args.get('style'))
+    if styles:
+        match["style"] = {"$in": styles}
+    # Earring type filter (using sub_category field)
+    earring_types = _split_csv(args.get('earringType'))
+    if earring_types:
+        match["sub_category"] = {"$in": earring_types}
+    # Occasion filter (using tags field)
+    occasions = _split_csv(args.get('occasion'))
+    if occasions:
+        # Use regex to match occasions in tags array
+        match["tags"] = {"$in": occasions}
+    # For filter (using tags field)
+    for_values = _split_csv(args.get('for'))
+    if for_values:
+        # Use regex to match for values in tags array
+        if "tags" in match:
+            # Combine with existing tags filter
+            match["tags"]["$in"].extend(for_values)
+        else:
+            match["tags"] = {"$in": for_values}
+    # Budget filter (map to price ranges)
+    budgets = _split_csv(args.get('budget'))
+    if budgets:
+        # We'll handle budget mapping in the frontend by converting to min_price/max_price
+        # This is just a placeholder in case we want to handle it server-side too
+        pass
     return match
 
 

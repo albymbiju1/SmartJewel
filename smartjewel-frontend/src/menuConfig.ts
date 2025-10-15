@@ -71,7 +71,7 @@ export const MENU: Record<string, MenuData> = {
           { label: 'Mangalsutra', href: '/products?category=mangalsutra&metal=gold' },
         ],
       },
-      { title: 'Shop by Purity', items: [{ label: '22KT' }, { label: '18KT' }, { label: '14KT' }] },
+      { title: 'Shop by Purity', items: [{ label: '22K' }, { label: '18K' }, { label: '14K' }] },
       { title: 'Metal Colour', items: [{ label: 'Yellow Gold' }, { label: 'Rose Gold' }, { label: 'White Gold' }] },
     ],
     promo: { image: '/Slide2.jpg', title: 'Pure Gold Collection', cta: 'View Collection', href: '/products/gold' },

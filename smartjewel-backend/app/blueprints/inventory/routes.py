@@ -229,10 +229,24 @@ def create_item():
             # Use full URL for frontend to display images properly
             image_url = f"http://127.0.0.1:5000/static/uploads/{unique_filename}"
 
+    # Handle new fields
+    gemstones = data.get("gemstones", "")
+    if isinstance(gemstones, str) and gemstones:
+        gemstones_list = [g.strip() for g in gemstones.split(",") if g.strip()]
+    else:
+        gemstones_list = gemstones if isinstance(gemstones, list) else []
+    
+    tags = data.get("tags", "")
+    if isinstance(tags, str) and tags:
+        tags_list = [t.strip() for t in tags.split(",") if t.strip()]
+    else:
+        tags_list = tags if isinstance(tags, list) else []
+
     doc = {
         "sku": data["sku"],
         "name": data["name"],
         "category": data["category"],
+        "sub_category": data.get("sub_category", ""),
         "metal": data["metal"],
         "purity": data["purity"],
         "weight_unit": data["weight_unit"],
@@ -240,6 +254,11 @@ def create_item():
         "price": data.get("price", 0),
         "description": data.get("description", ""),
         "image": image_url,
+        "gemstones": gemstones_list,
+        "color": data.get("color", ""),
+        "style": data.get("style", ""),
+        "tags": tags_list,
+        "brand": data.get("brand", "Smart Jewel"),
         "default_location_id": _oid(data.get("default_location_id")),
         "attributes": data.get("attributes", {}),
         "status": "active",
@@ -276,11 +295,29 @@ def list_products():
     try:
         db = current_app.extensions['mongo_db']
         q = {"status": "active"}
-        # Optional filtering by category, metal, etc.
-        for f in ["category", "metal", "purity"]:
+        # Optional filtering by category, metal, purity, and additional filters
+        for f in ["category", "metal", "purity", "color", "style"]:
             v = request.args.get(f)
             if v:
                 q[f] = v
+        
+        # Handle sub_category filter (for earring types)
+        sub_category = request.args.get("earringType")
+        if sub_category:
+            q["sub_category"] = sub_category
+            
+        # Handle tags-based filters (for occasion and for)
+        tags_filters = []
+        occasion = request.args.get("occasion")
+        if occasion:
+            tags_filters.append(occasion)
+            
+        for_filter = request.args.get("for")
+        if for_filter:
+            tags_filters.append(for_filter)
+            
+        if tags_filters:
+            q["tags"] = {"$in": tags_filters}
         
         # Ensure all items have a quantity field (default 0)
         db.items.update_many(
@@ -403,13 +440,25 @@ def update_item(item_id):
                 except ValueError:
                     data[field] = 0
                     
-    allowed = {"name", "category", "metal", "purity", "weight_unit", "weight", "price", "description", "attributes", "status", "default_location_id"}
+    allowed = {"name", "category", "sub_category", "metal", "purity", "weight_unit", "weight", "price", "description", "attributes", "status", "default_location_id", "gemstones", "color", "style", "tags", "brand"}
     update = {}
     
     for k, v in data.items():
         if k in allowed:
             if k == "default_location_id":
                 update[k] = ObjectId(v) if v else None
+            elif k == "gemstones":
+                # Handle gemstones as comma-separated string or array
+                if isinstance(v, str) and v:
+                    update[k] = [g.strip() for g in v.split(",") if g.strip()]
+                else:
+                    update[k] = v if isinstance(v, list) else []
+            elif k == "tags":
+                # Handle tags as comma-separated string or array
+                if isinstance(v, str) and v:
+                    update[k] = [t.strip() for t in v.split(",") if t.strip()]
+                else:
+                    update[k] = v if isinstance(v, list) else []
             else:
                 update[k] = v
                 

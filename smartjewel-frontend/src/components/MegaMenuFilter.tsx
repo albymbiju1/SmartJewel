@@ -73,7 +73,7 @@ export const MegaMenuFilter: React.FC<MegaMenuFilterProps> = ({ onApplied, promo
     if (selectedCategories.length) search.set('categories', selectedCategories.join(','));
     if (selectedMetal) search.set('metal', selectedMetal.toLowerCase());
     if (selectedPrice) search.set('price', selectedPrice);
-    if (selectedPurities.length) search.set('purity', selectedPurities.join(','));
+    if (selectedPurities.length) search.set('purity', selectedPurities.map(p => p.toLowerCase()).join(','));
     navigate(`/products?${search.toString()}`);
     onApplied?.();
   };
@@ -114,7 +114,7 @@ export const MegaMenuFilter: React.FC<MegaMenuFilterProps> = ({ onApplied, promo
         <div>
           <div className="text-sm font-semibold text-gray-900 mb-3">Shop by Purity</div>
           <div className="flex flex-wrap gap-2">
-            {['22KT','18KT','14KT'].map(p => {
+            {['22K','18K','14K'].map(p => {
               const checked = selectedPurities.includes(p);
               return (
                 <label key={p} className={`px-3 py-1.5 rounded-full border text-sm cursor-pointer ${checked? 'bg-gray-100 border-gray-300 text-gray-900' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>

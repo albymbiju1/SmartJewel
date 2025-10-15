@@ -21,6 +21,14 @@ export const LandingPage: React.FC = () => {
   const [mmCategories, setMmCategories] = useState<string[]>([]);
   const [mmMetals, setMmMetals] = useState<string[]>([]);
   const [mmPrices, setMmPrices] = useState<string[]>([]);
+  // Additional filter states
+  const [mmPurities, setMmPurities] = useState<string[]>([]);
+  const [mmColors, setMmColors] = useState<string[]>([]);
+  const [mmEarringTypes, setMmEarringTypes] = useState<string[]>([]);
+  const [mmOccasions, setMmOccasions] = useState<string[]>([]);
+  const [mmStyles, setMmStyles] = useState<string[]>([]);
+  const [mmBudgets, setMmBudgets] = useState<string[]>([]);
+  const [mmFor, setMmFor] = useState<string[]>([]);
   const userMenuRef = useRef<HTMLDivElement | HTMLButtonElement>(null);
 
   // Cart bounce animation state
@@ -59,7 +67,18 @@ export const LandingPage: React.FC = () => {
   };
 
   // Reset temp selections when switching tabs
-  useEffect(() => { setMmCategories([]); setMmMetals([]); setMmPrices([]); }, [activeMenu]);
+  useEffect(() => { 
+    setMmCategories([]); 
+    setMmMetals([]); 
+    setMmPrices([]); 
+    setMmPurities([]);
+    setMmColors([]);
+    setMmEarringTypes([]);
+    setMmOccasions([]);
+    setMmStyles([]);
+    setMmBudgets([]);
+    setMmFor([]);
+  }, [activeMenu]);
   
   // Redirect authenticated users to their role-based dashboard
   useEffect(() => {
@@ -201,94 +220,194 @@ export const LandingPage: React.FC = () => {
                 </button>
               </li>
             ))}
-          </ul>
-          {/* Mega menu appears for the hovered item, classic columns with multi-select */}
-          {activeMenu && (
-            <div className="absolute left-0 top-12 w-full max-w-[1100px] hidden md:block">
-              <div className="grid grid-cols-3 md:grid-cols-4 gap-6 p-6 bg-white border border-gray-200 rounded-xl shadow-2xl animate-[fadeSlide_.2s_ease-out]" onMouseEnter={() => setActiveMenu(activeMenu)}>
-                {/* Columns */}
-                {(MEGA_MENU[activeMenu!]?.columns || MEGA_MENU['all'].columns).map((col) => (
-                  <div key={col.title}>
-                    <div className="flex items-center gap-2 pb-2 mb-3 border-b border-gray-100">
-                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-gradient-to-br from-amber-400 to-rose-400 shadow"></span>
-                      <div className="text-[11px] uppercase tracking-[0.08em] text-gray-700 font-semibold">{col.title}</div>
+            </ul>
+            {/* Mega menu appears for the hovered item, classic columns with multi-select */}
+            {activeMenu && (
+              <div className="absolute left-0 top-12 w-full max-w-[1100px] hidden md:block">
+                <div className="grid grid-cols-3 md:grid-cols-4 gap-6 p-6 bg-white border border-gray-200 rounded-xl shadow-2xl animate-[fadeSlide_.2s_ease-out]" onMouseEnter={() => setActiveMenu(activeMenu)}>
+                  {/* Columns */}
+                  {(MEGA_MENU[activeMenu!]?.columns || MEGA_MENU['all'].columns).map((col) => (
+                    <div key={col.title}>
+                      <div className="flex items-center gap-2 pb-2 mb-3 border-b border-gray-100">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-gradient-to-br from-amber-400 to-rose-400 shadow"></span>
+                        <div className="text-[11px] uppercase tracking-[0.08em] text-gray-700 font-semibold">{col.title}</div>
+                      </div>
+                      {col.items.map((it) => {
+                        const isCategory = col.title.toLowerCase().includes('category') || 
+                                          col.title.toLowerCase()==='for her' || 
+                                          col.title.toLowerCase()==='for him' || 
+                                          col.title.toLowerCase()==='trending' || 
+                                          col.title.toLowerCase()==='themes';
+                        const isMetal = col.title.toLowerCase().includes('metal') && (it.label.toLowerCase()==='gold' || it.label.toLowerCase()==='diamond' || it.label.toLowerCase()==='platinum' || it.label.toLowerCase()==='silver');
+                        const isPrice = col.title.toLowerCase().includes('price');
+                        const isByBudget = col.title.toLowerCase().includes('budget');
+                        const isByOccasion = col.title.toLowerCase().includes('by occasion');
+                        // Additional filter type checks
+                        const isPurity = col.title.toLowerCase().includes('purity');
+                        const isColor = col.title.toLowerCase().includes('colour') || col.title.toLowerCase().includes('color') || col.title.toLowerCase().includes('metal colour');
+                        const isEarringType = col.title.toLowerCase().includes('earrings types') || col.title.toLowerCase().includes('earring types');
+                        const isOccasion = col.title.toLowerCase().includes('occasion') && !col.title.toLowerCase().includes('by occasion');
+                        const isStyle = col.title.toLowerCase().includes('style');
+                        const isFor = col.title.toLowerCase().includes('for') && !col.title.toLowerCase().includes('price') && !col.title.toLowerCase().includes('budget') && !col.title.toLowerCase().includes('by occasion');
+                        
+                        const catSlug = normalizeCategory(it.label);
+                        const priceSlug = priceLabelToSlug(it.label);
+                        const metalSlug = it.label.toLowerCase();
+                        
+                        // Check if item is selected based on filter type
+                        const selected = (isCategory && mmCategories.includes(catSlug)) || 
+                                        (isMetal && mmMetals.includes(metalSlug)) || 
+                                        (isPrice && priceSlug && mmPrices.includes(priceSlug)) ||
+                                        (isByBudget && mmBudgets.includes(it.label)) ||
+                                        (isByOccasion && mmOccasions.includes(it.label)) ||
+                                        (isPurity && mmPurities.includes(it.label)) ||
+                                        (isColor && mmColors.includes(it.label)) ||
+                                        (isEarringType && mmEarringTypes.includes(it.label)) ||
+                                        (isOccasion && mmOccasions.includes(it.label)) ||
+                                        (isStyle && mmStyles.includes(it.label)) ||
+                                        (isFor && mmFor.includes(it.label));
+                        
+                        const onClick = (e: React.MouseEvent) => {
+                          e.preventDefault();
+                          if (isCategory) {
+                            setMmCategories(prev => prev.includes(catSlug) ? prev.filter(x=>x!==catSlug) : [...prev, catSlug]);
+                          } else if (isMetal) {
+                            setMmMetals(prev => prev.includes(metalSlug) ? prev.filter(x=>x!==metalSlug) : [...prev, metalSlug]);
+                          } else if (isByBudget) {
+                            setMmBudgets(prev => prev.includes(it.label) ? prev.filter(x=>x!==it.label) : [...prev, it.label]);
+                          } else if (isPrice) {
+                            setMmPrices(prev => prev.includes(priceSlug) ? prev.filter(x=>x!==priceSlug) : [...prev, priceSlug]);
+                          } else if (isPurity) {
+                            setMmPurities(prev => prev.includes(it.label) ? prev.filter(x=>x!==it.label) : [...prev, it.label]);
+                          } else if (isColor) {
+                            setMmColors(prev => prev.includes(it.label) ? prev.filter(x=>x!==it.label) : [...prev, it.label]);
+                          } else if (isEarringType) {
+                            setMmEarringTypes(prev => prev.includes(it.label) ? prev.filter(x=>x!==it.label) : [...prev, it.label]);
+                          } else if (isOccasion || isByOccasion) {
+                            setMmOccasions(prev => prev.includes(it.label) ? prev.filter(x=>x!==it.label) : [...prev, it.label]);
+                          } else if (isStyle) {
+                            setMmStyles(prev => prev.includes(it.label) ? prev.filter(x=>x!==it.label) : [...prev, it.label]);
+                          } else if (isFor) {
+                            setMmFor(prev => prev.includes(it.label) ? prev.filter(x=>x!==it.label) : [...prev, it.label]);
+                          } else if (it.href) {
+                            navigate(it.href);
+                            setActiveMenu(null);
+                          }
+                        };
+                        return (
+                          <a
+                            key={it.label}
+                            href={it.href || '#'}
+                            onClick={onClick}
+                            className={`group relative block text-gray-700 text-sm my-1 no-underline rounded px-1 transition-colors duration-150 hover:text-brand-burgundy hover:bg-amber-50/50 ${selected ? 'text-brand-burgundy font-medium bg-amber-50/60' : ''}`}
+                          >
+                            <span className="inline-flex items-center gap-2">
+                              {selected && (
+                                <svg width="12" height="12" viewBox="0 0 24 24" className="text-amber-500 drop-shadow-[0_1px_1px_rgba(0,0,0,0.15)]">
+                                  <defs>
+                                    <linearGradient id="sjStar" x1="0%" y1="0%" x2="100%" y2="100%">
+                                      <stop offset="0%" stopColor="#f59e0b" />
+                                      <stop offset="100%" stopColor="#f43f5e" />
+                                    </linearGradient>
+                                  </defs>
+                                  <path fill="url(#sjStar)" d="M12 2l1.8 4.9L19 8.2l-4 3.1 1.4 5.2L12 13.8 7.6 16.5 9 11.3 5 8.2l5.2-1.3L12 2z"/>
+                                </svg>
+                              )}
+                              {it.label}
+                            </span>
+                            <span className="pointer-events-none absolute left-0 -bottom-0.5 h-[2px] w-0 bg-gradient-to-r from-amber-400 to-rose-400 transition-all duration-200 group-hover:w-full"></span>
+                          </a>
+                        );
+                      })}
                     </div>
-                    {col.items.map((it) => {
-                      const isCategory = col.title.toLowerCase().includes('category') || col.title.toLowerCase()==='for her' || col.title.toLowerCase()==='for him' || col.title.toLowerCase()==='trending' || col.title.toLowerCase()==='themes' || col.title.toLowerCase()==='by occasion';
-                      const isMetal = col.title.toLowerCase().includes('metal') && (it.label.toLowerCase()==='gold' || it.label.toLowerCase()==='diamond' || it.label.toLowerCase()==='platinum' || it.label.toLowerCase()==='silver');
-                      const isPrice = col.title.toLowerCase().includes('price') || col.title.toLowerCase().includes('budget');
-                      const catSlug = normalizeCategory(it.label);
-                      const priceSlug = priceLabelToSlug(it.label);
-                      const metalSlug = it.label.toLowerCase();
-                      const selected = (isCategory && mmCategories.includes(catSlug)) || (isMetal && mmMetals.includes(metalSlug)) || (isPrice && priceSlug && mmPrices.includes(priceSlug));
-                      const onClick = (e: React.MouseEvent) => {
-                        e.preventDefault();
-                        if (isCategory) {
-                          setMmCategories(prev => prev.includes(catSlug) ? prev.filter(x=>x!==catSlug) : [...prev, catSlug]);
-                        } else if (isMetal) {
-                          setMmMetals(prev => prev.includes(metalSlug) ? prev.filter(x=>x!==metalSlug) : [...prev, metalSlug]);
-                        } else if (isPrice && priceSlug) {
-                          setMmPrices(prev => prev.includes(priceSlug) ? prev.filter(x=>x!==priceSlug) : [...prev, priceSlug]);
-                        } else if (it.href) {
-                          navigate(it.href);
-                          setActiveMenu(null);
+                  ))}
+                  {/* Promo column if present */}
+                  {MEGA_MENU[activeMenu]?.promo && (
+                    <div className="hidden md:flex flex-col gap-3">
+                      <img src={MEGA_MENU[activeMenu]!.promo!.image} alt="promo" className="w-full h-28 object-cover rounded-lg" />
+                      <div className="text-sm font-medium text-gray-900">{MEGA_MENU[activeMenu]!.promo!.title}</div>
+                      <a className="inline-flex items-center gap-1 text-brand-burgundy text-sm no-underline hover:underline" href={MEGA_MENU[activeMenu]!.promo!.href}>
+                        {MEGA_MENU[activeMenu]!.promo!.cta}
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
+                      </a>
+                    </div>
+                  )}
+                  {/* Actions row */}
+                  <div className="col-span-full flex items-center justify-end gap-3 pt-2">
+                    <button className="px-3 py-1.5 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm" onClick={()=>{ 
+                      setMmCategories([]); 
+                      setMmMetals([]); 
+                      setMmPrices([]); 
+                      setMmPurities([]);
+                      setMmColors([]);
+                      setMmEarringTypes([]);
+                      setMmOccasions([]);
+                      setMmStyles([]);
+                      setMmBudgets([]);
+                      setMmFor([]);
+                    }}>Clear</button>
+                    <button className="px-3 py-1.5 rounded-md bg-brand-burgundy text-white hover:opacity-90 text-sm" onClick={()=>{
+                      const search = new URLSearchParams();
+                      if (mmCategories.length) search.set('categories', mmCategories.join(','));
+                      if (mmMetals.length) search.set('metal', mmMetals.join(','));
+                      // Handle price filters - either from price ranges or budget filters
+                      let minPrice = null;
+                      let maxPrice = null;
+                      
+                      // Check if we have direct price filters
+                      if (mmPrices.length) {
+                        // Use the first price filter (should only be one selected)
+                        const priceRange = mmPrices[0];
+                        if (priceRange === 'under-25k') {
+                          maxPrice = 25000;
+                        } else if (priceRange === '25k-50k') {
+                          minPrice = 25000;
+                          maxPrice = 50000;
+                        } else if (priceRange === '50k-100k') {
+                          minPrice = 50000;
+                          maxPrice = 100000;
+                        } else if (priceRange === 'above-100k') {
+                          minPrice = 100000;
                         }
-                      };
-                      return (
-                        <a
-                          key={it.label}
-                          href={it.href || '#'}
-                          onClick={onClick}
-                          className={`group relative block text-gray-700 text-sm my-1 no-underline rounded px-1 transition-colors duration-150 hover:text-brand-burgundy hover:bg-amber-50/50 ${selected ? 'text-brand-burgundy font-medium bg-amber-50/60' : ''}`}
-                        >
-                          <span className="inline-flex items-center gap-2">
-                            {selected && (
-                              <svg width="12" height="12" viewBox="0 0 24 24" className="text-amber-500 drop-shadow-[0_1px_1px_rgba(0,0,0,0.15)]">
-                                <defs>
-                                  <linearGradient id="sjStar" x1="0%" y1="0%" x2="100%" y2="100%">
-                                    <stop offset="0%" stopColor="#f59e0b" />
-                                    <stop offset="100%" stopColor="#f43f5e" />
-                                  </linearGradient>
-                                </defs>
-                                <path fill="url(#sjStar)" d="M12 2l1.8 4.9L19 8.2l-4 3.1 1.4 5.2L12 13.8 7.6 16.5 9 11.3 5 8.2l5.2-1.3L12 2z"/>
-                              </svg>
-                            )}
-                            {it.label}
-                          </span>
-                          <span className="pointer-events-none absolute left-0 -bottom-0.5 h-[2px] w-0 bg-gradient-to-r from-amber-400 to-rose-400 transition-all duration-200 group-hover:w-full"></span>
-                        </a>
-                      );
-                    })}
+                      }
+                      
+                      // Check if we have budget filters (which should override direct price filters)
+                      if (mmBudgets.length) {
+                        // Use the first budget filter (should only be one selected)
+                        const budgetRange = mmBudgets[0];
+                        if (budgetRange.includes('Under') || budgetRange.includes('under')) {
+                          maxPrice = 10000;
+                        } else if (budgetRange.includes('10,000') && budgetRange.includes('25,000')) {
+                          minPrice = 10000;
+                          maxPrice = 25000;
+                        } else if (budgetRange.includes('25,000') && budgetRange.includes('50,000')) {
+                          minPrice = 25000;
+                          maxPrice = 50000;
+                        } else if (budgetRange.includes('50,000') || budgetRange.includes('50000')) {
+                          minPrice = 50000;
+                        }
+                      }
+                      
+                      // Add price filters to search params if set
+                      if (minPrice !== null) search.set('min_price', minPrice.toString());
+                      if (maxPrice !== null) search.set('max_price', maxPrice.toString());
+                      
+                      // Add additional filters to search params (maintain original case)
+                      if (mmPurities.length) search.set('purity', mmPurities.join(','));
+                      if (mmColors.length) search.set('color', mmColors.join(','));
+                      if (mmEarringTypes.length) search.set('earringType', mmEarringTypes.join(','));
+                      if (mmOccasions.length) search.set('occasion', mmOccasions.join(','));
+                      if (mmStyles.length) search.set('style', mmStyles.join(','));
+                      if (mmFor.length) search.set('for', mmFor.join(','));
+                      navigate(`/products?${search.toString()}`);
+                      setActiveMenu(null);
+                    }}>Apply</button>
                   </div>
-                ))}
-                {/* Promo column if present */}
-                {MEGA_MENU[activeMenu]?.promo && (
-                  <div className="hidden md:flex flex-col gap-3">
-                    <img src={MEGA_MENU[activeMenu]!.promo!.image} alt="promo" className="w-full h-28 object-cover rounded-lg" />
-                    <div className="text-sm font-medium text-gray-900">{MEGA_MENU[activeMenu]!.promo!.title}</div>
-                    <a className="inline-flex items-center gap-1 text-brand-burgundy text-sm no-underline hover:underline" href={MEGA_MENU[activeMenu]!.promo!.href}>
-                      {MEGA_MENU[activeMenu]!.promo!.cta}
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
-                    </a>
-                  </div>
-                )}
-                {/* Actions row */}
-                <div className="col-span-full flex items-center justify-end gap-3 pt-2">
-                  <button className="px-3 py-1.5 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm" onClick={()=>{ setMmCategories([]); setMmMetals([]); setMmPrices([]); }}>Clear</button>
-                  <button className="px-3 py-1.5 rounded-md bg-brand-burgundy text-white hover:opacity-90 text-sm" onClick={()=>{
-                    const search = new URLSearchParams();
-                    if (mmCategories.length) search.set('categories', mmCategories.join(','));
-                    if (mmMetals.length) search.set('metal', mmMetals.join(','));
-                    if (mmPrices.length) search.set('price', mmPrices.join(','));
-                    navigate(`/products?${search.toString()}`);
-                    setActiveMenu(null);
-                  }}>Apply</button>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
       </nav>
       
       {/* Hero Section with Image Slider */}

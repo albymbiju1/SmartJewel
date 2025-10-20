@@ -76,6 +76,10 @@ def create_app():
     from app.blueprints.webhooks.razorpay_webhook import bp as webhooks_bp
     app.register_blueprint(webhooks_bp)
 
+    # Store blueprint
+    from app.blueprints.store import bp as store_bp
+    app.register_blueprint(store_bp)
+
     @app.route("/")
     def index():
         # List all routes for debugging

@@ -442,8 +442,10 @@ def firebase_login():
                 project_id_opt = project_id_file or project_id_env
                 cred = credentials.Certificate(creds_path)
                 if project_id_opt:
+                    log.info("auth.firebase_login.init_with_env_path", project_id=project_id_opt)
                     firebase_admin.initialize_app(cred, {"projectId": project_id_opt})
                 else:
+                    log.info("auth.firebase_login.init_with_env_path_no_project")
                     firebase_admin.initialize_app(cred)
             else:
                 # Try common paths if GOOGLE_APPLICATION_CREDENTIALS not set
@@ -469,6 +471,7 @@ def firebase_login():
                         project_id_file = None
                     project_id_env = os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
                     project_id_opt = project_id_file or project_id_env
+                    log.info("auth.firebase_login.init_with_service_account", project_id=project_id_opt, file=creds_path)
                     cred = credentials.Certificate(creds_path)
                     if project_id_opt:
                         firebase_admin.initialize_app(cred, {"projectId": project_id_opt})
@@ -485,6 +488,7 @@ def firebase_login():
                                 data["private_key"] = data["private_key"].replace("\\n", "\n")
                             cred = credentials.Certificate(data)
                             project_id_opt = data.get("project_id") or os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
+                            log.info("auth.firebase_login.init_with_env_json", project_id=project_id_opt)
                             if project_id_opt:
                                 firebase_admin.initialize_app(cred, {"projectId": project_id_opt})
                             else:
@@ -504,10 +508,12 @@ def firebase_login():
                                 "private_key": private_key,
                                 "type": "service_account",
                             })
+                            log.info("auth.firebase_login.init_with_env_vars", project_id=project_id)
                             firebase_admin.initialize_app(cred, {"projectId": project_id})
                         else:
                             # 4) Last resort: Application Default Credentials (may work in GCP)
                             adc_project = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("FIREBASE_PROJECT_ID")
+                            log.warning("auth.firebase_login.init_with_adc", project_id=adc_project)
                             if adc_project:
                                 firebase_admin.initialize_app(options={"projectId": adc_project})
                             else:
@@ -517,19 +523,31 @@ def firebase_login():
             return jsonify({"error": "firebase_init_failed", "details": str(exc)}), 500
 
     try:
-        decoded = fb_auth.verify_id_token(id_token, check_revoked=True)
-    except fb_auth.RevokedIdTokenError:
-        log.warning("auth.firebase_login.revoked_token")
-        return jsonify({"error": "token_revoked"}), 401
-    except fb_auth.ExpiredIdTokenError:
-        log.warning("auth.firebase_login.expired_token")
-        return jsonify({"error": "token_expired"}), 401
-    except fb_auth.InvalidIdTokenError:
-        log.warning("auth.firebase_login.invalid_id_token")
-        return jsonify({"error": "invalid_id_token"}), 401
+        # First try with revocation check
+        try:
+            decoded = fb_auth.verify_id_token(id_token, check_revoked=True)
+        except fb_auth.RevokedIdTokenError as e:
+            log.warning("auth.firebase_login.revoked_token", error=str(e))
+            return jsonify({"error": "token_revoked", "details": str(e)}), 401
+        except (fb_auth.InvalidIdTokenError, Exception) as first_attempt_error:
+            # Try again without revocation check - sometimes this can interfere with verification
+            log.warning("auth.firebase_login.verify_with_revoke_failed", error=str(first_attempt_error))
+            try:
+                decoded = fb_auth.verify_id_token(id_token, check_revoked=False)
+                log.info("auth.firebase_login.verify_without_revoke_succeeded")
+            except Exception as second_attempt_error:
+                # Both attempts failed
+                raise first_attempt_error  # Re-raise the first error for proper handling
+    except fb_auth.ExpiredIdTokenError as e:
+        log.warning("auth.firebase_login.expired_token", error=str(e))
+        return jsonify({"error": "token_expired", "details": str(e)}), 401
+    except fb_auth.InvalidIdTokenError as e:
+        log.warning("auth.firebase_login.invalid_id_token", error=str(e), token_prefix=id_token[:50] if id_token else "")
+        return jsonify({"error": "invalid_id_token", "details": str(e)}), 401
     except Exception as e:
-        log.warning("auth.firebase_login.verify_failed", error=str(e))
-        return jsonify({"error": "verify_failed"}), 401
+        import traceback
+        log.warning("auth.firebase_login.verify_failed", error=str(e), traceback=traceback.format_exc())
+        return jsonify({"error": "verify_failed", "details": str(e)}), 401
 
     email = (decoded.get("email") or "").lower()
     name = decoded.get("name") or email.split('@')[0]

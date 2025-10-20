@@ -16,6 +16,7 @@ import { default as AdminOrdersPage } from './pages/admin/AdminOrdersPage';
 import { StaffDirectory } from './pages/admin/StaffDirectory';
 import { StaffSchedulePage } from './pages/admin/StaffSchedulePage';
 import { CustomerManagementDashboard } from './pages/admin/CustomerManagementDashboard';
+import { StoreManagementPage } from './pages/admin/StoreManagementPage';
 import { SalesDashboard } from './pages/sales/SalesDashboard';
 import { ProductsPage } from './pages/products/ProductsPage';
 import { AllJewelleryPage } from './pages/products/AllJewelleryPage';
@@ -37,6 +38,7 @@ import { ProfilePage } from './pages/ProfilePage';
 import EventBridge from './components/EventBridge';
 import { VerifyOtp } from './pages/VerifyOtp';
 import { AdvancedSearchPage } from './pages/products/AdvancedSearchPage';
+import FindStorePage from './pages/FindStorePage';
 
 export const AppRouter: React.FC = () => (
   <Router>
@@ -48,6 +50,7 @@ export const AppRouter: React.FC = () => (
       <Route path="/register" element={<App />} />
       <Route path="/verify-otp" element={<VerifyOtp />} />
       <Route path="/logout" element={<Logout />} />
+      <Route path="/find-store" element={<FindStorePage />} />
 
       {/* Admin Routes (protected) */}
       <Route path="/admin/dashboard" element={<RequireAuth><AdminDashboard /></RequireAuth>} />
@@ -60,6 +63,7 @@ export const AppRouter: React.FC = () => (
       <Route path="/admin/customers" element={<RequireAuth><CustomerManagementDashboard /></RequireAuth>} />
       <Route path="/admin/engagement" element={<RequireAuth><div>Customer Engagement</div></RequireAuth>} />
       <Route path="/admin/logs" element={<RequireAuth><div>System Logs</div></RequireAuth>} />
+      <Route path="/admin/stores" element={<RequireAuth><StoreManagementPage /></RequireAuth>} />
 
       {/* Store Manager Routes (protected) */}
       <Route path="/store/products" element={<RequireAuth><div>Store Products</div></RequireAuth>} />

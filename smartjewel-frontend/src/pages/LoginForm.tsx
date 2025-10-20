@@ -82,7 +82,23 @@ export const LoginForm: React.FC<Props> = ({ onSuccess, switchToRegister }) => {
       const userData = JSON.parse(localStorage.getItem('user_data') || '{}');
       onSuccess({ access_token: access, refresh_token: refresh }, userData);
     } catch (error: any) {
-      const message = error?.response?.data?.error || error?.message || 'Google sign-in failed. Please try again.';
+      // Better error message construction
+      let message = 'Google sign-in failed. Please try again.';
+      
+      if (error?.response?.data?.error === 'invalid_id_token') {
+        message = 'The authentication token is invalid. Your system clock may be out of sync. Please try again, or restart your browser.';
+      } else if (error?.response?.data?.error === 'token_expired') {
+        message = 'The authentication token expired. Please try signing in again.';
+      } else if (error?.response?.data?.error === 'verify_failed') {
+        message = 'Failed to verify authentication. Please check your internet connection and try again.';
+      } else if (error?.response?.data?.details) {
+        message = error.response.data.details;
+      } else if (error?.response?.data?.error) {
+        message = error.response.data.error;
+      } else if (error?.message) {
+        message = error.message;
+      }
+      
       setLoginError(message);
     } finally {
       setIsGoogleSigningIn(false);

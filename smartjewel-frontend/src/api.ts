@@ -29,9 +29,51 @@ export const api = axios.create({
 export interface AuthTokens { access_token: string; refresh_token: string; }
 
 export function setAuthToken(token?: string) {
-  if (token) api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-  else delete api.defaults.headers.common['Authorization'];
+  if (token) {
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    console.log('[setAuthToken] Authorization header set', { tokenLength: token.length, tokenStart: token.substring(0, 20) });
+  } else {
+    delete api.defaults.headers.common['Authorization'];
+    console.log('[setAuthToken] Authorization header cleared');
+  }
 }
+
+// Add request interceptor to log Authorization header
+api.interceptors.request.use(
+  (config) => {
+    const authHeader = config.headers['Authorization'];
+    console.log('[API Request]', {
+      method: config.method,
+      url: config.url,
+      hasAuthHeader: !!authHeader,
+      authHeaderStart: authHeader ? authHeader.substring(0, 30) : 'NONE'
+    });
+    return config;
+  },
+  (error) => {
+    console.error('[API Request Error]', error);
+    return Promise.reject(error);
+  }
+);
+
+// Add response interceptor to log status and errors
+api.interceptors.response.use(
+  (response) => {
+    console.log('[API Response]', {
+      status: response.status,
+      url: response.config.url
+    });
+    return response;
+  },
+  (error) => {
+    console.error('[API Response Error]', {
+      status: error.response?.status,
+      url: error.response?.config?.url,
+      data: error.response?.data
+    });
+    return Promise.reject(error);
+  }
+);
 
 // Removed get_db function as it referenced Flask backend code
 

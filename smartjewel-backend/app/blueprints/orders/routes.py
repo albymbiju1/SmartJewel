@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, current_app
+from flask import Blueprint, jsonify, current_app, request
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from bson import ObjectId
 from datetime import datetime
@@ -331,3 +331,58 @@ def request_cancellation(order_id: str):
 
     db.orders.update_one({"_id": oid}, update)
     return jsonify({"ok": True})
+
+
+@bp.route("/track/<order_id>", methods=["GET"])
+def track_order(order_id: str):
+    """Public endpoint to track order status by order ID."""
+    db = current_app.extensions.get('mongo_db')
+    if db is None:
+        return jsonify({"error": "db_unavailable"}), 503
+
+    try:
+        oid = ObjectId(order_id)
+        order = db.orders.find_one({"_id": oid, "deleted": {"$ne": True}})
+    except Exception:
+        # If ObjectId conversion fails, try string match
+        order = db.orders.find_one({"_id": order_id, "deleted": {"$ne": True}})
+    
+    # If still not found, try alternative fields
+    if not order:
+        order = db.orders.find_one({
+            "$and": [
+                {"deleted": {"$ne": True}},
+                {"$or": [
+                    {"order_id": order_id},
+                    {"tracking_number": order_id}
+                ]}
+            ]
+        })
+    
+    if not order:
+        return jsonify({"error": "order_not_found"}), 404
+
+    # Get the latest status
+    status = "unknown"
+    status_history = order.get("statusHistory", [])
+    if status_history:
+        status = status_history[-1].get("status", "unknown")
+    else:
+        status = order.get("status", "unknown")
+    
+    # Check for cancellation
+    cancellation = order.get("cancellation", {})
+    if cancellation.get("requested"):
+        status = "cancellation requested"
+    elif cancellation.get("approved"):
+        status = "cancellation approved"
+    
+    created_at = order.get("createdAt") or order.get("created_at")
+    
+    return jsonify({
+        "orderId": str(order.get("_id")),
+        "status": status,
+        "createdAt": created_at.isoformat() if isinstance(created_at, datetime) else created_at,
+        "trackingNumber": order.get("tracking_number"),
+        "cancellation": cancellation
+    })

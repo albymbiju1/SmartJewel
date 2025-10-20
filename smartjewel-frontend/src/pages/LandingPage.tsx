@@ -9,6 +9,7 @@ import { MENU as MEGA_MENU, NAV_TABS } from '../menuConfig';
 import { getRoleBasedRedirectPath } from '../utils/roleRedirect';
 import { MegaMenuFilter } from '../components/MegaMenuFilter';
 import { SearchBar } from '../components/SearchBar';
+import FloatingChatbot from '../components/chatbot/FloatingChatbot';
 
 
 export const LandingPage: React.FC = () => {
@@ -118,7 +119,11 @@ export const LandingPage: React.FC = () => {
         {/* Main header row */}
         <div className="container-xl relative flex items-center justify-between gap-4 py-2">
           <div className="hidden md:flex items-center gap-4">
-            <button className="inline-flex items-center gap-2 text-gray-600 hover:text-brand-burgundy px-2 py-1 rounded-md" title="Find a Store">
+            <button 
+              className="inline-flex items-center gap-2 text-gray-600 hover:text-brand-burgundy px-2 py-1 rounded-md" 
+              title="Find a Store"
+              onClick={() => navigate('/find-store')}
+            >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
               <span>Find a Store</span>
             </button>
@@ -673,6 +678,8 @@ export const LandingPage: React.FC = () => {
           </p>
         </div>
       </footer>
+      {/* Floating AI Chatbot */}
+      <FloatingChatbot />
     </div>
   );
 };

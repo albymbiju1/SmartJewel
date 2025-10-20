@@ -431,3 +431,200 @@ def post_recent_search():
 
     _record_recent_search(term, filters)
     return jsonify({"saved": True})
+
+
+# --- GenAI Chat Endpoint ---
+@bp.post('/chat')
+def chat():
+    """Handle intelligent chatbot requests using Mistral AI."""
+    try:
+        # Import current_app directly in the function scope to avoid scoping issues
+        from flask import current_app, request, jsonify
+        
+        # Get the database connection
+        db = current_app.extensions.get('mongo_db')
+        if db is None:
+            return jsonify({"error": "Database not available"}), 503
+
+        # Parse request data
+        data = request.get_json() or {}
+        user_message = data.get("message", "").strip()
+        
+        if not user_message:
+            return jsonify({"error": "Message is required"}), 400
+
+        # Configure Mistral AI
+        from mistralai import Mistral
+        import os
+        
+        # Get API key from environment
+        api_key = os.getenv("MISTRAL_API_KEY")
+        if not api_key:
+            return jsonify({"error": "Mistral API key not configured"}), 500
+            
+        client = Mistral(api_key=api_key)
+        
+        # Simple intent detection
+        intent = "general"
+        context = ""
+        response_text = ""
+        
+        # Convert to lowercase for easier matching
+        lower_message = user_message.lower()
+        
+        # Order cancellation intent - check this first as it's more specific
+        if ("cancel" in lower_message and ("order" in lower_message or "ord" in lower_message)) or \
+           lower_message.startswith("cancel my order") or \
+           lower_message.startswith("cancel order") or \
+           "cancel my order" in lower_message:
+            intent = "order_cancellation"
+            # Try to extract order ID
+            import re
+            order_id_match = re.search(r'(SJ-?\d+|\d{4,})', user_message, re.IGNORECASE)
+            if order_id_match:
+                order_id = order_id_match.group(1)
+                # Return a message indicating that cancellation needs to be done through the proper endpoint
+                response_text = f"To cancel your order {order_id}, please visit your Orders page and click the 'Cancel Order' button. If you need help with that, I can guide you through the process."
+            else:
+                response_text = "To cancel an order, please provide the order number. For example: 'Cancel my order 12345'"
+        
+        # Order tracking intent
+        elif any(keyword in lower_message for keyword in ["track", "status", "where is my order", "order #", "order number"]):
+            intent = "order_tracking"
+            # Try to extract order ID
+            import re
+            order_id_match = re.search(r'(SJ-?\d+|\d{4,})', user_message, re.IGNORECASE)
+            if order_id_match:
+                order_id = order_id_match.group(1)
+                # Use the new public tracking endpoint
+                try:
+                    # Import requests to make HTTP call
+                    import requests
+                    
+                    # Get the base URL of the current app
+                    base_url = request.url_root.rstrip('/')
+                    track_url = f"{base_url}/api/orders/track/{order_id}"
+                    
+                    # Make request to tracking endpoint
+                    track_response = requests.get(track_url)
+                    
+                    if track_response.status_code == 200:
+                        track_data = track_response.json()
+                        status = track_data.get("status", "unknown")
+                        created_at = track_data.get("createdAt", "")
+                        
+                        response_text = f"Order {order_id} is currently {status}."
+                        if created_at:
+                            response_text += f" It was created on {created_at.split('T')[0]}."
+                    elif track_response.status_code == 404:
+                        response_text = f"I couldn't find any order with ID {order_id}. Please check the order number and try again."
+                    else:
+                        response_text = f"Sorry, I'm having trouble tracking your order right now. Please try again later."
+                except Exception as e:
+                    print(f"Error tracking order: {str(e)}")
+                    response_text = f"Sorry, I'm having trouble tracking your order right now. Please try again later."
+            else:
+                response_text = "Please provide your order number to track it. For example: 'Where is my order 12345?'"
+        
+        # Product enquiry intent
+        elif any(keyword in lower_message for keyword in ["product", "item", "jewellery", "jewelry", "ring", "necklace", "earring", "bracelet", "gold", "diamond", "price", "under", "show me", "recommend"]):
+            intent = "product_enquiry"
+            # Extract key terms for product search
+            search_terms = []
+            
+            # Extract budget if mentioned
+            import re
+            budget_match = re.search(r'[₹$€£¥]\s*(\d+(?:,\d+)*)|(\d+(?:,\d+)*)\s*(?:rs|rupees|inr|dollars|usd)', user_message, re.IGNORECASE)
+            if budget_match:
+                budget = budget_match.group(1) or budget_match.group(2)
+                search_terms.append(f"budget: {budget}")
+            
+            # Extract product types
+            product_types = ["ring", "necklace", "earring", "bracelet", "pendant", "chain", "bangle", "mangalsutra"]
+            for pt in product_types:
+                if pt in lower_message:
+                    search_terms.append(f"type: {pt}")
+            
+            # Extract materials
+            materials = ["gold", "silver", "diamond", "emerald", "ruby", "sapphire", "pearl"]
+            for mat in materials:
+                if mat in lower_message:
+                    search_terms.append(f"material: {mat}")
+            
+            # Query products from database
+            query = {"status": "active"}
+            if search_terms:
+                # Simple search based on terms
+                text_search = " ".join([term.split(": ")[1] for term in search_terms if ":" in term])
+                if text_search:
+                    # Try to find relevant products
+                    products = list(db.items.find(query).limit(3))
+                    if products:
+                        product_names = [p.get("name", "Unnamed Product") for p in products]
+                        response_text = f"Here are some products I found: {', '.join(product_names)}. Would you like more details about any of these?"
+                    else:
+                        response_text = "I couldn't find any products matching your criteria. Would you like me to help you with something else?"
+                else:
+                    response_text = "I can help you find jewellery. What type of jewellery are you looking for?"
+            else:
+                response_text = "I can help you find jewellery. What type of jewellery are you looking for?"
+        
+        # FAQ intent
+        elif any(keyword in lower_message for keyword in ["faq", "question", "how to", "what is", "return", "policy", "warranty", "care", "clean", "resize", "custom", "delivery"]):
+            intent = "faq"
+            response_text = "I can help answer your questions about our products and services. Could you please be more specific about what you'd like to know?"
+        
+        # Default to general intent
+        else:
+            intent = "general"
+            context = "General conversation"
+
+        # If we haven't set a specific response yet, use Mistral AI
+        if not response_text:
+            # Prepare prompt for Mistral AI
+            prompt = f"""
+You are an intelligent jewellery shopping assistant for SmartJewel. 
+Respond naturally and helpfully to customer inquiries.
+
+User message: {user_message}
+Intent detected: {intent}
+Context: {context}
+
+Please provide a helpful, concise response appropriate for a jewellery store chatbot.
+For order-related queries, be specific and helpful.
+For other queries, be polite but explain that you primarily assist with order-related questions.
+"""
+
+            # Generate response using Mistral AI
+            messages = [
+                {"role": "user", "content": prompt}
+            ]
+            
+            # Use a suitable model - mistral-tiny, mistral-small, or mistral-medium
+            # Limit response to 150 tokens to avoid lengthy responses
+            chat_response = client.chat.complete(
+                model="mistral-small",
+                messages=messages,
+                max_tokens=150
+            )
+            
+            response_text = chat_response.choices[0].message.content
+
+        # Return the response
+        return jsonify({
+            "reply": response_text,
+            "intent": intent,
+            "context": context
+        })
+        
+    except Exception as e:
+        # Log the error for debugging
+        import traceback
+        print(f"Chat endpoint error: {str(e)}")
+        print(traceback.format_exc())
+        
+        # Return a friendly error message
+        return jsonify({
+            "reply": "I'm sorry, I'm having trouble processing your request right now. Please try again later or contact our customer support team.",
+            "error": "internal_error"
+        }), 500

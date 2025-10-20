@@ -33,6 +33,7 @@ export const ROLE_NAVIGATION: Record<string, RoleNavigation> = {
       { label: 'Sales', key: 'sales', href: '/admin/sales' },
       { label: 'Inventory', key: 'inventory_details', href: '/admin/inventory' },
       { label: 'Customers', key: 'customers', href: '/admin/customers' },
+      { label: 'Stores', key: 'stores', href: '/admin/stores' },
       { label: 'Engagement', key: 'engagement', href: '/admin/engagement' },
       { label: 'Logs', key: 'logs', href: '/admin/logs' },
     ],

@@ -115,6 +115,12 @@ export default function ImageSlider() {
   // Keyboard navigation
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      // Ignore keyboard events when focus is on input/textarea elements
+      const activeElement = document.activeElement;
+      if (activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement) {
+        return;
+      }
+
       switch (e.key) {
         case "ArrowLeft":
           e.preventDefault();

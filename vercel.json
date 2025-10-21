@@ -2,7 +2,7 @@
   "version": 2,
   "builds": [
     { 
-      "src": "smartjewel-backend/wsgi.py", 
+      "src": "api/index.py", 
       "use": "@vercel/python",
       "config": {
         "maxLambdaSize": "15mb",
@@ -13,13 +13,8 @@
   "routes": [
     { 
       "src": "/(.*)", 
-      "dest": "smartjewel-backend/wsgi.py" 
+      "dest": "/api/index.py" 
     }
-  ],
-  "functions": {
-    "smartjewel-backend/wsgi.py": {
-      "includeFiles": "smartjewel-backend/**"
-    }
-  }
+  ]
 }
 

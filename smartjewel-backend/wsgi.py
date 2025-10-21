@@ -1,8 +1,10 @@
 import os
 import sys
 
-# Add backend folder to Python path so 'app' can be imported
-sys.path.append(os.path.dirname(__file__))
+# Add backend folder to Python path FIRST so 'app' can be imported
+# Use insert(0, ...) to put it at the beginning and abspath for reliability
+backend_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, backend_dir)
 
 from app import create_app  # now this will work
 

@@ -503,10 +503,16 @@ def firebase_login():
                         if project_id and client_email and private_key:
                             private_key = private_key.replace("\\n", "\n")
                             cred = credentials.Certificate({
-                                "project_id": project_id,
-                                "client_email": client_email,
-                                "private_key": private_key,
                                 "type": "service_account",
+                                "project_id": project_id,
+                                "private_key_id": "",
+                                "private_key": private_key,
+                                "client_email": client_email,
+                                "client_id": "",
+                                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                                "token_uri": "https://oauth2.googleapis.com/token",
+                                "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                                "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/{client_email}"
                             })
                             log.info("auth.firebase_login.init_with_env_vars", project_id=project_id)
                             firebase_admin.initialize_app(cred, {"projectId": project_id})

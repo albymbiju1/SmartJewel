@@ -12,6 +12,14 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID || "your-app-id"
 };
 
+// Log configuration status (hide sensitive values)
+console.log('[Firebase] Configuration loaded:', {
+  hasApiKey: !!firebaseConfig.apiKey && firebaseConfig.apiKey !== "your-api-key",
+  authDomain: firebaseConfig.authDomain,
+  projectId: firebaseConfig.projectId,
+  hasAppId: !!firebaseConfig.appId && firebaseConfig.appId !== "your-app-id"
+});
+
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 

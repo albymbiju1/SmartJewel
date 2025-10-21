@@ -26,12 +26,15 @@ class FirebaseAuthService {
    */
   async signInWithGoogle(): Promise<FirebaseAuthResult> {
     try {
+      console.log('[Firebase] Attempting Google sign-in...');
       const result = await signInWithPopup(auth, googleProvider);
+      console.log('[Firebase] Google sign-in successful:', result.user.email);
       return {
         user: result.user,
         isNewUser: result.user.metadata.creationTime === result.user.metadata.lastSignInTime
       };
     } catch (error) {
+      console.error('[Firebase] Google sign-in error:', error);
       throw this.handleAuthError(error as AuthError);
     }
   }

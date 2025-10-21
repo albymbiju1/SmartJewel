@@ -20,7 +20,7 @@ type QuickAction = {
 const LUX_GOLD = 'var(--brand-gold)';
 const LUX_BURGUNDY = 'var(--brand-burgundy)';
 
-const BOT_WELCOME = "Hi there ✨ I'm your Jewellery Assistant. Looking for something special today?";
+const BOT_WELCOME = "Hi there ✨ I'm your Jewellery Expert Assistant. I can help you find the perfect jewelry, explain gold purity, recommend care tips, and assist with orders. What would you like to know about our jewelry collection?";
 
 function uid() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -51,11 +51,10 @@ function useUserLocalStorage<T>(key: string, initial: T, userId: string | null) 
 }
 
 const quickActions: QuickAction[] = [
-  { label: 'Shop by Category', prompt: 'Show me jewellery by category' },
-  { label: 'Diamond rings under ₹50k', prompt: 'Show me diamond rings under ₹50,000' },
-  { label: 'Gold bangles with stones', prompt: 'Do you have gold bangles with stones?' },
-  { label: 'Track My Order', prompt: 'Track order: SJ-12345' },
-  { label: 'Cancel Order', prompt: 'How do I cancel my order 5678?' },
+  { label: 'Diamond Engagement Rings', prompt: 'Show me diamond engagement rings under ₹100000' },
+  { label: 'Gold Rate Today', prompt: 'What is today\'s gold rate?' },
+  { label: 'Ring Size Guide', prompt: 'How do I measure my ring size?' },
+  { label: 'My Recent Orders', prompt: 'Show my recent orders' },
 ];
 
 const bubbleVariants: { [key: string]: Variant } = {
@@ -117,6 +116,26 @@ export const FloatingChatbot: React.FC = () => {
     setMessages((prev) => [...prev, { id: uid(), role: 'user', text, createdAt: Date.now() }]);
   };
 
+  // Fetch latest cached gold rate from backend
+  const getGoldRate = async () => {
+    try {
+      const { data } = await api.get('/market/gold-rate');
+      const rates = data?.rates || {} as Record<string, number>;
+      const upd = data?.updated_at as string | undefined;
+      const fmt = (n?: number) => typeof n === 'number' ? `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}/g` : 'N/A';
+      const lines = [
+        `24K: ${fmt(rates['24k'])}`,
+        `22K: ${fmt(rates['22k'])}`,
+        `18K: ${fmt(rates['18k'])}`,
+        `14K: ${fmt(rates['14k'])}`,
+      ].join('\n');
+      const updated = upd ? `\nUpdated: ${new Date(upd).toLocaleString('en-IN')}` : '';
+      return `Current gold rates (per gram)\n${lines}${updated}\n\nFor the most accurate pricing on jewellery, please visit our store or website as making charges may apply.`;
+    } catch (e) {
+      return null;
+    }
+  };
+
   const pushBotMessage = (text: string) => {
     setMessages((prev) => [...prev, { id: uid(), role: 'bot', text, createdAt: Date.now() }]);
   };
@@ -145,14 +164,25 @@ export const FloatingChatbot: React.FC = () => {
     // Accept patterns like SJ-12345 or bare numbers with length >= 5
     const sj = text.match(/\bSJ[-_ ]?(\w{4,})\b/i);
     if (sj) return `SJ-${sj[1].toUpperCase()}`;
+    
+    // First try to match MongoDB ObjectId pattern (24 hex characters)
+    const objectId = text.match(/\b([0-9a-fA-F]{24})\b/);
+    if (objectId) return objectId[1];
+    
+    // Then try alphanumeric sequences of 5 or more characters
+    const alphanum = text.match(/\b([a-zA-Z0-9]{5,})\b/);
+    if (alphanum) return alphanum[1];
+    
+    // Finally try numeric sequences of 5 or more digits
     const num = text.match(/\b(\d{5,})\b/);
     if (num) return num[1];
+    
     return null;
   };
 
   const trackOrder = async (orderId: string) => {
     try {
-      const { data } = await api.get(`/orders/track/${encodeURIComponent(orderId)}`);
+      const { data } = await api.get(`/api/orders/track/${encodeURIComponent(orderId)}`);
       return data;
     } catch (err: unknown) {
       return { error: true };
@@ -162,7 +192,21 @@ export const FloatingChatbot: React.FC = () => {
   // New function to send messages to the GenAI chat endpoint
   const sendToAI = async (message: string) => {
     try {
-      const response = await api.post('/catalog/chat', { message });
+      // Include more context about the user's browsing session
+      const pageInfo = `User is currently on: ${window.location.pathname}`;
+      
+      // Include recent search history if available
+      const recentSearches = messages.filter(m => m.role === 'user').slice(-3).map(m => m.text).join('; ');
+      const searchContext = recentSearches ? `Recent user searches: ${recentSearches}` : '';
+      
+      // Enhanced message with context
+      const enhancedMessage = `${message}\n\nContext: ${pageInfo}${searchContext ? `\n${searchContext}` : ''}`;
+      
+      const history = messages.slice(-6).map((m) => ({
+        role: m.role === 'user' ? 'user' : 'assistant',
+        content: m.text,
+      }));
+      const response = await api.post('/catalog/chat', { message: enhancedMessage, history });
       return response.data.reply;
     } catch (error) {
       console.error('AI chat error:', error);
@@ -172,29 +216,42 @@ export const FloatingChatbot: React.FC = () => {
 
   const recommendFromPrompt = (text: string) => {
     const wantsDiamond = /diamond/i.test(text);
-    const wantsGold = /gold/i.test(text);
-    const wantsNecklace = /necklace|necklaces|mala|haram/i.test(text);
+    const wantsGold = /\b(18k|22k|24k|gold)\b/i.test(text);
+    const wantsPlatinum = /platinum/i.test(text);
+    const wantsSilver = /silver/i.test(text);
+    const wantsNecklace = /necklace|necklaces|mala|haram|chain/i.test(text);
     const wantsRing = /ring|rings|band/i.test(text);
-    const wantsBudget = /under\s?\₹?\s?([0-9,]+)|under\s?(\d+)/i.exec(text);
-    const budget = wantsBudget ? (wantsBudget[1] || wantsBudget[2]) : undefined;
+    const wantsBangle = /bangle|kada|bracelet/i.test(text);
+    const wantsEarring = /earring|stud|jhumka/i.test(text);
+    const wantsPendant = /pendant/i.test(text);
+    const wantsMangalsutra = /mangalsutra/i.test(text);
+    const wantsNosePin = /nose[-\s]pin/i.test(text);
+    const budgetMatch = /(under|below|upto|up to)\s*₹?\s*([\d,]+)/i.exec(text) || /₹\s*([\d,]+)\s*budget/i.exec(text);
+    const budget = budgetMatch ? parseInt(budgetMatch[2].replace(/,/g, '')) : undefined;
 
     const items: string[] = [];
+    if (wantsDiamond && wantsRing) items.push('Solitaire Diamond Ring DR-201');
     if (wantsDiamond && wantsNecklace) items.push('Elegant Diamond Necklace DN-102');
     if (wantsGold && wantsRing) items.push('22K Gold Ring GR-221');
-    if (!items.length) items.push('Classic Pendant PN-310', 'Minimal Stud Earrings ER-118');
+    if (wantsGold && wantsBangle) items.push('Traditional 22K Gold Bangle GB-145');
+    if (wantsGold && wantsNecklace) items.push('Exquisite Gold Haram GH-305');
+    if (wantsEarring) items.push('Minimal Gold Stud Earrings ER-118');
+    if (wantsMangalsutra) items.push('Diamond Mangalsutra MM-402');
+    if (wantsNosePin) items.push('Traditional Gold Nose Pin NP-501');
+    if (wantsPlatinum && wantsRing) items.push('Platinum Wedding Band PB-601');
+    if (wantsSilver && wantsEarring) items.push('Silver Jhumka Earrings SE-702');
+    if (!items.length) items.push('Classic Gold Pendant PN-310', 'Everyday Gold Chain CH-032');
 
-    const budgetLine = budget ? ` within your budget of ₹${budget}` : '';
-    return `Here are a few picks${budgetLine}:
-• ${items.join('\n• ') }
-Would you like me to open the products page filtered for you?`;
+    const budgetLine = budget ? ` within your budget of ₹${budget.toLocaleString('en-IN')}` : '';
+    const query = encodeURIComponent(text);
+    const link = `${window.location.origin}/products?query=${query}`;
+    return `Here are a few curated picks${budgetLine}:
+• ${items.join('\n• ')}
+Browse our full collection here → ${link}`;
   };
 
   const faqAnswer = (text: string): string | null => {
-    if (/custom/i.test(text)) return 'Yes, we offer customization on select designs. Share your idea and our experts will help craft it.';
-    if (/resize|resizing|size/i.test(text)) return 'Most rings can be resized by 1–2 sizes. Provide your order ID or visit our store for precise assistance.';
-    if (/warranty|guarantee/i.test(text)) return 'We provide a 12-month warranty covering manufacturing defects. Wear-and-tear and mishandling are excluded.';
-    if (/care|clean/i.test(text)) return 'To care for your jewellery, store separately, avoid harsh chemicals, and clean gently with a soft cloth.';
-    if (/gem|diamond|emerald|ruby|sapphire/i.test(text)) return 'Gemstone tip: Diamonds rank 10 on the Mohs scale. Clean with mild soap and a soft brush for lasting sparkle.';
+    // Always return null to disable FAQ-based responses
     return null;
   };
 
@@ -234,28 +291,43 @@ Would you like me to open the products page filtered for you?`;
       return;
     }
 
+    // Show recent orders
+    if (lower.includes('recent orders') || lower.includes('my orders') || lower.includes('order history')) {
+      setIsTyping(true);
+      const orders = await getRecentOrders();
+      const response = formatOrderHistory(orders);
+      setIsTyping(false);
+      pushBotMessage(response);
+      return;
+    }
+
     const words = trimmed.split(/\s+/);
-    const productMatch = /(product|item|sku)/.test(lower);
-    const hasName = words.length > 1;
-    if (productMatch || hasName) {
+    const productIntent = /(product|item|sku|show|find|recommend|suggest|looking for|want)/.test(lower) || 
+                         (/(ring|necklace|bangle|bracelet|chain|earring|pendant|stud|mangalsutra|nose pin|anklet|diamond|platinum|silver)/i.test(lower) && !/^gold\s*$/i.test(trimmed));
+    if (productIntent) {
       try {
+        // Extract key terms for better search
+        const searchTerms = trimmed.replace(/(show|find|recommend|suggest|looking for|want|me)/gi, '').trim();
+        
         const { data } = await api.get('/catalog/search', {
           params: {
-            q: trimmed,
+            q: searchTerms,
             page: 1,
             per_page: 5,
           },
         });
 
-        const results: Array<{ _id?: string; name?: string; sku?: string; price?: number }> = data?.results || [];
+        const results: Array<{ _id?: string; name?: string; sku?: string; price?: number; category?: string; metal?: string }> = data?.results || [];
         if (results.length) {
-          const formatProductLine = (product: { _id?: string; name?: string; sku?: string; price?: number }) => {
+          const formatProductLine = (product: { _id?: string; name?: string; sku?: string; price?: number; category?: string; metal?: string }) => {
             const name = product.name || product.sku || 'Product';
             const sku = product.sku ? ` (SKU: ${product.sku})` : '';
+            const category = product.category ? ` ${product.category}` : '';
+            const metal = product.metal ? ` ${product.metal}` : '';
             const price = typeof product.price === 'number' ? ` - ₹${product.price.toLocaleString('en-IN')}` : '';
             const id = product._id || product.sku;
             const link = id ? `${window.location.origin}/products?highlight=${encodeURIComponent(id)}` : `${window.location.origin}/products`;
-            return `${name}${sku}${price} → ${link}`;
+            return `${name}${category}${metal}${sku}${price} → ${link}`;
           };
 
           const message = `Here are the top ${results.length} matches I found:\n${results
@@ -268,7 +340,7 @@ Would you like me to open the products page filtered for you?`;
           return;
         }
 
-        pushBotMessage("I couldn't find a matching product. Please try a different description or SKU.");
+        pushBotMessage("I couldn't find a matching product. Please try a different description or browse our full collection on our website.");
         setIsTyping(false);
         return;
       } catch (error) {
@@ -279,10 +351,39 @@ Would you like me to open the products page filtered for you?`;
       }
     }
 
-    // Use GenAI for all other queries
+    // Gold rate live fetch - moved before FAQ to handle gold price queries properly
+    if (/(gold\s*rate|gold\s*price|today'?s\s*gold|price.*gold.*1\s*gram|1\s*gram.*gold.*price|price.*1\s*gram.*gold|1\s*gram.*price.*gold|what.*price.*1\s*gram.*gold|what.*gold.*price|how\s*much.*1\s*gram.*gold|how\s*much.*gold.*1\s*gram)/i.test(lower)) {
+      const info = await getGoldRate();
+      if (info) {
+        pushBotMessage(info);
+      } else {
+        // Fallback to AI if we can't fetch the rate
+        const aiResponse = await sendToAI(trimmed);
+        pushBotMessage(aiResponse || 'I could not fetch the live rate right now. Please try again shortly or check our gold rate page.');
+      }
+      setIsTyping(false);
+      return;
+    }
+
+    // Product style/budget recommendations
+    const wantsSuggest = /(suggest|recommend|ideas|options)/i.test(trimmed) || /(under|below|upto|up to)\s*₹?\s*[\d,]+/i.test(trimmed);
+    if (wantsSuggest) {
+      pushBotMessage(recommendFromPrompt(trimmed));
+      setIsTyping(false);
+      return;
+    }
+
+    // Use GenAI for all other queries with jewellery prompt
     const aiResponse = await sendToAI(trimmed);
     setIsTyping(false);
-    pushBotMessage(aiResponse);
+    
+    // Check if the response is meaningful
+    if (aiResponse && aiResponse.length > 10 && !aiResponse.toLowerCase().includes("i'm sorry") && !aiResponse.toLowerCase().includes("having trouble")) {
+      pushBotMessage(aiResponse);
+    } else {
+      // Provide a more helpful fallback response
+      pushBotMessage("I'd be happy to help you with jewelry questions! I can assist with product recommendations, gold rates, ring sizing, care tips, and order tracking. Could you please be more specific about what you're looking for?");
+    }
   }, []);
 
   const Avatar: React.FC<{ role: ChatRole }> = ({ role }) => {
@@ -317,6 +418,44 @@ Would you like me to open the products page filtered for you?`;
         {isUser && <Avatar role={m.role} />}
       </motion.div>
     );
+  };
+
+  // Function to fetch user's recent orders
+  const getRecentOrders = async () => {
+    try {
+      const { data } = await api.get('/api/orders/my-orders');
+      return data?.orders || [];
+    } catch (error) {
+      console.error('Failed to fetch orders:', error);
+      return [];
+    }
+  };
+
+  // Function to format order history response
+  const formatOrderHistory = (orders: any[]) => {
+    if (!orders.length) {
+      return "You don't have any orders yet. When you place an order, it will appear here.";
+    }
+    
+    const recentOrders = orders.slice(0, 5); // Get last 5 orders
+    const orderLines = recentOrders.map((order: any) => {
+      const orderId = order.orderId?.substring(0, 8) + '...';
+      const amount = typeof order.amount === 'number' ? `₹${order.amount.toLocaleString('en-IN')}` : 'N/A';
+      const date = order.createdAt ? new Date(order.createdAt).toLocaleDateString('en-IN') : 'N/A';
+      
+      // Get latest status
+      let status = 'Processing';
+      if (order.statusHistory && order.statusHistory.length > 0) {
+        status = order.statusHistory[order.statusHistory.length - 1].status || status;
+      } else if (order.status) {
+        status = order.status;
+      }
+      
+      return `• Order #${orderId} (${date}) - ${amount} [${status}]`;
+    });
+    
+    const ordersList = orderLines.join('\n');
+    return `Here are your recent orders:\n${ordersList}\n\nTo track a specific order, please provide the full order ID.`;
   };
 
   return (

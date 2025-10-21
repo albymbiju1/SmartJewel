@@ -239,8 +239,8 @@ export const StoreManagementPage: React.FC = () => {
 
           {/* Store Form Modal */}
           {showForm && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4 py-10">
-              <div className="w-full max-w-4xl rounded-3xl bg-white shadow-2xl">
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4 py-10 overflow-y-auto">
+              <div className="w-full max-w-4xl rounded-3xl bg-white shadow-2xl max-h-[90vh] overflow-y-auto">
                 <div className="flex items-center justify-between border-b border-gray-100 px-8 py-6">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-500">
@@ -327,14 +327,14 @@ export const StoreManagementPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="mt-6 rounded-2xl border border-gray-100 bg-gray-50/60 p-6">
+                    <div className="mt-0 rounded-2xl border border-gray-100 bg-gray-50/60 p-6">
                       <h4 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Contact & Timing</h4>
                       <p className="mt-1 text-xs text-gray-500">
                         These details ensure your customers and staff can reach the store easily.
                       </p>
 
                       <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-                        <div>
+                        <div className="md:col-span-2">
                           <label className="mb-2 block text-sm font-medium text-gray-700">Primary Phone *</label>
                           <input
                             type="tel"
@@ -342,12 +342,12 @@ export const StoreManagementPage: React.FC = () => {
                             value={formData.phone}
                             onChange={handleFormChange}
                             required
-                            className={inputClasses}
+                            className={`${inputClasses} py-3 text-base`}
                             placeholder="+91 98765 43210"
                           />
                         </div>
 
-                        <div>
+                        <div className="md:col-span-2">
                           <label className="mb-2 block text-sm font-medium text-gray-700">Store Email *</label>
                           <input
                             type="email"
@@ -355,7 +355,7 @@ export const StoreManagementPage: React.FC = () => {
                             value={formData.email}
                             onChange={handleFormChange}
                             required
-                            className={inputClasses}
+                            className={`${inputClasses} py-3 text-base`}
                             placeholder="bandra.smartjewel@stores.com"
                           />
                         </div>

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Gold Query Test</title>
+</head>
+<body>
+    <h1>Gold Query Test</h1>
+    <button onclick="testGoldQuery()">Test "What is the price of 1 gram gold?"</button>
+    <button onclick="testGoldRateQuery()">Test "What is the gold rate today?"</button>
+    <button onclick="testFAQQuery()">Test "What is BIS hallmark?"</button>
+    <div id="result"></div>
+
+    <script>
+        function faqAnswer(text) {
+            // Skip FAQ for price/rate queries that should go to the gold rate function or AI
+            if (/(gold\s*rate|gold\s*price|today'?s\s*gold|price.*gold|gold.*price|1\s*gram.*gold|gold.*1\s*gram)/i.test(text)) {
+                return null;
+            }
+            
+            if (/hallmark|bis/i.test(text)) return 'BIS hallmark certification ensures the purity of gold jewelry.';
+            return null;
+        }
+        
+        function isGoldRateQuery(lower) {
+            return /(gold\s*rate|gold\s*price|today'?s\s*gold|price.*gold.*1\s*gram|1\s*gram.*gold.*price)/i.test(lower);
+        }
+
+        async function testGoldQuery() {
+            const message = "What is the price of 1 gram gold?";
+            await runTest(message);
+        }
+        
+        async function testGoldRateQuery() {
+            const message = "What is the gold rate today?";
+            await runTest(message);
+        }
+        
+        async function testFAQQuery() {
+            const message = "What is BIS hallmark?";
+            await runTest(message);
+        }
+
+        async function runTest(message) {
+            const resultDiv = document.getElementById('result');
+            const lower = message.toLowerCase();
+            
+            try {
+                // Check if this is a gold rate query
+                const isGoldQuery = isGoldRateQuery(lower);
+                
+                // Check if this is an FAQ query
+                const faqResponse = faqAnswer(message);
+                
+                let result = `<h3>Testing: "${message}"</h3>`;
+                result += `<p>Is gold rate query: ${isGoldQuery}</p>`;
+                result += `<p>FAQ response: ${faqResponse ? `"${faqResponse}"` : 'null'}</p>`;
+                
+                if (isGoldQuery) {
+                    result += `<p><strong>Result:</strong> This should be handled by the gold rate function</p>`;
+                } else if (faqResponse) {
+                    result += `<p><strong>Result:</strong> This should be handled by the FAQ function</p>`;
+                } else {
+                    result += `<p><strong>Result:</strong> This would go to the AI</p>`;
+                }
+                
+                resultDiv.innerHTML = result;
+            } catch (error) {
+                resultDiv.innerHTML = `<p>Error: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>

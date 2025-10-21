@@ -171,10 +171,10 @@ export const RoleBasedNavigation: React.FC<RoleBasedNavigationProps> = ({ childr
         </div>
       </nav>
 
-      <div className="flex">
+      <div className="flex h-[calc(100vh-5rem)] overflow-hidden">
         {/* Left Sidebar (for items like Add, Edit, Approve Discounts) */}
         {navigation.leftSidebarItems && navigation.leftSidebarItems.length > 0 && (
-          <div className="w-72 bg-white shadow-lg border-r border-gray-200">
+          <div className="w-72 bg-white shadow-lg border-r border-gray-200 h-full overflow-y-auto">
             <div className="h-full py-6">
               <div className="px-4 mb-4">
                 <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Quick Actions</h3>
@@ -202,15 +202,15 @@ export const RoleBasedNavigation: React.FC<RoleBasedNavigationProps> = ({ childr
         )}
 
         {/* Main Content Area */}
-        <div className="flex-1 flex">
+        <div className="flex-1 flex min-w-0">
           {/* Main Content */}
-          <main className="flex-1 p-8 bg-gray-50">
+          <main className="flex-1 p-8 bg-gray-50 overflow-y-auto">
             {children}
           </main>
 
           {/* Right Sidebar (for navigation items like Items, Stock, etc.) */}
           {navigation.sidebarItems && navigation.sidebarItems.length > 0 && (
-            <div className="w-72 bg-white shadow-lg border-l border-gray-200">
+            <div className="w-72 bg-white shadow-lg border-l border-gray-200 h-full overflow-y-auto">
               <div className="h-full py-6">
                 <div className="px-4 mb-4">
                   <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Navigation</h3>

@@ -436,7 +436,12 @@ def post_recent_search():
 # --- GenAI Chat Endpoint ---
 @bp.post('/chat')
 def chat():
-    """Handle intelligent chatbot requests using Mistral AI."""
+    """Handle intelligent chatbot requests using Mistral AI.
+
+    Strategy:
+    - Fast-path only for order cancel/track with a detected order ID (returns deterministic text or calls internal tracker).
+    - For everything else, delegate to Mistral with a jewellery-specific system prompt to ensure intelligent, on-topic replies.
+    """
     try:
         # Import current_app directly in the function scope to avoid scoping issues
         from flask import current_app, request, jsonify
@@ -449,6 +454,7 @@ def chat():
         # Parse request data
         data = request.get_json() or {}
         user_message = data.get("message", "").strip()
+        history = data.get("history") or []  # optional: list of {role, content}
         
         if not user_message:
             return jsonify({"error": "Message is required"}), 400
@@ -456,21 +462,32 @@ def chat():
         # Configure Mistral AI
         from mistralai import Mistral
         import os
-        
-        # Get API key from environment
+
         api_key = os.getenv("MISTRAL_API_KEY")
         if not api_key:
             return jsonify({"error": "Mistral API key not configured"}), 500
-            
+
+        model_name = os.getenv("MISTRAL_MODEL", "mistral-small")
+        max_tokens = int(os.getenv("MISTRAL_MAX_TOKENS", "150"))  # Reduced from 220 to 150
+        temperature = float(os.getenv("MISTRAL_TEMPERATURE", "0.4"))
         client = Mistral(api_key=api_key)
-        
-        # Simple intent detection
+
+        # Minimal intent detection for tool-like paths; otherwise rely on LLM
         intent = "general"
         context = ""
         response_text = ""
-        
-        # Convert to lowercase for easier matching
+
         lower_message = user_message.lower()
+        
+        # Debug output for intent detection
+        print(f"Processing message: {user_message}")
+        print(f"Lower message: {lower_message}")
+        
+        # Check gold rate intent first
+        is_gold_rate_query = (any(keyword in lower_message for keyword in ["gold rate", "gold price", "price of gold", "rate of gold"]) or \
+             ("gold" in lower_message and "1 gram" in lower_message and any(keyword in lower_message for keyword in ["price", "rate", "cost", "much"])) or \
+             ("price" in lower_message and "1 gram" in lower_message and "gold" in lower_message))
+        print(f"Is gold rate query: {is_gold_rate_query}")
         
         # Order cancellation intent - check this first as it's more specific
         if ("cancel" in lower_message and ("order" in lower_message or "ord" in lower_message)) or \
@@ -526,88 +543,80 @@ def chat():
             else:
                 response_text = "Please provide your order number to track it. For example: 'Where is my order 12345?'"
         
-        # Product enquiry intent
-        elif any(keyword in lower_message for keyword in ["product", "item", "jewellery", "jewelry", "ring", "necklace", "earring", "bracelet", "gold", "diamond", "price", "under", "show me", "recommend"]):
-            intent = "product_enquiry"
-            # Extract key terms for product search
-            search_terms = []
-            
-            # Extract budget if mentioned
-            import re
-            budget_match = re.search(r'[₹$€£¥]\s*(\d+(?:,\d+)*)|(\d+(?:,\d+)*)\s*(?:rs|rupees|inr|dollars|usd)', user_message, re.IGNORECASE)
-            if budget_match:
-                budget = budget_match.group(1) or budget_match.group(2)
-                search_terms.append(f"budget: {budget}")
-            
-            # Extract product types
-            product_types = ["ring", "necklace", "earring", "bracelet", "pendant", "chain", "bangle", "mangalsutra"]
-            for pt in product_types:
-                if pt in lower_message:
-                    search_terms.append(f"type: {pt}")
-            
-            # Extract materials
-            materials = ["gold", "silver", "diamond", "emerald", "ruby", "sapphire", "pearl"]
-            for mat in materials:
-                if mat in lower_message:
-                    search_terms.append(f"material: {mat}")
-            
-            # Query products from database
-            query = {"status": "active"}
-            if search_terms:
-                # Simple search based on terms
-                text_search = " ".join([term.split(": ")[1] for term in search_terms if ":" in term])
-                if text_search:
-                    # Try to find relevant products
-                    products = list(db.items.find(query).limit(3))
-                    if products:
-                        product_names = [p.get("name", "Unnamed Product") for p in products]
-                        response_text = f"Here are some products I found: {', '.join(product_names)}. Would you like more details about any of these?"
-                    else:
-                        response_text = "I couldn't find any products matching your criteria. Would you like me to help you with something else?"
+        # Gold rate intent - handle gold price queries directly
+        elif any(keyword in lower_message for keyword in ["gold rate", "gold price", "price of gold", "rate of gold"]) or \
+             ("gold" in lower_message and "1 gram" in lower_message and any(keyword in lower_message for keyword in ["price", "rate", "cost", "much"])) or \
+             ("price" in lower_message and "1 gram" in lower_message and "gold" in lower_message):
+            print(f"Gold rate intent detected for message: {user_message}")
+            intent = "gold_rate"
+            try:
+                # Get gold rates from the database
+                gold_rates_collection = db.gold_rate
+                latest_rate_doc = gold_rates_collection.find_one(sort=[("updated_at", -1)])
+                
+                if latest_rate_doc and "rates" in latest_rate_doc:
+                    rates = latest_rate_doc["rates"]
+                    fmt = lambda n: f"₹{n:,.2f}/g" if isinstance(n, (int, float)) else "N/A"
+                    response_lines = [
+                        "Current gold rates (per gram):",
+                        f"24K: {fmt(rates.get('24k'))}",
+                        f"22K: {fmt(rates.get('22k'))}",
+                        f"18K: {fmt(rates.get('18k'))}",
+                        f"14K: {fmt(rates.get('14k'))}",
+                        f"\nUpdated: {latest_rate_doc.get('updated_at', 'N/A')}"
+                    ]
+                    response_text = "\n".join(response_lines)
                 else:
-                    response_text = "I can help you find jewellery. What type of jewellery are you looking for?"
-            else:
-                response_text = "I can help you find jewellery. What type of jewellery are you looking for?"
+                    response_text = "I'm sorry, I couldn't fetch the current gold rates. Please try again later or visit our website for the most up-to-date information."
+            except Exception as e:
+                print(f"Error fetching gold rates: {str(e)}")
+                response_text = "I'm sorry, I'm having trouble accessing the gold rates right now. Please try again later or check our website for current rates."
         
-        # FAQ intent
-        elif any(keyword in lower_message for keyword in ["faq", "question", "how to", "what is", "return", "policy", "warranty", "care", "clean", "resize", "custom", "delivery"]):
-            intent = "faq"
-            response_text = "I can help answer your questions about our products and services. Could you please be more specific about what you'd like to know?"
-        
-        # Default to general intent
-        else:
-            intent = "general"
-            context = "General conversation"
-
-        # If we haven't set a specific response yet, use Mistral AI
+        # For non-tool paths, defer to LLM with a jewellery-specific system prompt
         if not response_text:
-            # Prepare prompt for Mistral AI
-            prompt = f"""
-You are an intelligent jewellery shopping assistant for SmartJewel. 
-Respond naturally and helpfully to customer inquiries.
-
-User message: {user_message}
-Intent detected: {intent}
-Context: {context}
-
-Please provide a helpful, concise response appropriate for a jewellery store chatbot.
-For order-related queries, be specific and helpful.
-For other queries, be polite but explain that you primarily assist with order-related questions.
-"""
-
-            # Generate response using Mistral AI
             messages = [
-                {"role": "user", "content": prompt}
+                {
+                    "role": "system",
+                    "content": (
+                        "You are SmartJewel's Jewellery Assistant. Be concise, friendly and accurate. "
+                        "Specialize in jewellery, gemstones, metal purity, pricing guidance, certification, care, sizing, store policies, and orders. "
+                        "Ask a brief clarifying question when details are missing (e.g., type or budget). "
+                        "Use Indian English and INR formatting when relevant. "
+                        "Focus on jewelry expertise: rings, necklaces, earrings, bangles, pendants, mangalsutras, nose pins. "
+                        "Materials: gold (24K, 22K, 18K, 14K), platinum, silver, diamonds, emeralds, rubies, sapphires. "
+                        "Provide specific care instructions for different materials. "
+                        "Explain certification (BIS hallmark for gold, IGI/GIA for diamonds). "
+                        "Offer sizing guidance and recommend visiting stores for accurate measurements. "
+                        "Discuss customization options (5-7 working days additional). "
+                        "Mention gold investment options (BIS certified coins and bars). "
+                        "For product inquiries, recommend browsing our full catalog. "
+                        "Do not make up product names or prices. "
+                        "Stay focused on jewelry-related topics. "
+                        "Keep responses concise and to the point, under 3 sentences. "
+                        "Always provide complete and well-structured responses that end properly."
+                    ),
+                }
             ]
-            
-            # Use a suitable model - mistral-tiny, mistral-small, or mistral-medium
-            # Limit response to 150 tokens to avoid lengthy responses
+
+            # Append trimmed conversation history if provided
+            try:
+                for m in history[-8:]:  # keep last 8 messages
+                    role = m.get("role")
+                    content = (m.get("content") or "").strip()
+                    if role in ("user", "assistant") and content:
+                        messages.append({"role": role, "content": content})
+            except Exception:
+                pass
+
+            messages.append({"role": "user", "content": user_message})
+
             chat_response = client.chat.complete(
-                model="mistral-small",
+                model=model_name,
                 messages=messages,
-                max_tokens=150
+                max_tokens=max_tokens,
+                temperature=temperature,
             )
-            
+
             response_text = chat_response.choices[0].message.content
 
         # Return the response

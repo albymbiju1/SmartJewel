@@ -340,12 +340,18 @@ def track_order(order_id: str):
     if db is None:
         return jsonify({"error": "db_unavailable"}), 503
 
+    order = None
     try:
+        # Try to convert to ObjectId and search by _id
         oid = ObjectId(order_id)
         order = db.orders.find_one({"_id": oid, "deleted": {"$ne": True}})
-    except Exception:
-        # If ObjectId conversion fails, try string match
+        print(f"Found order by ObjectId: {order_id}")
+    except Exception as e:
+        # If ObjectId conversion fails, try string match on _id
+        print(f"ObjectId conversion failed for {order_id}: {str(e)}")
         order = db.orders.find_one({"_id": order_id, "deleted": {"$ne": True}})
+        if order:
+            print(f"Found order by string _id: {order_id}")
     
     # If still not found, try alternative fields
     if not order:
@@ -358,8 +364,11 @@ def track_order(order_id: str):
                 ]}
             ]
         })
+        if order:
+            print(f"Found order by order_id or tracking_number: {order_id}")
     
     if not order:
+        print(f"Order not found: {order_id}")
         return jsonify({"error": "order_not_found"}), 404
 
     # Get the latest status
@@ -386,3 +395,9 @@ def track_order(order_id: str):
         "trackingNumber": order.get("tracking_number"),
         "cancellation": cancellation
     })
+
+
+# CORS preflight for order tracking
+@bp.route("/track/<order_id>", methods=["OPTIONS"])
+def options_track_order(order_id: str):
+    return ("", 204)

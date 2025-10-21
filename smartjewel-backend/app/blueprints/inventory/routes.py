@@ -226,8 +226,8 @@ def create_item():
             file_path = os.path.join(upload_dir, unique_filename)
             
             file.save(file_path)
-            # Use full URL for frontend to display images properly
-            image_url = f"http://127.0.0.1:5000/static/uploads/{unique_filename}"
+            # Store relative path instead of full URL for environment portability
+            image_url = f"/static/uploads/{unique_filename}"
 
     # Handle new fields
     gemstones = data.get("gemstones", "")
@@ -476,8 +476,8 @@ def update_item(item_id):
             file_path = os.path.join(upload_dir, unique_filename)
             
             file.save(file_path)
-            # Use full URL for frontend to display images properly
-            update["image"] = f"http://127.0.0.1:5000/static/uploads/{unique_filename}"
+            # Store relative path instead of full URL for environment portability
+            update["image"] = f"/static/uploads/{unique_filename}"
     
     if not update:
         return jsonify({"error": "nothing_to_update"}), 400

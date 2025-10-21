@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { api } from '../../api';
+import { api, API_BASE_URL } from '../../api';
 import { useAuth } from '../../contexts/AuthContext';
 import { RoleBasedNavigation } from '../../components/RoleBasedNavigation';
 import { AddItemForm } from '../../components/AddItemForm';
@@ -203,7 +203,7 @@ export const ItemsPage: React.FC = () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         {item.image ? (
                           <img 
-                            src={item.image.startsWith('http') ? item.image : `http://127.0.0.1:5000${item.image}`} 
+                            src={item.image.startsWith('http') ? item.image : `${API_BASE_URL}${item.image}`} 
                             alt={item.name} 
                             className="w-12 h-12 object-cover rounded-lg"
                             onError={(e) => {

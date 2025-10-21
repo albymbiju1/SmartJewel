@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { catalogService, CatalogItem } from '../../services/catalogService';
 import { SearchBar } from '../../components/SearchBar';
 import { FiltersPanel, FiltersState } from '../../components/FiltersPanel';
+import { API_BASE_URL } from '../../api';
 
 function useQuery() {
   const { search } = useLocation();
@@ -136,7 +137,7 @@ export const AdvancedSearchPage: React.FC = () => {
                   <div key={p._id} className="card overflow-hidden hover:shadow-elevated transition-shadow">
                     <div className="aspect-square bg-gray-100">
                       {p.image ? (
-                        <img src={p.image.startsWith('http') ? p.image : `http://127.0.0.1:5000${p.image}`} alt={p.name} className="w-full h-full object-cover" />
+                        <img src={p.image.startsWith('http') ? p.image : `${API_BASE_URL}${p.image}`} alt={p.name} className="w-full h-full object-cover" />
                       ) : null}
                     </div>
                     <div className="p-4">

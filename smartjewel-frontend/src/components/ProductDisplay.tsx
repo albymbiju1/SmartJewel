@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { api } from '../api';
+import { api, API_BASE_URL } from '../api';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QuickViewModal } from './QuickViewModal';
 import { MegaMenuFilter } from './MegaMenuFilter';
@@ -384,7 +384,7 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
                   <div className={`${viewMode==='list' ? 'w-48 flex-shrink-0' : ''} aspect-square overflow-hidden relative`}>
                     {product.image ? (
                       <img
-                        src={product.image.startsWith('http') ? product.image : `http://127.0.0.1:5000${product.image}`}
+                        src={product.image.startsWith('http') ? product.image : `${API_BASE_URL}${product.image}`}
                         alt={product.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         onError={(e) => {

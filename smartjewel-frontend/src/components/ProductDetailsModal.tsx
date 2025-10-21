@@ -1,4 +1,5 @@
 import React from 'react';
+import { API_BASE_URL } from '../api';
 
 interface Item {
   _id: string;
@@ -61,7 +62,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
               <div>
                 {item.image ? (
                   <img 
-                    src={item.image.startsWith('http') ? item.image : `http://127.0.0.1:5000${item.image}`} 
+                    src={item.image.startsWith('http') ? item.image : `${API_BASE_URL}${item.image}`} 
                     alt={item.name} 
                     className="w-full h-64 object-cover rounded-lg border"
                   />

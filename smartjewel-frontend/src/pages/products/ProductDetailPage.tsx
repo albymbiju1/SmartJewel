@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { api } from '../../api';
+import { api, API_BASE_URL } from '../../api';
 import { stockService, ProductWithStock } from '../../services/stockService';
 
 interface Product {
@@ -150,7 +150,7 @@ export const ProductDetailPage: React.FC = () => {
             <div className="p-6">
               <div className="aspect-square relative overflow-hidden rounded-lg border">
                 <img
-                  src={(activeImage || (product.image || '')).startsWith('http') ? (activeImage || (product.image || '')) : `http://127.0.0.1:5000${(activeImage || (product.image || ''))}`}
+                  src={(activeImage || (product.image || '')).startsWith('http') ? (activeImage || (product.image || '')) : `${API_BASE_URL}${(activeImage || (product.image || ''))}`}
                   alt={product.name}
                   className={`w-full h-full object-cover ${zoomed ? 'scale-150 cursor-zoom-out' : 'cursor-zoom-in'} transition-transform duration-300`}
                   onClick={() => setZoomed(z => !z)}
@@ -172,7 +172,7 @@ export const ProductDetailPage: React.FC = () => {
                 <div className="mt-3 grid grid-cols-5 gap-2">
                   {[product.image].map((img, i) => (
                     <button key={i} onClick={()=>{ setActiveImage(img); setZoomed(false); }} className={`aspect-square rounded overflow-hidden border ${activeImage===img ? 'ring-2 ring-amber-400' : ''}`}>
-                      <img src={img.startsWith('http') ? img : `http://127.0.0.1:5000${img}`} alt={`thumb-${i}`} className="w-full h-full object-cover" />
+                      <img src={img.startsWith('http') ? img : `${API_BASE_URL}${img}`} alt={`thumb-${i}`} className="w-full h-full object-cover" />
                     </button>
                   ))}
                 </div>

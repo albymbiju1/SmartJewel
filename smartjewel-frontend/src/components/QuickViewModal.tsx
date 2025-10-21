@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { API_BASE_URL } from '../api';
 
 export interface QuickViewProduct {
   _id: string;
@@ -41,7 +42,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({ open, product, o
               <div className="bg-gray-50 aspect-square">
                 {product.image ? (
                   <img
-                    src={product.image.startsWith('http') ? product.image : `http://127.0.0.1:5000${product.image}`}
+                    src={product.image.startsWith('http') ? product.image : `${API_BASE_URL}${product.image}`}
                     alt={product.name}
                     className="w-full h-full object-cover"
                   />

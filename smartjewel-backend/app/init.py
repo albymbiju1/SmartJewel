@@ -1,4 +1,5 @@
 import time
+import logging
 from flask import Flask, jsonify, request
 from app.config import Config
 from app.extensions import init_extensions, log
@@ -11,6 +12,12 @@ def create_app():
     import os
     app = Flask(__name__, static_folder='static')
     app.config.from_object(Config)
+    # Ensure INFO-level logs (so scheduler startup and job registration are visible)
+    try:
+        app.logger.setLevel(logging.INFO)
+        logging.getLogger('werkzeug').setLevel(logging.INFO)
+    except Exception:
+        pass
     
     # Ensure static/uploads directory exists
     upload_dir = os.path.join(app.root_path, 'static', 'uploads')
@@ -18,6 +25,23 @@ def create_app():
     
     init_extensions(app)
 
+    # Optionally start background scheduler for gold rate refresh (reloader-safe)
+    try:
+        from app.scheduler import setup_scheduler
+        from app.config import Config as _Cfg
+        import os
+        should_start = True
+        # In debug with reloader, only start in the main process
+        if app.debug:
+            should_start = os.environ.get("WERKZEUG_RUN_MAIN") == "true"
+        if getattr(_Cfg, "SCHEDULER_ENABLED", True) and should_start:
+            scheduler = setup_scheduler(app)
+            app.extensions['scheduler'] = scheduler
+            app.logger.info("Scheduler initialized and attached to app.extensions")
+        else:
+            app.logger.info("Scheduler not started (disabled or reloader child process)")
+    except Exception as _e:
+        app.logger.error(f"Failed to start scheduler: {_e}")
 
     app.register_blueprint(core_bp)
     app.register_blueprint(auth_bp)
@@ -35,6 +59,26 @@ def create_app():
     # Market data (gold rate) blueprint
     from app.blueprints.market import bp as market_bp
     app.register_blueprint(market_bp)
+
+    # Catalog (advanced search & suggestions) blueprint
+    from app.blueprints.catalog.routes import bp as catalog_bp
+    app.register_blueprint(catalog_bp)
+
+    # Orders API (customer-facing)
+    from app.blueprints.orders.routes import bp as orders_bp
+    app.register_blueprint(orders_bp)
+
+    # Admin Orders API
+    from app.blueprints.admin_orders.routes import bp as admin_orders_bp
+    app.register_blueprint(admin_orders_bp)
+
+    # Webhooks (Razorpay, etc.)
+    from app.blueprints.webhooks.razorpay_webhook import bp as webhooks_bp
+    app.register_blueprint(webhooks_bp)
+
+    # Store blueprint
+    from app.blueprints.store import bp as store_bp
+    app.register_blueprint(store_bp)
 
     @app.route("/")
     def index():

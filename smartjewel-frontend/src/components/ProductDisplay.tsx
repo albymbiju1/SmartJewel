@@ -6,6 +6,8 @@ import { QuickViewModal } from './QuickViewModal';
 import { MegaMenuFilter } from './MegaMenuFilter';
 import { useWishlist } from '../contexts/WishlistContext';
 import { useCart } from '../contexts/CartContext';
+import { stockService, ProductWithStock } from '../services/stockService';
+import { catalogService } from '../services/catalogService';
 
 interface Product {
   _id: string;
@@ -20,6 +22,7 @@ interface Product {
   description?: string;
   image?: string;
   status: string;
+  quantity?: number;
 }
 
 interface ProductDisplayProps {
@@ -39,11 +42,13 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
   const { addToCart } = useCart();
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
+  const [productsWithStock, setProductsWithStock] = useState<ProductWithStock[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [stockLoading, setStockLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMetals, setSelectedMetals] = useState<string[]>((searchParams.get('metal') || '').split(',').filter(Boolean));
   const [priceRanges, setPriceRanges] = useState<string[]>((searchParams.get('price') || '').split(',').filter(Boolean));
-  const [selectedPurities, setSelectedPurities] = useState<string[]>((searchParams.get('purity') || '').split(',').filter(Boolean));
+  const [selectedPurities, setSelectedPurities] = useState<string[]>((searchParams.get('purity') || '').split(',').filter(Boolean).map(p => p.toUpperCase()));
   const urlCategories = useMemo(() => (searchParams.get('categories') || '').split(',').filter(Boolean), [searchParams]);
   const [sortBy, setSortBy] = useState<string>(searchParams.get('sort') || 'popularity');
   const [viewMode, setViewMode] = useState<'grid'|'list'>(searchParams.get('view') === 'list' ? 'list' : 'grid');
@@ -58,7 +63,7 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
     // Keep local state synced if URL params change
     setSelectedMetals((searchParams.get('metal') || '').split(',').filter(Boolean));
     setPriceRanges((searchParams.get('price') || '').split(',').filter(Boolean));
-    setSelectedPurities((searchParams.get('purity') || '').split(',').filter(Boolean));
+    setSelectedPurities((searchParams.get('purity') || '').split(',').filter(Boolean).map(p => p.toUpperCase()));
     // colour removed
     setSortBy(searchParams.get('sort') || 'popularity');
     setViewMode(searchParams.get('view') === 'list' ? 'list' : 'grid');
@@ -68,81 +73,135 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
   const normalizeCategory = (c: string) => c.toLowerCase().replace(/\s+/g, '-');
   const toTitleCase = (s: string) => s.replace(/-/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
 
+  // Load stock data for products
+  const loadStockData = async (products: Product[]) => {
+    if (products.length === 0) {
+      setProductsWithStock([]);
+      return;
+    }
+
+    try {
+      setStockLoading(true);
+      
+      // Use the quantity directly from products since it's now included in the API response
+      const productsWithStockData: ProductWithStock[] = products.map(product => {
+        const quantity = product.quantity || 0;
+        return {
+          ...product,
+          quantity: quantity,
+          stockStatus: stockService.getStockStatus(quantity),
+          stockDisplayText: stockService.getStockDisplayText(quantity)
+        };
+      });
+
+      setProductsWithStock(productsWithStockData);
+    } catch (error) {
+      console.error('Failed to load stock data:', error);
+      // Fallback to products without stock data
+      const fallbackProducts: ProductWithStock[] = products.map(product => ({
+        ...product,
+        quantity: product.quantity || 0,
+        stockStatus: stockService.getStockStatus(product.quantity || 0),
+        stockDisplayText: stockService.getStockDisplayText(product.quantity || 0)
+      }));
+      setProductsWithStock(fallbackProducts);
+    } finally {
+      setStockLoading(false);
+    }
+  };
+
   useEffect(() => {
     const loadProducts = async () => {
       try {
         setIsLoading(true);
-        // Build query params for server-side filtering
-        const params: Record<string, string> = {};
+        // Use the catalog service instead of the inventory endpoint for better filtering
+        const params: any = {
+          // Add basic filters
+        };
+        
+        // Add category filter if specified
         if (category && category !== 'all') {
           const catLower = category.toLowerCase();
           if (catLower === 'gold' || catLower === 'diamond') {
-            params.metal = toTitleCase(catLower); // e.g., Gold, Diamond
+            params.metal = [toTitleCase(catLower)]; // e.g., Gold, Diamond
           } else {
             params.category = toTitleCase(catLower); // e.g., Earrings, Necklace Set
           }
         }
-        const query = new URLSearchParams(params).toString();
-        const response = await api.get(`/inventory/products${query ? `?${query}` : ''}`);
-        let filteredProducts = response.data.products || [];
-
-        // Optional single-category pre-filter for legacy name-based categories
-        if (category && category !== 'all') {
-          const categoryLower = category.toLowerCase();
-          if (categoryLower === 'bangles') {
-            filteredProducts = filteredProducts.filter((item: Product) => 
-              item.category.toLowerCase() === 'bangles' || item.name.toLowerCase().includes('bangle')
-            );
-          } else if (categoryLower === 'chains') {
-            filteredProducts = filteredProducts.filter((item: Product) => 
-              item.category.toLowerCase() === 'chains' || item.name.toLowerCase().includes('chain')
-            );
-          } else if (categoryLower === 'pendants') {
-            filteredProducts = filteredProducts.filter((item: Product) => 
-              item.category.toLowerCase() === 'pendants' || item.name.toLowerCase().includes('pendant')
-            );
-          } else if (categoryLower === 'mangalsutra') {
-            filteredProducts = filteredProducts.filter((item: Product) => 
-              item.category.toLowerCase() === 'mangalsutra' || item.name.toLowerCase().includes('mangalsutra')
-            );
-          } else if (categoryLower === 'bracelets') {
-            filteredProducts = filteredProducts.filter((item: Product) => 
-              item.category.toLowerCase() === 'bracelets' || item.name.toLowerCase().includes('bracelet')
-            );
-          } else if (categoryLower === 'rings') {
-            filteredProducts = filteredProducts.filter((item: Product) => 
-              item.category.toLowerCase() === 'rings' || item.name.toLowerCase().includes('ring')
-            );
-          } else if (categoryLower === 'earrings') {
-            filteredProducts = filteredProducts.filter((item: Product) => 
-              item.category.toLowerCase() === 'earrings' || item.name.toLowerCase().includes('earring')
-            );
-          } else if (categoryLower === 'necklaces') {
-            filteredProducts = filteredProducts.filter((item: Product) => 
-              item.category.toLowerCase() === 'necklaces' || item.category.toLowerCase() === 'necklace' || item.name.toLowerCase().includes('necklace')
-            );
-          } else if (categoryLower === 'gold') {
-            filteredProducts = filteredProducts.filter((item: Product) => item.metal.toLowerCase().includes('gold'));
-          } else if (categoryLower === 'diamond') {
-            filteredProducts = filteredProducts.filter((item: Product) => 
-              item.metal.toLowerCase().includes('diamond') || item.name.toLowerCase().includes('diamond') || item.description?.toLowerCase().includes('diamond')
-            );
-          } else if (categoryLower === 'wedding') {
-            filteredProducts = filteredProducts.filter((item: Product) => 
-              item.category.toLowerCase().includes('mangalsutra') || item.category.toLowerCase().includes('necklace') || item.category.toLowerCase().includes('ring') || item.name.toLowerCase().includes('wedding') || item.name.toLowerCase().includes('bridal')
-            );
-          } else if (categoryLower === 'collections') {
-            filteredProducts = filteredProducts.filter((item: Product) => 
-              (item.price && item.price > 50000) || item.name.toLowerCase().includes('collection') || item.description?.toLowerCase().includes('collection')
-            );
-          } else if (categoryLower === 'gifting') {
-            filteredProducts = filteredProducts.filter((item: Product) => 
-              ['Earrings', 'Pendants', 'Bracelets', 'Chains', 'Rings'].includes(item.category)
-            );
-          }
+        
+        // Add URL-based filters
+        const urlCategories = (searchParams.get('categories') || '').split(',').filter(Boolean);
+        if (urlCategories.length) {
+          params.categories = urlCategories;
         }
-
+        
+        const urlMetals = (searchParams.get('metal') || '').split(',').filter(Boolean);
+        if (urlMetals.length) {
+          params.metal = urlMetals;
+        }
+        
+        const urlPurities = (searchParams.get('purity') || '').split(',').filter(Boolean);
+        if (urlPurities.length) {
+          params.purity = urlPurities;
+        }
+        
+        const urlColors = (searchParams.get('color') || '').split(',').filter(Boolean);
+        if (urlColors.length) {
+          params.color = urlColors;
+        }
+        
+        const urlStyles = (searchParams.get('style') || '').split(',').filter(Boolean);
+        if (urlStyles.length) {
+          params.style = urlStyles;
+        }
+        
+        const urlEarringTypes = (searchParams.get('earringType') || '').split(',').filter(Boolean);
+        if (urlEarringTypes.length) {
+          params.earringType = urlEarringTypes;
+        }
+        
+        const urlOccasions = (searchParams.get('occasion') || '').split(',').filter(Boolean);
+        if (urlOccasions.length) {
+          params.occasion = urlOccasions;
+        }
+        
+        const urlFor = (searchParams.get('for') || '').split(',').filter(Boolean);
+        if (urlFor.length) {
+          params.for = urlFor;
+        }
+        
+        // Handle price range filters
+        const minPrice = searchParams.get('min_price');
+        if (minPrice) {
+          params.min_price = parseFloat(minPrice);
+        }
+        
+        const maxPrice = searchParams.get('max_price');
+        if (maxPrice) {
+          params.max_price = parseFloat(maxPrice);
+        }
+        
+        const response = await catalogService.search(params);
+        // Map CatalogItem to Product interface
+        const filteredProducts: Product[] = response.results.map(item => ({
+          _id: item._id,
+          sku: item.sku,
+          name: item.name,
+          category: item.category,
+          metal: item.metal,
+          purity: item.purity,
+          weight: item.weight,
+          weight_unit: item.weight_unit || 'g',
+          price: item.price,
+          image: item.image,
+          description: '', // CatalogItem doesn't have description
+          status: 'active', // Default status
+          quantity: item.quantity
+        }));
+        
         setProducts(filteredProducts);
+        // Load stock data for the filtered products
+        await loadStockData(filteredProducts);
       } catch (error) {
         console.error('Failed to load products:', error);
       } finally {
@@ -151,40 +210,12 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
     };
 
     loadProducts();
-  }, [category]);
+  }, [category, searchParams]);
 
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = !searchTerm || 
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.description?.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesMetal = !selectedMetals.length || selectedMetals.some(m => product.metal.toLowerCase().includes(m.toLowerCase()));
-
-    const matchesPurity = !selectedPurities.length || selectedPurities.includes(product.purity);
-
-    const matchesPrice = !priceRanges.length || priceRanges.some(range =>
-      (range === 'under-25k' && (product.price || 0) < 25000) ||
-      (range === '25k-50k' && (product.price || 0) >= 25000 && (product.price || 0) <= 50000) ||
-      (range === '50k-100k' && (product.price || 0) > 50000 && (product.price || 0) <= 100000) ||
-      (range === 'above-100k' && (product.price || 0) > 100000)
-    );
-
-    // Match multiple URL categories if provided
-    const matchesCategories = !urlCategories.length || (() => {
-      const pc = normalizeCategory(product.category);
-      return urlCategories.some(uc => {
-        const ucText = uc.replace('-', ' ');
-        return pc === uc || pc.includes(uc) || uc.includes(pc) ||
-          product.name.toLowerCase().includes(ucText) ||
-          product.category.toLowerCase().includes(ucText);
-      });
-    })();
-
-    return matchesSearch && matchesMetal && matchesPurity && matchesPrice && matchesCategories;
-  });
-
-  const uniqueMetals = [...new Set(products.map(p => p.metal))];
+  // Since we're using the catalog service which handles filtering on the backend,
+  // we don't need client-side filtering anymore
+  const filteredProducts = productsWithStock;
+  const uniqueMetals = [...new Set(productsWithStock.map(p => p.metal))];
   const updateParams = (updates: Record<string, string | string[] | null>) => {
     const params = new URLSearchParams(searchParams.toString());
     Object.entries(updates).forEach(([k,v])=>{ 
@@ -208,13 +239,15 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
   const currentPage = Math.min(page, totalPages);
   const pageSlice = sortedProducts.slice((currentPage-1)*perPage, currentPage*perPage);
 
-  if (isLoading) {
+  if (isLoading || stockLoading) {
     return (
       <div className="min-h-screen bg-gray-50 py-12">
         <div className="container mx-auto px-6">
           <div className="text-center">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            <p className="mt-4 text-gray-600">Loading our beautiful collection...</p>
+            <p className="mt-4 text-gray-600">
+              {isLoading ? 'Loading our beautiful collection...' : 'Checking stock availability...'}
+            </p>
           </div>
         </div>
       </div>
@@ -422,6 +455,7 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
                                 // Emit a global Buy Now event to centralize auth check and navigation
                                 const ev = new CustomEvent('sj:buyNow', { detail: {
                                   productId: product._id,
+                                  sku: product.sku,
                                   name: product.name,
                                   price: product.price || 0,
                                   image: product.image || '',
@@ -432,15 +466,22 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
                                 }});
                                 window.dispatchEvent(ev);
                               }} 
-                              className="bg-orange-600 text-white px-3 py-1 rounded-md text-sm hover:bg-orange-700 transition-colors"
+                              disabled={product.stockStatus === 'out_of_stock'}
+                              className={`px-3 py-1 rounded-md text-sm transition-colors ${
+                                product.stockStatus === 'out_of_stock' 
+                                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                                  : 'bg-orange-600 text-white hover:bg-orange-700'
+                              }`}
                             >
-                              Buy Now
+                              {product.stockStatus === 'out_of_stock' ? 'Out of Stock' : 'Buy Now'}
                             </button>
                           </div>
+                        </div>                    
+                        {/* Stock Status Display */}
+                        <div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <button onClick={(e) => e.stopPropagation()} className="pill px-3 py-1 text-sm">Similar</button>
-                          <button onClick={(e) => e.stopPropagation()} className="pill px-3 py-1 text-sm">Try it</button>
+  
                         </div>
                       </div>
                     )}

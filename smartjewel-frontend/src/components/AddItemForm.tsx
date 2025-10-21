@@ -4,12 +4,18 @@ interface FormData {
   sku: string;
   name: string;
   category: string;
+  sub_category: string;
   metal: string;
   purity: string;
   weight_unit: string;
   weight: number;
   price: number;
   description: string;
+  gemstones: string;
+  color: string;
+  style: string;
+  tags: string;
+  brand: string;
 }
 
 interface AddItemFormProps {
@@ -29,12 +35,18 @@ export const AddItemForm: React.FC<AddItemFormProps> = ({
     sku: initialData.sku || '',
     name: initialData.name || '',
     category: initialData.category || '',
+    sub_category: initialData.sub_category || '',
     metal: initialData.metal || '',
     purity: initialData.purity || '',
     weight_unit: initialData.weight_unit || 'g',
     weight: initialData.weight || 0,
     price: initialData.price || 0,
-    description: initialData.description || ''
+    description: initialData.description || '',
+    gemstones: Array.isArray(initialData.gemstones) ? initialData.gemstones.join(', ') : (initialData.gemstones || ''),
+    color: initialData.color || '',
+    style: initialData.style || '',
+    tags: Array.isArray(initialData.tags) ? initialData.tags.join(', ') : (initialData.tags || ''),
+    brand: initialData.brand || 'Smart Jewel'
   });
 
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -46,6 +58,9 @@ export const AddItemForm: React.FC<AddItemFormProps> = ({
   ];
   const metals = ['Gold', 'Silver', 'Platinum', 'Diamond', 'White Gold', 'Rose Gold'];
   const purities = ['24K', '22K', '18K', '14K', '10K', '925 Silver', 'Pure Platinum'];
+  const colors = ['Yellow Gold', 'Rose Gold', 'White Gold', 'Silver'];
+  const styles = ['Modern', 'Traditional', 'Vintage', 'Contemporary', 'Classic'];
+  const commonGemstones = ['Diamond', 'Ruby', 'Emerald', 'Sapphire', 'Pearl', 'Topaz', 'Amethyst', 'Garnet', 'Opal', 'Turquoise'];
 
   // Individual field handlers to prevent re-rendering
   const updateField = useCallback((field: keyof FormData) => (value: string | number) => {
@@ -193,6 +208,85 @@ export const AddItemForm: React.FC<AddItemFormProps> = ({
             placeholder="Enter price" 
             value={formData.price === 0 ? '' : formData.price}
             onChange={(e) => updateField('price')(e.target.value === '' ? 0 : Number(e.target.value))}
+          />
+        </div>
+
+        {/* Sub Category */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Sub Category</label>
+          <input 
+            type="text"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" 
+            placeholder="e.g., Wedding, Daily Wear" 
+            value={formData.sub_category}
+            onChange={(e) => updateField('sub_category')(e.target.value)}
+          />
+        </div>
+
+        {/* Color */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Color</label>
+          <select 
+            className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" 
+            value={formData.color}
+            onChange={(e) => updateField('color')(e.target.value)}
+          >
+            <option value="">Select Color</option>
+            {colors.map(color => (
+              <option key={color} value={color}>{color}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Style */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Style</label>
+          <select 
+            className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" 
+            value={formData.style}
+            onChange={(e) => updateField('style')(e.target.value)}
+          >
+            <option value="">Select Style</option>
+            {styles.map(style => (
+              <option key={style} value={style}>{style}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Brand */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Brand</label>
+          <input 
+            type="text"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" 
+            placeholder="Brand name" 
+            value={formData.brand}
+            onChange={(e) => updateField('brand')(e.target.value)}
+          />
+        </div>
+
+        {/* Gemstones */}
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Gemstones</label>
+          <input 
+            type="text"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" 
+            placeholder="e.g., Diamond, Ruby, Emerald (separate multiple with commas)" 
+            value={formData.gemstones}
+            onChange={(e) => updateField('gemstones')(e.target.value)}
+          />
+          <p className="text-xs text-gray-500 mt-1">Common options: {commonGemstones.join(', ')}</p>
+        </div>
+
+        {/* Tags */}
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
+          <input 
+            type="text"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" 
+            placeholder="e.g., luxury, handcrafted, antique (separate multiple with commas)" 
+            value={formData.tags}
+            onChange={(e) => updateField('tags')(e.target.value)}
           />
         </div>
 

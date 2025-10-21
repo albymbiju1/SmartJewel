@@ -1,8 +1,11 @@
 """Authorization helpers: role / permission decorators."""
 from functools import wraps
 from typing import Iterable, Callable
-from flask import jsonify
+from flask import jsonify, request
 from flask_jwt_extended import verify_jwt_in_request, get_jwt
+import logging
+
+log = logging.getLogger(__name__)
 
 
 def _has_any(claim_values: Iterable[str], required: Iterable[str]) -> bool:
@@ -46,14 +49,27 @@ def require_permissions(*perms: str) -> Callable:
     def decorator(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):
-            verify_jwt_in_request()
-            claims = get_jwt()
-            user_perms = claims.get("perms", [])
-            if "*" in user_perms:
+            try:
+                # Check if Authorization header exists
+                auth_header = request.headers.get('Authorization', 'NOT_PROVIDED')
+                log.debug(f"require_permissions: Authorization header: {auth_header[:20]}..." if auth_header != 'NOT_PROVIDED' else f"require_permissions: Authorization header: NOT_PROVIDED")
+                
+                verify_jwt_in_request()
+                claims = get_jwt()
+                user_perms = claims.get("perms", [])
+                
+                log.debug(f"require_permissions: user_perms={user_perms}, required={list(perms)}")
+                
+                if "*" in user_perms:
+                    log.debug("require_permissions: Admin user (wildcard perm)")
+                    return fn(*args, **kwargs)
+                if not all(p in user_perms for p in perms):
+                    log.warning(f"require_permissions: Permission denied for {claims.get('email')}. Required: {list(perms)}, Has: {user_perms}")
+                    return jsonify({"error": "forbidden", "reason": "missing_permissions", "required": perms}), 403
                 return fn(*args, **kwargs)
-            if not all(p in user_perms for p in perms):
-                return jsonify({"error": "forbidden", "reason": "missing_permissions", "required": perms}), 403
-            return fn(*args, **kwargs)
+            except Exception as e:
+                log.error(f"require_permissions: JWT verification failed: {str(e)}")
+                return jsonify({"error": "unauthorized", "reason": str(e)}), 401
         return wrapper
     return decorator
 

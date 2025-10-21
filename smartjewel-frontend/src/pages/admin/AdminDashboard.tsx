@@ -55,6 +55,17 @@ export const AdminDashboard: React.FC = () => {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <button 
+              onClick={() => navigate('/admin/orders')}
+              className="p-4 text-center border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <div className="text-amber-600 mb-2">
+                <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18" />
+                </svg>
+              </div>
+              <span className="text-sm font-medium">View Orders</span>
+            </button>
+            <button 
               onClick={() => navigate('/inventory/items')}
               className="p-4 text-center border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
             >

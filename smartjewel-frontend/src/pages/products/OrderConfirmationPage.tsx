@@ -1,18 +1,23 @@
-import React from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
+// Note: Cart is now cleared on successful payment in CheckoutPage
 
 export const OrderConfirmationPage: React.FC = () => {
-  const navigate = useNavigate();
   const { state } = useLocation() as { state?: { orderId?: string; amount?: number; details?: any } };
 
   const orderId = state?.orderId || 'DEMO-ORDER';
   const amount = state?.amount || 0;
 
+  // Debug logging
+  console.log('OrderConfirmationPage - state:', state);
+  console.log('OrderConfirmationPage - orderId:', orderId);
+  console.log('OrderConfirmationPage - amount:', amount);
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b">
         <div className="container mx-auto px-6 py-3 text-sm text-gray-600 flex items-center gap-2">
-          <button onClick={() => navigate('/')} className="hover:text-blue-600">Home</button>
+          <a href="/" className="hover:text-blue-600">Home</a>
           <span>/</span>
           <span className="text-gray-900">Order Confirmation</span>
         </div>
@@ -38,8 +43,24 @@ export const OrderConfirmationPage: React.FC = () => {
           </div>
 
           <div className="mt-8 flex items-center justify-center gap-3">
-            <button onClick={() => navigate('/products/all')} className="px-5 py-2.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50">Continue Shopping</button>
-            <button onClick={() => navigate('/')} className="px-5 py-2.5 rounded-lg bg-gray-900 text-white hover:opacity-90">Go to Home</button>
+            <a 
+              href="/my-orders"
+              className="px-5 py-2.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
+            >
+              View My Orders
+            </a>
+            <a 
+              href="/products/all"
+              className="px-5 py-2.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
+            >
+              Continue Shopping
+            </a>
+            <a 
+              href="/"
+              className="px-5 py-2.5 rounded-lg bg-gray-900 text-white hover:opacity-90"
+            >
+              Go to Home
+            </a>
           </div>
         </div>
       </div>

@@ -9,6 +9,10 @@ from flask import current_app
 from .schemas import LoginSchema, RegistrationSchema, StaffCreateSchema
 from app.utils.security import verify_password, hash_password
 from app.utils.authz import require_roles
+from datetime import timedelta
+from app.utils.mailer import send_email
+from app.utils.email_templates import otp_email
+from pymongo.errors import DuplicateKeyError
 try:
     import firebase_admin
     from firebase_admin import auth as fb_auth
@@ -32,11 +36,46 @@ def register():
     
     existing = db.users.find_one({"email": data["email"].lower()})
     if existing:
+        # If the account exists but is not verified, guide client to OTP flow
+        if existing.get("status") != "active":
+            return jsonify({"error": "account_unverified"}), 409
         return jsonify({"error": "email_in_use"}), 409
+    
+    # Create Firebase user if Firebase is available
+    firebase_uid = None
+    if fb_auth is not None:
+        try:
+            # Initialize Firebase app if not already initialized
+            try:
+                firebase_admin.get_app()
+            except ValueError:
+                _initialize_firebase_app()
+            
+            # Create Firebase user
+            firebase_user = fb_auth.create_user(
+                email=data["email"].lower(),
+                password=data["password"],
+                display_name=data["name"]
+            )
+            firebase_uid = firebase_user.uid
+            log.info("auth.register.firebase_user_created", firebase_uid=firebase_uid, email=data["email"])
+        except Exception as e:
+            log.error("auth.register.firebase_user_creation_failed", error=str(e), email=data["email"])
+            # Continue with MongoDB user creation even if Firebase fails
+            # This ensures the registration doesn't fail completely
+    
     # Assign default role (customer) by looking up roles collection
     role_doc = db.roles.find_one({"role_name": "Customer"})
     if not role_doc:
         return jsonify({"error": "role_not_found"}), 500
+    
+    # Prepare OTP
+    import random
+    cfg = current_app.config
+    otp_length = int(cfg.get("OTP_LENGTH", 6))
+    ttl_minutes = int(cfg.get("OTP_TTL_MINUTES", 10))
+    otp_code = ''.join(str(random.randint(0, 9)) for _ in range(otp_length))
+
     user_doc = {
         "full_name": data["name"],
         "email": data["email"].lower(),
@@ -46,11 +85,42 @@ def register():
             "_id": role_doc["_id"],
             "role_name": role_doc["role_name"]
         },
-        "status": "active",
-        "created_at": db.command("isMaster")['localTime'] if 'localTime' in db.command("isMaster") else None
+        "status": "pending_verification",
+        "created_at": _now(db),
+        "otp": {
+            "code_hash": hash_password(otp_code),
+            "expires_at": _now(db) + timedelta(minutes=ttl_minutes),
+            "attempts": 0
+        }
     }
-    inserted = db.users.insert_one(user_doc)
-    return jsonify({"id": str(inserted.inserted_id), "email": user_doc["email"], "full_name": user_doc["full_name"]}), 201
+
+    # Add Firebase UID if available
+    if firebase_uid:
+        user_doc["firebase_uid"] = firebase_uid
+        user_doc["uid"] = firebase_uid  # Also store as uid for compatibility
+
+    try:
+        inserted = db.users.insert_one(user_doc)
+    except DuplicateKeyError:
+        # Email unique index caught a race; return 409 consistent with pre-check
+        return jsonify({"error": "email_in_use"}), 409
+
+    log.info("auth.register.user_created", user_id=str(inserted.inserted_id), email=data["email"], firebase_uid=firebase_uid)
+
+    # Send OTP email
+    try:
+        subject, text_body, html_body = otp_email(data["name"], otp_code, ttl_minutes)
+        send_email(user_doc["email"], subject, text_body, html_body)
+        log.info("auth.register.otp_sent", email=user_doc["email"]) 
+    except Exception as e:
+        log.error("auth.register.otp_send_failed", email=user_doc["email"], error=str(e))
+
+    return jsonify({
+        "id": str(inserted.inserted_id),
+        "email": user_doc["email"],
+        "full_name": user_doc["full_name"],
+        "requires_verification": True
+    }), 201
 
 
 # Role -> default permissions (extend as system grows)
@@ -117,10 +187,12 @@ def login():
         log.warning("auth.login.validation_failed", details=err.messages)
         return jsonify({"error": "validation_failed", "details": err.messages}), 400
     
-    user = db.users.find_one({"email": data["email"].lower(), "status": "active"})
+    user = db.users.find_one({"email": data["email"].lower()})
     if not user or not verify_password(data["password"], user["password_hash"]):
         log.info("auth.login.invalid_credentials", email=data.get("email"))
         return jsonify({"error": "invalid_credentials"}), 401
+    if user.get("status") != "active":
+        return jsonify({"error": "account_unverified"}), 403
 
     # Fetch full role info
     role_doc = db.roles.find_one({"_id": user["role"]["_id"]}) if user.get("role") else None
@@ -170,6 +242,89 @@ def me():
         "branch_id": claims.get("branch_id"),
         "perms": claims.get("perms", []),
     }), 200
+
+
+@limiter.limit("5 per minute")
+@bp.post("/verify-otp")
+def verify_otp():
+    db = current_app.extensions['mongo_db']
+    payload = request.get_json() or {}
+    email = (payload.get("email") or "").strip().lower()
+    otp = (payload.get("otp") or "").strip()
+
+    if not email or not otp:
+        return jsonify({"error": "validation_failed", "details": {"email": ["Email is required"], "otp": ["OTP is required"]}}), 400
+
+    user = db.users.find_one({"email": email})
+    if not user:
+        return jsonify({"error": "not_found"}), 404
+    if user.get("status") == "active":
+        return jsonify({"message": "already_verified"}), 200
+
+    otp_info = (user or {}).get("otp") or {}
+    if not otp_info:
+        return jsonify({"error": "no_otp"}), 400
+
+    # Check expiration
+    now = _now(db)
+    if otp_info.get("expires_at") and now > otp_info["expires_at"]:
+        return jsonify({"error": "otp_expired"}), 400
+
+    # Check attempts
+    max_attempts = int(current_app.config.get("OTP_MAX_ATTEMPTS", 5))
+    attempts = int(otp_info.get("attempts", 0))
+    if attempts >= max_attempts:
+        return jsonify({"error": "otp_attempts_exceeded"}), 429
+
+    # Verify code
+    if not verify_password(otp, otp_info.get("code_hash", "")):
+        db.users.update_one({"_id": user["_id"]}, {"$inc": {"otp.attempts": 1}})
+        return jsonify({"error": "otp_invalid"}), 400
+
+    # Success: mark user active and clear otp
+    db.users.update_one({"_id": user["_id"]}, {"$set": {"status": "active"}, "$unset": {"otp": ""}})
+    return jsonify({"message": "verified"}), 200
+
+
+@limiter.limit("3 per minute")
+@bp.post("/request-otp")
+def request_otp():
+    import random
+    db = current_app.extensions['mongo_db']
+    payload = request.get_json() or {}
+    email = (payload.get("email") or "").strip().lower()
+
+    if not email:
+        return jsonify({"error": "validation_failed", "details": {"email": ["Email is required"]}}), 400
+
+    user = db.users.find_one({"email": email})
+    if not user:
+        return jsonify({"error": "not_found"}), 404
+
+    if user.get("status") == "active":
+        return jsonify({"message": "already_verified"}), 200
+
+    cfg = current_app.config
+    otp_length = int(cfg.get("OTP_LENGTH", 6))
+    ttl_minutes = int(cfg.get("OTP_TTL_MINUTES", 10))
+    otp_code = ''.join(str(random.randint(0, 9)) for _ in range(otp_length))
+
+    db.users.update_one({"_id": user["_id"]}, {
+        "$set": {
+            "otp.code_hash": hash_password(otp_code),
+            "otp.expires_at": _now(db) + timedelta(minutes=ttl_minutes),
+            "otp.attempts": 0
+        }
+    })
+
+    try:
+        subject, text_body, html_body = otp_email(user.get("full_name") or "there", otp_code, ttl_minutes)
+        send_email(email, subject, text_body, html_body)
+        log.info("auth.request_otp.sent", email=email)
+    except Exception as e:
+        log.error("auth.request_otp.send_failed", email=email, error=str(e))
+
+    return jsonify({"message": "otp_sent"}), 200
 
 @bp.post("/refresh")
 @jwt_required(refresh=True)
@@ -287,8 +442,10 @@ def firebase_login():
                 project_id_opt = project_id_file or project_id_env
                 cred = credentials.Certificate(creds_path)
                 if project_id_opt:
+                    log.info("auth.firebase_login.init_with_env_path", project_id=project_id_opt)
                     firebase_admin.initialize_app(cred, {"projectId": project_id_opt})
                 else:
+                    log.info("auth.firebase_login.init_with_env_path_no_project")
                     firebase_admin.initialize_app(cred)
             else:
                 # Try common paths if GOOGLE_APPLICATION_CREDENTIALS not set
@@ -314,6 +471,7 @@ def firebase_login():
                         project_id_file = None
                     project_id_env = os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
                     project_id_opt = project_id_file or project_id_env
+                    log.info("auth.firebase_login.init_with_service_account", project_id=project_id_opt, file=creds_path)
                     cred = credentials.Certificate(creds_path)
                     if project_id_opt:
                         firebase_admin.initialize_app(cred, {"projectId": project_id_opt})
@@ -330,6 +488,7 @@ def firebase_login():
                                 data["private_key"] = data["private_key"].replace("\\n", "\n")
                             cred = credentials.Certificate(data)
                             project_id_opt = data.get("project_id") or os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
+                            log.info("auth.firebase_login.init_with_env_json", project_id=project_id_opt)
                             if project_id_opt:
                                 firebase_admin.initialize_app(cred, {"projectId": project_id_opt})
                             else:
@@ -349,10 +508,12 @@ def firebase_login():
                                 "private_key": private_key,
                                 "type": "service_account",
                             })
+                            log.info("auth.firebase_login.init_with_env_vars", project_id=project_id)
                             firebase_admin.initialize_app(cred, {"projectId": project_id})
                         else:
                             # 4) Last resort: Application Default Credentials (may work in GCP)
                             adc_project = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("FIREBASE_PROJECT_ID")
+                            log.warning("auth.firebase_login.init_with_adc", project_id=adc_project)
                             if adc_project:
                                 firebase_admin.initialize_app(options={"projectId": adc_project})
                             else:
@@ -362,19 +523,31 @@ def firebase_login():
             return jsonify({"error": "firebase_init_failed", "details": str(exc)}), 500
 
     try:
-        decoded = fb_auth.verify_id_token(id_token, check_revoked=True)
-    except fb_auth.RevokedIdTokenError:
-        log.warning("auth.firebase_login.revoked_token")
-        return jsonify({"error": "token_revoked"}), 401
-    except fb_auth.ExpiredIdTokenError:
-        log.warning("auth.firebase_login.expired_token")
-        return jsonify({"error": "token_expired"}), 401
-    except fb_auth.InvalidIdTokenError:
-        log.warning("auth.firebase_login.invalid_id_token")
-        return jsonify({"error": "invalid_id_token"}), 401
+        # First try with revocation check
+        try:
+            decoded = fb_auth.verify_id_token(id_token, check_revoked=True)
+        except fb_auth.RevokedIdTokenError as e:
+            log.warning("auth.firebase_login.revoked_token", error=str(e))
+            return jsonify({"error": "token_revoked", "details": str(e)}), 401
+        except (fb_auth.InvalidIdTokenError, Exception) as first_attempt_error:
+            # Try again without revocation check - sometimes this can interfere with verification
+            log.warning("auth.firebase_login.verify_with_revoke_failed", error=str(first_attempt_error))
+            try:
+                decoded = fb_auth.verify_id_token(id_token, check_revoked=False)
+                log.info("auth.firebase_login.verify_without_revoke_succeeded")
+            except Exception as second_attempt_error:
+                # Both attempts failed
+                raise first_attempt_error  # Re-raise the first error for proper handling
+    except fb_auth.ExpiredIdTokenError as e:
+        log.warning("auth.firebase_login.expired_token", error=str(e))
+        return jsonify({"error": "token_expired", "details": str(e)}), 401
+    except fb_auth.InvalidIdTokenError as e:
+        log.warning("auth.firebase_login.invalid_id_token", error=str(e), token_prefix=id_token[:50] if id_token else "")
+        return jsonify({"error": "invalid_id_token", "details": str(e)}), 401
     except Exception as e:
-        log.warning("auth.firebase_login.verify_failed", error=str(e))
-        return jsonify({"error": "verify_failed"}), 401
+        import traceback
+        log.warning("auth.firebase_login.verify_failed", error=str(e), traceback=traceback.format_exc())
+        return jsonify({"error": "verify_failed", "details": str(e)}), 401
 
     email = (decoded.get("email") or "").lower()
     name = decoded.get("name") or email.split('@')[0]
@@ -419,17 +592,35 @@ def firebase_login():
             except Exception as e:
                 log.error("auth.firebase_login.role_autocreate_failed", error=str(e))
                 return jsonify({"error": "role_not_found"}), 500
+        # New Google user: create as pending verification and send OTP
+        import random
+        cfg = current_app.config
+        otp_length = int(cfg.get("OTP_LENGTH", 6))
+        ttl_minutes = int(cfg.get("OTP_TTL_MINUTES", 10))
+        otp_code = ''.join(str(random.randint(0, 9)) for _ in range(otp_length))
+
         user_doc = {
             "full_name": name,
             "email": email,
             "firebase_uid": firebase_uid,
             "uid": firebase_uid,
             "role": {"_id": role_doc["_id"], "role_name": role_doc["role_name"]},
-            "status": "active",
-            "created_at": _now(db)
+            "status": "pending_verification",
+            "created_at": _now(db),
+            "otp": {
+                "code_hash": hash_password(otp_code),
+                "expires_at": _now(db) + timedelta(minutes=ttl_minutes),
+                "attempts": 0
+            }
         }
         ins = db.users.insert_one(user_doc)
         log.info("auth.firebase_login.user_created", user_id=str(ins.inserted_id), email=email)
+        try:
+            subject, text_body, html_body = otp_email(name or "there", otp_code, ttl_minutes)
+            send_email(email, subject, text_body, html_body)
+            log.info("auth.firebase_login.otp_sent", email=email)
+        except Exception as e:
+            log.error("auth.firebase_login.otp_send_failed", email=email, error=str(e))
         user = db.users.find_one({"_id": ins.inserted_id})
     else:
         # Ensure firebase_uid is stored on primary user
@@ -448,6 +639,11 @@ def firebase_login():
                         user = db.users.find_one({"_id": user["_id"]})
             except Exception:
                 pass
+
+    # Enforce verification for existing users before issuing tokens
+    if user and user.get("status") != "active":
+        log.info("auth.firebase_login.account_unverified", email=user.get("email"))
+        return jsonify({"error": "account_unverified"}), 403
 
     # Prepare role/claims similar to password login
     role_info = {}
@@ -490,6 +686,104 @@ def _now(db):
     except Exception:
         from datetime import datetime
         return datetime.utcnow()
+
+
+def _initialize_firebase_app():
+    """Initialize Firebase Admin SDK with proper credentials."""
+    if fb_auth is None:
+        return
+    
+    try:
+        from firebase_admin import credentials
+        import os, json
+
+        # 1) Prefer GOOGLE_APPLICATION_CREDENTIALS if provided (points to JSON file)
+        creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        if creds_path and os.path.exists(creds_path):
+            # Try to read project_id from the JSON, fallback to env
+            project_id_env = os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
+            try:
+                with open(creds_path, "r", encoding="utf-8") as fh:
+                    sa_data = json.load(fh)
+                    project_id_file = sa_data.get("project_id")
+            except Exception:
+                project_id_file = None
+            project_id_opt = project_id_file or project_id_env
+            cred = credentials.Certificate(creds_path)
+            if project_id_opt:
+                firebase_admin.initialize_app(cred, {"projectId": project_id_opt})
+            else:
+                firebase_admin.initialize_app(cred)
+        else:
+            # Try common paths if GOOGLE_APPLICATION_CREDENTIALS not set
+            possible_paths = [
+                os.path.join(os.getcwd(), "service-account.json"),
+                os.path.join(os.path.dirname(__file__), "..", "..", "service-account.json"),
+                os.path.join(os.path.dirname(__file__), "..", "..", "..", "service-account.json"),
+            ]
+            creds_path = None
+            for path in possible_paths:
+                abs_path = os.path.abspath(path)
+                if os.path.exists(abs_path):
+                    creds_path = abs_path
+                    break
+            
+            if creds_path:
+                log.info("auth.firebase_init.found_service_account", path=creds_path)
+                try:
+                    with open(creds_path, "r", encoding="utf-8") as fh:
+                        sa_data = json.load(fh)
+                        project_id_file = sa_data.get("project_id")
+                except Exception:
+                    project_id_file = None
+                project_id_env = os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
+                project_id_opt = project_id_file or project_id_env
+                cred = credentials.Certificate(creds_path)
+                if project_id_opt:
+                    firebase_admin.initialize_app(cred, {"projectId": project_id_opt})
+                else:
+                    firebase_admin.initialize_app(cred)
+            else:
+                # 2) Try full JSON blob in env (FIREBASE_CREDENTIALS_JSON)
+                creds_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
+                if creds_json:
+                    try:
+                        data = json.loads(creds_json)
+                        # Normalize possible \n in private_key
+                        if isinstance(data, dict) and data.get("private_key"):
+                            data["private_key"] = data["private_key"].replace("\\n", "\n")
+                        cred = credentials.Certificate(data)
+                        project_id_opt = data.get("project_id") or os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
+                        if project_id_opt:
+                            firebase_admin.initialize_app(cred, {"projectId": project_id_opt})
+                        else:
+                            firebase_admin.initialize_app(cred)
+                    except Exception as e:
+                        raise RuntimeError(f"Invalid FIREBASE_CREDENTIALS_JSON: {e}")
+                else:
+                    # 3) Fallback to split envs (PROJECT_ID, CLIENT_EMAIL, PRIVATE_KEY)
+                    project_id = os.getenv("FIREBASE_PROJECT_ID")
+                    client_email = os.getenv("FIREBASE_CLIENT_EMAIL")
+                    private_key = os.getenv("FIREBASE_PRIVATE_KEY")
+                    if project_id and client_email and private_key:
+                        private_key = private_key.replace("\\n", "\n")
+                        cred = credentials.Certificate({
+                            "project_id": project_id,
+                            "client_email": client_email,
+                            "private_key": private_key,
+                            "type": "service_account",
+                        })
+                        firebase_admin.initialize_app(cred, {"projectId": project_id})
+                    else:
+                        # 4) Last resort: Application Default Credentials (may work in GCP)
+                        adc_project = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("FIREBASE_PROJECT_ID")
+                        if adc_project:
+                            firebase_admin.initialize_app(options={"projectId": adc_project})
+                        else:
+                            firebase_admin.initialize_app()
+    except Exception as exc:
+        log.error("auth.firebase_init.failed", error=str(exc))
+        raise exc
 
 
 def _merge_users(db, primary_id, duplicate_id):

@@ -7,8 +7,11 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 from pymongo.database import Database
+import pytz
 
 logger = logging.getLogger(__name__)
+
+IST = pytz.timezone("Asia/Kolkata")
 
 class GoldPriceCalculator:
     """Service for calculating and updating product prices based on gold rates."""
@@ -194,14 +197,14 @@ class GoldPriceCalculator:
     def update_product_prices(self, dry_run: bool = False) -> Dict[str, any]:
         """
         Update prices for all gold products based on current gold rates.
-        
+
         Args:
             dry_run: If True, only calculate prices without updating database
-            
+
         Returns:
             Dictionary with update results
         """
-        start_time = datetime.now(timezone.utc)
+        start_time = datetime.now(IST)
         results = {
             "success": False,
             "updated_count": 0,
@@ -312,7 +315,7 @@ class GoldPriceCalculator:
         try:
             log_entry = {
                 "operation": "price_update",
-                "timestamp": datetime.now(timezone.utc),
+                "timestamp": datetime.now(IST),
                 "success": results["success"],
                 "updated_count": results["updated_count"],
                 "error_count": results["error_count"],
@@ -337,7 +340,9 @@ class GoldPriceCalculator:
             for log in logs:
                 log["_id"] = str(log["_id"])
                 if "timestamp" in log and hasattr(log["timestamp"], "isoformat"):
-                    log["timestamp"] = log["timestamp"].isoformat()
+                    # Convert UTC timestamp to IST and format with timezone
+                    ist_timestamp = log["timestamp"] + timedelta(hours=5, minutes=30)
+                    log["timestamp"] = ist_timestamp.isoformat() + '+05:30'
             
             return logs
             
@@ -356,7 +361,9 @@ class GoldPriceCalculator:
             if log:
                 log["_id"] = str(log["_id"])
                 if "timestamp" in log and hasattr(log["timestamp"], "isoformat"):
-                    log["timestamp"] = log["timestamp"].isoformat()
+                    # Convert UTC timestamp to IST and format with timezone
+                    ist_timestamp = log["timestamp"] + timedelta(hours=5, minutes=30)
+                    log["timestamp"] = ist_timestamp.isoformat() + '+05:30'
             
             return log
             

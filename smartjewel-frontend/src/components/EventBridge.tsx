@@ -48,6 +48,7 @@ const EventBridge: React.FC = () => {
       const quantity = typeof detail.quantity === 'number' ? detail.quantity : 1;
       addToCart({
         productId: String(detail.productId),
+        sku: typeof detail.sku === 'string' ? detail.sku : undefined,
         name: String(detail.name),
         price: typeof detail.price === 'number' ? detail.price : undefined,
         image: typeof detail.image === 'string' ? detail.image : undefined,
@@ -77,6 +78,7 @@ const EventBridge: React.FC = () => {
       const quantity = typeof detail.quantity === 'number' ? detail.quantity : 1;
       addToCart({
         productId: String(detail.productId),
+        sku: typeof detail.sku === 'string' ? detail.sku : undefined,
         name: String(detail.name),
         price: typeof detail.price === 'number' ? detail.price : undefined,
         image: typeof detail.image === 'string' ? detail.image : undefined,

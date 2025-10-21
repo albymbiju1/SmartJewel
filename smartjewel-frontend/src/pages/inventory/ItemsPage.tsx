@@ -9,6 +9,7 @@ interface Item {
   sku: string; 
   name: string; 
   category: string; 
+  sub_category?: string;
   metal: string; 
   purity: string; 
   weight_unit: string; 
@@ -16,6 +17,11 @@ interface Item {
   price?: number;
   description?: string;
   image?: string;
+  gemstones?: string[];
+  color?: string;
+  style?: string;
+  tags?: string[];
+  brand?: string;
   status: string; 
   created_at?: string;
   updated_at?: string;
@@ -27,7 +33,9 @@ export const ItemsPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
+  const [viewingItem, setViewingItem] = useState<Item | null>(null);
   // Simplified state management
   
   // Check permissions - admins get full access, others need specific permissions
@@ -112,6 +120,20 @@ export const ItemsPage: React.FC = () => {
     setShowEditModal(true);
   }, []);
 
+  const openDetailsModal = useCallback((item: Item) => {
+    setViewingItem(item);
+    setShowDetailsModal(true);
+  }, []);
+
+  // Convert Item to FormData format for editing
+  const convertItemToFormData = (item: Item) => {
+    return {
+      ...item,
+      gemstones: Array.isArray(item.gemstones) ? item.gemstones.join(', ') : (item.gemstones || ''),
+      tags: Array.isArray(item.tags) ? item.tags.join(', ') : (item.tags || ''),
+    };
+  };
+
 
   const deleteItem = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this item?')) {
@@ -168,6 +190,7 @@ export const ItemsPage: React.FC = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Brand</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Metal</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
@@ -199,6 +222,7 @@ export const ItemsPage: React.FC = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.sku}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.name}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{item.category}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{item.brand || 'Smart Jewel'}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{item.metal} ({item.purity})</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">₹{item.price?.toLocaleString() || 'N/A'}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -210,6 +234,16 @@ export const ItemsPage: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex justify-end space-x-2">
+                          <button
+                            onClick={() => openDetailsModal(item)}
+                            className="text-green-600 hover:text-green-900 p-1"
+                            title="View Details"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          </button>
                           {canEdit && (
                             <button
                               onClick={() => openEditModal(item)}
@@ -238,7 +272,7 @@ export const ItemsPage: React.FC = () => {
                   ))}
                   {items.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
+                      <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
                         <div className="flex flex-col items-center">
                           <svg className="w-12 h-12 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
@@ -290,7 +324,7 @@ export const ItemsPage: React.FC = () => {
                     onSubmit={handleEditItem}
                     onCancel={() => { setShowEditModal(false); setEditingItem(null); }}
                     isEdit
-                    initialData={editingItem}
+                    initialData={editingItem ? convertItemToFormData(editingItem) : undefined}
                   />
                 </div>
               </div>

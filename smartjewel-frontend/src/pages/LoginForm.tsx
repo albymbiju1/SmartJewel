@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { firebaseAuthService } from '../services/firebaseAuth';
 import { ForgotPasswordModal } from '../components/ForgotPasswordModal';
@@ -20,6 +21,7 @@ export const LoginForm: React.FC<Props> = ({ onSuccess, switchToRegister }) => {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [isGoogleSigningIn, setIsGoogleSigningIn] = useState(false);
   const { loginWithFirebase } = useAuth();
+  const navigate = useNavigate();
   
   const { register, handleSubmit, formState: { errors, isSubmitting, isValid, touchedFields }, getValues } = useForm<FormValues>({ 
     resolver: zodResolver(loginSchema),
@@ -54,6 +56,11 @@ export const LoginForm: React.FC<Props> = ({ onSuccess, switchToRegister }) => {
       if (errorData?.error === 'validation_failed' && errorData?.details) {
         const validationMessages = Object.values(errorData.details).flat().join(', ');
         setLoginError(validationMessages);
+      } else if (errorData?.error === 'account_unverified') {
+        setLoginError('Please verify your email before signing in.');
+        // Route to OTP verification with email prefilled
+        const email = getValues('email');
+        setTimeout(() => navigate('/verify-otp', { state: { email } }), 300);
       } else if (error?.response?.status === 401 || errorData?.error === 'invalid_credentials') {
         setLoginError('Invalid email or password. Please try again.');
       } else {
@@ -75,7 +82,23 @@ export const LoginForm: React.FC<Props> = ({ onSuccess, switchToRegister }) => {
       const userData = JSON.parse(localStorage.getItem('user_data') || '{}');
       onSuccess({ access_token: access, refresh_token: refresh }, userData);
     } catch (error: any) {
-      const message = error?.response?.data?.error || error?.message || 'Google sign-in failed. Please try again.';
+      // Better error message construction
+      let message = 'Google sign-in failed. Please try again.';
+      
+      if (error?.response?.data?.error === 'invalid_id_token') {
+        message = 'The authentication token is invalid. Your system clock may be out of sync. Please try again, or restart your browser.';
+      } else if (error?.response?.data?.error === 'token_expired') {
+        message = 'The authentication token expired. Please try signing in again.';
+      } else if (error?.response?.data?.error === 'verify_failed') {
+        message = 'Failed to verify authentication. Please check your internet connection and try again.';
+      } else if (error?.response?.data?.details) {
+        message = error.response.data.details;
+      } else if (error?.response?.data?.error) {
+        message = error.response.data.error;
+      } else if (error?.message) {
+        message = error.message;
+      }
+      
       setLoginError(message);
     } finally {
       setIsGoogleSigningIn(false);

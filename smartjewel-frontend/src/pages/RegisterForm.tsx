@@ -3,11 +3,12 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { api } from '../api';
 import { registrationSchema, RegistrationFormValues } from '../utils/validation';
+import { firebaseAuthService } from '../services/firebaseAuth';
 
 type FormValues = RegistrationFormValues;
 
 interface Props {
-  onSuccess: () => void;
+  onSuccess: (email: string) => void;
   switchToLogin: () => void;
 }
 
@@ -30,20 +31,30 @@ export const RegisterForm: React.FC<Props> = ({ onSuccess, switchToLogin }) => {
   const onSubmit = async (values: FormValues) => {
     try {
       setRegisterError(null);
-      // Backend expects: name, email, password, phone
-      await api.post('/auth/register', {
+      
+      // Register only via backend; backend will handle Firebase linking/creation
+      const response = await api.post('/auth/register', {
         name: values.name,
         email: values.email,
         password: values.password,
         phone: values.phone
       });
-      onSuccess();
+
+      // Redirect to OTP verification with email prefilled
+      onSuccess(values.email);
     } catch (error: any) {
       const errorData = error.response?.data;
       if (errorData?.error === 'validation_failed' && errorData?.details) {
         // Handle validation errors
         const validationMessages = Object.values(errorData.details).flat().join(', ');
         setRegisterError(validationMessages);
+      } else if (errorData?.error === 'account_unverified') {
+        // Redirect to OTP verification with email prefilled and request resend
+        try {
+          await api.post('/auth/request-otp', { email: values.email });
+        } catch {}
+        onSuccess(values.email);
+        return;
       } else if (errorData?.error === 'email_in_use') {
         setRegisterError('This email is already registered. Please use a different email or try logging in.');
       } else {

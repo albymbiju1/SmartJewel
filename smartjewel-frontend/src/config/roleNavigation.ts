@@ -40,8 +40,8 @@ export const ROLE_NAVIGATION: Record<string, RoleNavigation> = {
       { label: 'Items (CRUD)', key: 'items', href: '/inventory/items' },
       { label: 'Stock', key: 'stock', href: '/inventory/stock' },
       { label: 'Tags', key: 'tags', href: '/inventory/tags' },
-      { label: 'Locations', key: 'locations', href: '/inventory/locations' },
-      { label: 'BOM', key: 'bom', href: '/inventory/bom' },
+      { label: 'Stores', key: 'stores', href: '/admin/stores' },
+      { label: 'View Orders', key: 'view_orders', href: '/admin/orders' },
     ]
   },
 
@@ -55,7 +55,6 @@ export const ROLE_NAVIGATION: Record<string, RoleNavigation> = {
     ],
     sidebarItems: [
       { label: 'Tags', key: 'tags', href: '/inventory/tags' },
-      { label: 'Locations', key: 'locations', href: '/inventory/locations' },
       { label: 'BOM', key: 'bom', href: '/inventory/bom' },
       { label: 'Valuation', key: 'valuation', href: '/inventory/valuation' },
     ],

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../api';
+import { stockService, ProductWithStock } from '../../services/stockService';
 
 interface Product {
   _id: string;
@@ -16,13 +17,16 @@ interface Product {
   image?: string;
   status: string;
   created_at?: string;
+  quantity?: number;
 }
 
 export const ProductDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [product, setProduct] = useState<Product | null>(null);
+  const [productWithStock, setProductWithStock] = useState<ProductWithStock | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [stockLoading, setStockLoading] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [activeImage, setActiveImage] = useState<string | null>(null);
   const [zoomed, setZoomed] = useState(false);
@@ -42,6 +46,11 @@ export const ProductDetailPage: React.FC = () => {
         const products = response.data.products || [];
         const foundProduct = products.find((item: Product) => item._id === id);
         setProduct(foundProduct || null);
+        
+        if (foundProduct) {
+          // Load stock data for this product
+          await loadStockData(foundProduct);
+        }
       } catch (error) {
         console.error('Failed to load product:', error);
       } finally {
@@ -49,23 +58,54 @@ export const ProductDetailPage: React.FC = () => {
       }
     };
 
+    const loadStockData = async (product: Product) => {
+      try {
+        setStockLoading(true);
+        
+        // Use the quantity directly from the product since it's now included in the API response
+        const quantity = product.quantity || 0;
+        const productWithStockData: ProductWithStock = {
+          ...product,
+          quantity: quantity,
+          stockStatus: stockService.getStockStatus(quantity),
+          stockDisplayText: stockService.getStockDisplayText(quantity)
+        };
+        
+        setProductWithStock(productWithStockData);
+      } catch (error) {
+        console.error('Failed to load stock data:', error);
+        // Fallback to product without stock data
+        const fallbackProduct: ProductWithStock = {
+          ...product,
+          quantity: product.quantity || 0,
+          stockStatus: stockService.getStockStatus(product.quantity || 0),
+          stockDisplayText: stockService.getStockDisplayText(product.quantity || 0)
+        };
+        setProductWithStock(fallbackProduct);
+      } finally {
+        setStockLoading(false);
+      }
+    };
+
     loadProduct();
   }, [id]);
 
-  if (isLoading) {
+  if (isLoading || stockLoading) {
     return (
       <div className="min-h-screen bg-gray-50 py-12">
         <div className="container mx-auto px-6">
           <div className="text-center">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            <p className="mt-4 text-gray-600">Loading product details...</p>
+            <p className="mt-4 text-gray-600">
+              {isLoading ? 'Loading product details...' : 'Checking stock availability...'}
+            </p>
           </div>
         </div>
       </div>
     );
   }
 
-  if (!product) {
+  if (!product || !productWithStock) {
     return (
       <div className="min-h-screen bg-gray-50 py-12">
         <div className="container mx-auto px-6">
@@ -160,6 +200,19 @@ export const ProductDetailPage: React.FC = () => {
                       ₹{product.price.toLocaleString()}
                     </span>
                     <span className="text-gray-600 ml-2">(inclusive of all taxes)</span>
+                    
+                    {/* Stock Status Display */}
+                    <div className="mt-3">
+                      <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                        productWithStock.stockStatus === 'available' 
+                          ? 'bg-green-100 text-green-800' 
+                          : productWithStock.stockStatus === 'limited' 
+                            ? 'bg-yellow-100 text-yellow-800' 
+                            : 'bg-red-100 text-red-800'
+                      }`}>
+                        {productWithStock.stockDisplayText}
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -195,7 +248,21 @@ export const ProductDetailPage: React.FC = () => {
                     </div>
                     <div className="bg-gray-50 p-4 rounded-lg">
                       <span className="text-sm font-medium text-gray-500">Status</span>
-                      <p className={`font-semibold ${product.status === 'active' ? 'text-green-600' : 'text-red-600'}`}>{product.status === 'active' ? 'Available' : 'Out of Stock'}</p>
+                      <p
+                        className={`font-semibold ${
+                          productWithStock.stockStatus === 'out_of_stock'
+                            ? 'text-red-600'
+                            : productWithStock.stockStatus === 'limited'
+                              ? 'text-yellow-600'
+                              : 'text-green-600'
+                        }`}
+                      >
+                        {productWithStock.stockStatus === 'out_of_stock'
+                          ? 'Out of Stock'
+                          : productWithStock.stockStatus === 'limited'
+                            ? 'Limited Stock'
+                            : 'Available'}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -224,11 +291,19 @@ export const ProductDetailPage: React.FC = () => {
                     <div className="flex items-center space-x-4 mb-6">
                       <label className="text-sm font-medium text-gray-700">Quantity:</label>
                       <div className="flex items-center border rounded-md">
-                        <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="p-2 hover:bg-gray-50">
+                        <button 
+                          onClick={() => setQuantity(Math.max(1, quantity - 1))} 
+                          disabled={productWithStock.stockStatus === 'out_of_stock'}
+                          className="p-2 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
                         </button>
                         <span className="px-4 py-2 border-x">{quantity}</span>
-                        <button onClick={() => setQuantity(quantity + 1)} className="p-2 hover:bg-gray-50">
+                        <button 
+                          onClick={() => setQuantity(Math.min(quantity + 1, productWithStock.quantity || 0))} 
+                          disabled={productWithStock.stockStatus === 'out_of_stock' || quantity >= (productWithStock.quantity || 0)}
+                          className="p-2 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
                         </button>
                       </div>
@@ -236,10 +311,17 @@ export const ProductDetailPage: React.FC = () => {
 
                     <div className="flex flex-col sm:flex-row gap-4">
                       <button
-                        className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
+                        className={`flex-1 py-3 px-6 rounded-lg transition-colors flex items-center justify-center space-x-2 ${
+                          productWithStock.stockStatus === 'out_of_stock'
+                            ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                            : 'bg-blue-600 text-white hover:bg-blue-700'
+                        }`}
+                        disabled={productWithStock.stockStatus === 'out_of_stock'}
                         onClick={()=>{
+                          if (productWithStock.stockStatus === 'out_of_stock') return;
                           const ev = new CustomEvent('sj:addToCart', { detail: {
                             productId: product._id,
+                            sku: product.sku,
                             name: product.name,
                             price: product.price,
                             image: product.image,
@@ -253,12 +335,20 @@ export const ProductDetailPage: React.FC = () => {
                         }}
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 3H3m4 10v6a1 1 0 001 1h1m-4-3h12a2 2 0 002-2V9a2 2 0 00-2-2H9a2 2 0 00-2 2v10z" /></svg>
-                        <span>Add to Cart</span>
+                        <span>{productWithStock.stockStatus === 'out_of_stock' ? 'Out of Stock' : 'Add to Cart'}</span>
                       </button>
-                      <button className="flex-1 bg-orange-600 text-white py-3 px-6 rounded-lg hover:bg-orange-700 transition-colors flex items-center justify-center space-x-2"
+                      <button 
+                        className={`flex-1 py-3 px-6 rounded-lg transition-colors flex items-center justify-center space-x-2 ${
+                          productWithStock.stockStatus === 'out_of_stock'
+                            ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                            : 'bg-orange-600 text-white hover:bg-orange-700'
+                        }`}
+                        disabled={productWithStock.stockStatus === 'out_of_stock'}
                         onClick={()=>{
+                          if (productWithStock.stockStatus === 'out_of_stock') return;
                           const ev = new CustomEvent('sj:buyNow', { detail: {
                             productId: product._id,
+                            sku: product.sku,
                             name: product.name,
                             price: product.price,
                             image: product.image,
@@ -272,7 +362,7 @@ export const ProductDetailPage: React.FC = () => {
                         }}
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                        <span>Buy Now</span>
+                        <span>{productWithStock.stockStatus === 'out_of_stock' ? 'Out of Stock' : 'Buy Now'}</span>
                       </button>
                     </div>
 

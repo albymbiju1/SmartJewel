@@ -167,13 +167,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const loginWithFirebase = async (firebaseUser: FirebaseUser) => {
     try {
       // Exchange Firebase ID token for backend JWTs mapped by email
-      const idToken = await firebaseUser.getIdToken();
+      let idToken: string;
+      try {
+        idToken = await firebaseUser.getIdToken(true); // Force refresh to ensure freshness
+        console.log('Firebase ID token obtained successfully', { email: firebaseUser.email, uid: firebaseUser.uid, tokenLength: idToken.length });
+      } catch (tokenError) {
+        console.error('Failed to get Firebase ID token:', tokenError);
+        throw tokenError;
+      }
+
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000);
+        console.log('Attempting to exchange Firebase token with backend...');
         const exchange = await api.post('/auth/firebase-login', { id_token: idToken }, { signal: controller.signal });
         clearTimeout(timeoutId);
 
+        console.log('Token exchange successful');
         const tokens = { access_token: exchange.data.access_token, refresh_token: exchange.data.refresh_token };
         const userData = { ...(exchange.data.user as User), isFirebaseUser: true };
 
@@ -187,9 +197,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Set axios auth header and update state
         setAuthToken(tokens.access_token);
         setUser(userData);
-      } catch (exchangeError) {
+      } catch (exchangeError: any) {
         // Do not complete login without a backend session; surface error to UI
         // Persist Firebase token so a later retry can work silently
+        console.error('Token exchange failed:', {
+          status: exchangeError?.response?.status,
+          error: exchangeError?.response?.data?.error,
+          details: exchangeError?.response?.data?.details,
+          message: exchangeError?.message
+        });
         localStorage.setItem('firebase_user', 'true');
         localStorage.setItem('firebase_token', idToken);
         throw exchangeError;

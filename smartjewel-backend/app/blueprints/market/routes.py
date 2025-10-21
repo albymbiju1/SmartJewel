@@ -9,6 +9,8 @@ from flask_jwt_extended import jwt_required
 
 from . import bp
 from app.services.price_calculator import GoldPriceCalculator
+from app.services.gold_rate_service import GoldRateService
+from app.scheduler import trigger_gold_rate_refresh
 
 
 def _now():
@@ -28,52 +30,8 @@ def _to_jsonable(doc: dict):
 
 
 def _fetch_gold_rate_inr() -> Optional[dict]:
-    from app.config import Config
-    api_key = Config.GOLDAPI_KEY
-    if not api_key:
-        return None
-    # GoldAPI endpoint for XAU/INR spot price
-    url = "https://www.goldapi.io/api/XAU/INR"
-    headers = {
-        "x-access-token": api_key,
-        "Content-Type": "application/json",
-    }
-    try:
-        resp = requests.get(url, headers=headers, timeout=20)
-        if resp.status_code >= 400:
-            return None
-        data = resp.json()
-        # GoldAPI provides per-gram rates for 24k and fineness-based fields; derive common retail purities
-        # Base: 24k per gram
-        g24 = data.get("price_gram_24k")
-        try:
-            g24 = float(g24) if g24 is not None else None
-        except Exception:
-            g24 = None
-        if g24 is None:
-            # As a fallback, derive from ounce price when necessary
-            try:
-                oz = float(data.get("price"))
-                g24 = oz / 31.1034768
-            except Exception:
-                g24 = None
-
-        if g24 is None:
-            return None
-
-        # Derive per-gram for common purities using karat ratio
-        def k(val):
-            return round(g24 * (val / 24.0), 4)
-
-        rates = {
-            "24k": round(g24, 4),
-            "22k": k(22),
-            "18k": k(18),
-            "14k": k(14),
-        }
-        return {"rates": rates}
-    except Exception:
-        return None
+    """Deprecated: Kept for backwards compatibility; delegate to GoldRateService."""
+    return GoldRateService.fetch_from_goldapi()
 
 
 @bp.get("/gold-rate")
@@ -87,7 +45,7 @@ def get_gold_rate():
 
     return jsonify({
         "rates": rates,
-        "updated_at": updated_at.isoformat() if hasattr(updated_at, 'isoformat') else updated_at
+        "updated_at": updated_at.isoformat() + '+05:30' if hasattr(updated_at, 'isoformat') else updated_at
     })
 
 
@@ -96,42 +54,18 @@ def get_gold_rate():
 def refresh_gold_rate():
     """Force-refresh the gold rate from GoldAPI (spends one API call)."""
     db = current_app.extensions['mongo_db']
-    fetched = _fetch_gold_rate_inr()
-    if not fetched:
-        return jsonify({"error": "refresh_failed"}), 502
-    payload = {"updated_at": _now(), "rates": fetched.get("rates", {})}
-    db.gold_rate.update_one({}, {"$set": payload}, upsert=True)
-    
-    # Automatically update product prices when gold rates are refreshed
-    try:
-        price_calculator = GoldPriceCalculator(db)
-        update_results = price_calculator.update_product_prices(dry_run=False)
-        
-        # Add price update info to response
-        response_data = {
-            "rates": payload["rates"], 
-            "updated_at": payload["updated_at"].isoformat(),
-            "price_update": {
-                "success": update_results["success"],
-                "updated_count": update_results["updated_count"],
-                "error_count": update_results["error_count"],
-                "skipped_count": update_results["skipped_count"]
-            }
-        }
-        
-        if update_results["errors"]:
-            response_data["price_update"]["errors"] = update_results["errors"]
-        
-        return jsonify(response_data)
-        
-    except Exception as e:
-        # Don't fail the gold rate refresh if price update fails
-        current_app.logger.error(f"Price update failed during gold rate refresh: {e}")
-        return jsonify({
-            "rates": payload["rates"], 
-            "updated_at": payload["updated_at"].isoformat(),
-            "price_update": {"success": False, "error": str(e)}
-        })
+    result = GoldRateService.refresh_and_reprice(db)
+    if not result.get("success"):
+        return jsonify({"error": result.get("error", "refresh_failed")}), 502
+
+    # Build response
+    upd_at = result.get("updated_at")
+    updated_at = upd_at.isoformat() + '+05:30' if hasattr(upd_at, 'isoformat') else upd_at
+    return jsonify({
+        "rates": result.get("rates", {}),
+        "updated_at": updated_at,
+        "price_update": result.get("price_update", {})
+    })
 
 
 @bp.post("/update-product-prices")
@@ -182,18 +116,32 @@ def get_price_update_history():
 def get_last_price_update():
     """Get information about the last successful price update."""
     db = current_app.extensions['mongo_db']
-    
+
     try:
         price_calculator = GoldPriceCalculator(db)
         last_update = price_calculator.get_last_successful_update()
-        
+
         if last_update:
             return jsonify({"last_update": last_update}), 200
         else:
             return jsonify({"last_update": None}), 200
-            
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@bp.post("/trigger-scheduler-job")
+@jwt_required()  # require auth; admin only
+def trigger_scheduler_job():
+    """Manually trigger the scheduled gold rate refresh job for testing."""
+    try:
+        result = trigger_gold_rate_refresh(current_app)
+        if result["success"]:
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 500
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @bp.post("/calculate-gold-price")

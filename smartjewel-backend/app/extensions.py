@@ -16,14 +16,21 @@ db = None
 def init_extensions(app):
     global mongo_client, db
     # Use shorter client timeouts so API doesn't hang when DB is down
-    mongo_client = MongoClient(
-        app.config["MONGODB_URI"],
-        serverSelectionTimeoutMS=3000,
-        connectTimeoutMS=3000,
-        socketTimeoutMS=3000,
-    )
-    db = mongo_client[app.config["MONGO_DB_NAME"]]
-    app.extensions['mongo_db'] = db
+    try:
+        mongo_client = MongoClient(
+            app.config["MONGODB_URI"],
+            serverSelectionTimeoutMS=3000,
+            connectTimeoutMS=3000,
+            socketTimeoutMS=3000,
+        )
+        db = mongo_client[app.config["MONGO_DB_NAME"]]
+        app.extensions['mongo_db'] = db
+        print(f"MongoDB connected successfully to {app.config['MONGO_DB_NAME']}")
+    except Exception as e:
+        print(f"MongoDB connection failed: {e}")
+        print("Continuing without database - orders will not be persisted")
+        db = None
+        app.extensions['mongo_db'] = None
 
     # Expand CORS origins to include localhost/127.0.0.1 counterparts to avoid dev mismatches
     cfg_origins = app.config["CORS_ORIGINS"] or []

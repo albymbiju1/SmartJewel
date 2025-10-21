@@ -3,11 +3,8 @@ services:
   - type: web
     name: smartjewel-frontend
     env: static
-    buildCommand: cd smartjewel-frontend && npm install && npm run build
+    buildCommand: cd smartjewel-frontend && npm install && VITE_API_BASE=https://smart-jewel.vercel.app npm run build
     staticPublishPath: smartjewel-frontend/dist
-    envVars:
-      - key: VITE_API_BASE
-        value: https://smart-jewel.vercel.app
     routes:
       - type: rewrite
         source: /*

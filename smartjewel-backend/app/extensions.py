@@ -5,6 +5,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from pymongo import MongoClient
 import structlog
+import os
 
 jwt = JWTManager()
 cors = CORS()
@@ -15,13 +16,17 @@ db = None
 
 def init_extensions(app):
     global mongo_client, db
-    # Use shorter client timeouts so API doesn't hang when DB is down
+    # Use shorter client timeouts for serverless environments
+    # Vercel has strict timeout limits (10s for Hobby, 60s for Pro)
+    is_serverless = app.config.get('ENV') == 'production' or os.getenv('VERCEL') or os.getenv('AWS_LAMBDA_FUNCTION_NAME')
+    timeout_ms = 5000 if is_serverless else 10000
+    
     try:
         mongo_client = MongoClient(
             app.config["MONGODB_URI"],
-            serverSelectionTimeoutMS=3000,
-            connectTimeoutMS=3000,
-            socketTimeoutMS=3000,
+            serverSelectionTimeoutMS=timeout_ms,
+            connectTimeoutMS=timeout_ms,
+            socketTimeoutMS=timeout_ms,
         )
         db = mongo_client[app.config["MONGO_DB_NAME"]]
         app.extensions['mongo_db'] = db

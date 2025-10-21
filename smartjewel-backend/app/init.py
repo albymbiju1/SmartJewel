@@ -19,13 +19,18 @@ def create_app():
     except Exception:
         pass
     
-    # Ensure static/uploads directory exists
-    upload_dir = os.path.join(app.root_path, 'static', 'uploads')
-    os.makedirs(upload_dir, exist_ok=True)
+    # Skip static folder creation in serverless environments (Vercel)
+    is_serverless = os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME")
+    if not is_serverless:
+        # Ensure static/uploads directory exists
+        upload_dir = os.path.join(app.root_path, 'static', 'uploads')
+        os.makedirs(upload_dir, exist_ok=True)
     
     init_extensions(app)
 
     # Optionally start background scheduler for gold rate refresh (reloader-safe)
+    # IMPORTANT: Scheduler should NOT run in serverless environments (Vercel, AWS Lambda, etc.)
+    is_serverless = os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME")
     try:
         from app.scheduler import setup_scheduler
         from app.config import Config as _Cfg
@@ -34,6 +39,10 @@ def create_app():
         # In debug with reloader, only start in the main process
         if app.debug:
             should_start = os.environ.get("WERKZEUG_RUN_MAIN") == "true"
+        # Never start scheduler in serverless environments
+        if is_serverless:
+            should_start = False
+            app.logger.info("Scheduler disabled in serverless environment")
         if getattr(_Cfg, "SCHEDULER_ENABLED", True) and should_start:
             scheduler = setup_scheduler(app)
             app.extensions['scheduler'] = scheduler

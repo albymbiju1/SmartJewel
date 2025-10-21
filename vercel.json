@@ -1,8 +1,13 @@
 {
+  "version": 2,
   "builds": [
     { "src": "smartjewel-backend/wsgi.py", "use": "@vercel/python" }
   ],
   "routes": [
     { "src": "/(.*)", "dest": "smartjewel-backend/wsgi.py" }
-  ]
+  ],
+  "env": {
+    "VERCEL": "1",
+    "SCHEDULER_ENABLED": "false"
+  }
 }

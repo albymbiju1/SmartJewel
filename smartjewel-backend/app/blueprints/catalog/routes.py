@@ -445,11 +445,15 @@ def chat():
     try:
         # Import current_app directly in the function scope to avoid scoping issues
         from flask import current_app, request, jsonify
+        import os
         
         # Get the database connection
         db = current_app.extensions.get('mongo_db')
         if db is None:
-            return jsonify({"error": "Database not available"}), 503
+            return jsonify({
+                "reply": "I'm temporarily unavailable. Please try again in a moment.",
+                "error": "database_unavailable"
+            }), 503
 
         # Parse request data
         data = request.get_json() or {}
@@ -459,18 +463,17 @@ def chat():
         if not user_message:
             return jsonify({"error": "Message is required"}), 400
 
-        # Configure Mistral AI
-        from mistralai import Mistral
-        import os
-
+        # Configure Mistral AI (lazy import to reduce cold start time)
         api_key = os.getenv("MISTRAL_API_KEY")
         if not api_key:
-            return jsonify({"error": "Mistral API key not configured"}), 500
+            return jsonify({
+                "reply": "AI assistant is temporarily unavailable. How can I help you with our jewelry collection?",
+                "error": "ai_unavailable"
+            }), 200  # Return 200 to keep chatbot functional
 
         model_name = os.getenv("MISTRAL_MODEL", "mistral-small")
         max_tokens = int(os.getenv("MISTRAL_MAX_TOKENS", "150"))  # Reduced from 220 to 150
         temperature = float(os.getenv("MISTRAL_TEMPERATURE", "0.4"))
-        client = Mistral(api_key=api_key)
 
         # Minimal intent detection for tool-like paths; otherwise rely on LLM
         intent = "general"
@@ -574,6 +577,16 @@ def chat():
         
         # For non-tool paths, defer to LLM with a jewellery-specific system prompt
         if not response_text:
+            try:
+                # Import Mistral here to avoid cold start issues
+                from mistralai import Mistral
+                client = Mistral(api_key=api_key)
+            except Exception as mistral_error:
+                print(f"Failed to initialize Mistral client: {str(mistral_error)}")
+                return jsonify({
+                    "reply": "I'm having trouble connecting to my AI brain right now. Please try asking about our products, gold rates, or order tracking.",
+                    "error": "ai_init_failed"
+                }), 200
             messages = [
                 {
                     "role": "system",

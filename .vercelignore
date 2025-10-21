@@ -1,0 +1,10 @@
+smartjewel-frontend
+node_modules
+*.pyc
+__pycache__
+.git
+.env.local
+.DS_Store
+*.log
+smartjewel-backend/.vite
+smartjewel-backend/static/uploads

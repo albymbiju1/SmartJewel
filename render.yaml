@@ -5,6 +5,19 @@ services:
     env: static
     buildCommand: cd smartjewel-frontend && npm install && VITE_API_BASE=https://smart-jewel.vercel.app npm run build
     staticPublishPath: smartjewel-frontend/dist
+    envVars:
+      - key: VITE_FIREBASE_API_KEY
+        sync: false
+      - key: VITE_FIREBASE_AUTH_DOMAIN
+        sync: false
+      - key: VITE_FIREBASE_PROJECT_ID
+        sync: false
+      - key: VITE_FIREBASE_STORAGE_BUCKET
+        sync: false
+      - key: VITE_FIREBASE_MESSAGING_SENDER_ID
+        sync: false
+      - key: VITE_FIREBASE_APP_ID
+        sync: false
     routes:
       - type: rewrite
         source: /*

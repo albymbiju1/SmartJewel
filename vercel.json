@@ -1,0 +1,8 @@
+{
+  "builds": [
+    { "src": "smartjewel-backend/wsgi.py", "use": "@vercel/python" }
+  ],
+  "routes": [
+    { "src": "/(.*)", "dest": "smartjewel-backend/wsgi.py" }
+  ]
+}

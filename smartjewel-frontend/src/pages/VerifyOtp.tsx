@@ -52,13 +52,21 @@ export const VerifyOtp: React.FC = () => {
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-xl w-full max-w-md mx-auto mt-12">
-      <div className="text-center mb-6">
-        <div className="flex justify-center mb-4">
-          <img src="/logo192.png" alt="SmartJewel logo" width="192" height="192" className="h-10 md:h-12 w-auto object-contain" />
+    <div className="bg-white/95 backdrop-blur rounded-2xl p-8 shadow-2xl w-full max-w-md mx-auto mt-16 border border-gray-200">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3 mx-auto">
+          <div className="h-10 w-10 rounded-lg bg-[color:var(--brand-gold)]/10 flex items-center justify-center">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[color:var(--brand-gold)]">
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="M12 8v8"></path>
+              <path d="M8 12h8"></path>
+            </svg>
+          </div>
+          <div>
+            <h1 className="text-xl font-semibold text-gray-800">Verify your email</h1>
+            <p className="text-xs text-gray-500">Enter the 6-digit code we sent</p>
+          </div>
         </div>
-        <h1 className="text-xl font-semibold text-gray-800">Verify your email</h1>
-        <p className="text-gray-500 text-sm">Enter the 6-digit code sent to your email</p>
       </div>
 
       {message && (
@@ -73,7 +81,7 @@ export const VerifyOtp: React.FC = () => {
           <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
           <input
             type="email"
-            className="w-full h-11 rounded-md border bg-white px-3 text-sm border-gray-300"
+            className="w-full h-11 rounded-md border bg-white px-3 text-sm focus:outline-none focus:ring-2 border-gray-300 focus:ring-[color:var(--brand-gold)]/30"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
@@ -89,7 +97,7 @@ export const VerifyOtp: React.FC = () => {
             autoComplete="one-time-code"
             name="otp"
             required
-            className="w-full h-11 rounded-md border bg-white px-3 text-sm border-gray-300"
+            className="w-full h-11 rounded-md border bg-white px-3 text-sm focus:outline-none focus:ring-2 border-gray-300 focus:ring-[color:var(--brand-gold)]/30"
             value={otp}
             onChange={(e) => setOtp(e.target.value.replace(/[^0-9]/g, ''))}
             placeholder="123456"

@@ -11,7 +11,7 @@ from app.utils.security import verify_password, hash_password
 from app.utils.authz import require_roles
 from datetime import timedelta
 from app.utils.mailer import send_email
-from app.utils.email_templates import otp_email
+from app.utils.email_templates import otp_email, reset_password_email
 from pymongo.errors import DuplicateKeyError
 try:
     import firebase_admin
@@ -805,3 +805,78 @@ def _merge_users(db, primary_id, duplicate_id):
 
     db.users.delete_one({"_id": duplicate_id})
     log.info("auth.merge.duplicate_deleted", duplicate_id=str(duplicate_id))
+
+@limiter.limit("3 per minute")
+@bp.post("/request-password-reset")
+def request_password_reset():
+    db = current_app.extensions['mongo_db']
+    payload = request.get_json() or {}
+    email = (payload.get("email") or "").strip().lower()
+
+    # Always respond success to avoid email enumeration
+    user = db.users.find_one({"email": email}) if email else None
+    if user:
+        import random
+        cfg = current_app.config
+        otp_length = int(cfg.get("OTP_LENGTH", 6))
+        ttl_minutes = int(cfg.get("OTP_TTL_MINUTES", 10))
+        code = ''.join(str(random.randint(0, 9)) for _ in range(otp_length))
+        db.users.update_one({"_id": user["_id"]}, {
+            "$set": {
+                "reset": {
+                    "code_hash": hash_password(code),
+                    "expires_at": _now(db) + timedelta(minutes=ttl_minutes),
+                    "attempts": 0
+                }
+            }
+        })
+        try:
+            name = user.get("full_name") or user.get("email")
+            subject, text_body, html_body = reset_password_email(name, code, ttl_minutes)
+            send_email(email, subject, text_body, html_body)
+            log.info("auth.reset.request_sent", email=email)
+        except Exception as e:
+            log.error("auth.reset.request_send_failed", email=email, error=str(e))
+    return jsonify({"message": "reset_sent"}), 200
+
+@limiter.limit("3 per minute")
+@bp.post("/reset-password")
+def reset_password():
+    db = current_app.extensions['mongo_db']
+    payload = request.get_json() or {}
+    email = (payload.get("email") or "").strip().lower()
+    code = (payload.get("code") or "").strip()
+    new_password = (payload.get("new_password") or "").strip()
+
+    if not email or not code or not new_password:
+        return jsonify({"error": "validation_failed", "details": {
+            "email": ["Email is required"],
+            "code": ["Code is required"],
+            "new_password": ["New password is required"]
+        }}), 400
+
+    user = db.users.find_one({"email": email})
+    if not user:
+        # For security, respond success
+        return jsonify({"message": "reset_success"}), 200
+
+    reset_info = (user or {}).get("reset") or {}
+    if not reset_info:
+        return jsonify({"error": "no_reset"}), 400
+
+    now = _now(db)
+    if reset_info.get("expires_at") and now > reset_info["expires_at"]:
+        return jsonify({"error": "reset_expired"}), 400
+
+    max_attempts = int(current_app.config.get("OTP_MAX_ATTEMPTS", 5))
+    attempts = int(reset_info.get("attempts", 0))
+    if attempts >= max_attempts:
+        return jsonify({"error": "reset_attempts_exceeded"}), 429
+
+    if not verify_password(code, reset_info.get("code_hash", "")):
+        db.users.update_one({"_id": user["_id"]}, {"$inc": {"reset.attempts": 1}})
+        return jsonify({"error": "reset_invalid"}), 400
+
+    # Update password and clear reset object
+    db.users.update_one({"_id": user["_id"]}, {"$set": {"password_hash": hash_password(new_password), "status": "active"}, "$unset": {"reset": ""}})
+    return jsonify({"message": "reset_success"}), 200

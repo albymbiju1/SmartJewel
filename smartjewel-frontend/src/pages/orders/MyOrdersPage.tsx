@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { api } from '../../api';
+import { api, API_BASE_URL } from '../../api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../components/Toast';
@@ -290,7 +290,7 @@ const MyOrdersPage: React.FC = () => {
                 const metal = '18k Yellow Gold';
                 const carat = '0.75';
                 const ringSize = '6';
-                const imageUrl = (firstItem.imageUrl?.startsWith('http') ? firstItem.imageUrl : firstItem.imageUrl ? `http://127.0.0.1:5000${firstItem.imageUrl}` : 'https://via.placeholder.com/80x80?text=Jewelry');
+                const imageUrl = (firstItem.imageUrl?.startsWith('http') ? firstItem.imageUrl : firstItem.imageUrl ? `${API_BASE_URL}${firstItem.imageUrl}` : 'https://via.placeholder.com/80x80?text=Jewelry');
                 const isDelivered = status === 'delivered';
                 const isCancelledRefunded = o.cancellation?.approved && o.cancellation?.refundDetails?.status === 'processed';
                 const isReturned = status === 'returned';

@@ -184,6 +184,7 @@ def _now(db):
 def create_item():
     import os
     from werkzeug.utils import secure_filename
+    from app.utils.cloudinary_helper import upload_image, is_cloudinary_configured
     
     db = current_app.extensions['mongo_db']
     
@@ -214,20 +215,37 @@ def create_item():
     if 'image' in request.files:
         file = request.files['image']
         if file and file.filename:
-            filename = secure_filename(file.filename)
-            # Create uploads directory if it doesn't exist
-            upload_dir = os.path.join(current_app.static_folder or 'static', 'uploads')
-            os.makedirs(upload_dir, exist_ok=True)
-            
-            # Generate unique filename
-            import uuid
-            file_ext = os.path.splitext(filename)[1]
-            unique_filename = f"{uuid.uuid4()}{file_ext}"
-            file_path = os.path.join(upload_dir, unique_filename)
-            
-            file.save(file_path)
-            # Store relative path instead of full URL for environment portability
-            image_url = f"/static/uploads/{unique_filename}"
+            try:
+                # Try Cloudinary first (for production)
+                if is_cloudinary_configured():
+                    result = upload_image(
+                        file,
+                        folder="smartjewel/products",
+                        public_id=f"product_{data['sku']}"
+                    )
+                    image_url = result['secure_url']
+                    current_app.logger.info(f"Image uploaded to Cloudinary: {result['public_id']}")
+                else:
+                    # Fallback to local storage (development only)
+                    filename = secure_filename(file.filename)
+                    upload_dir = os.path.join(current_app.static_folder or 'static', 'uploads')
+                    os.makedirs(upload_dir, exist_ok=True)
+                    
+                    import uuid
+                    file_ext = os.path.splitext(filename)[1]
+                    unique_filename = f"{uuid.uuid4()}{file_ext}"
+                    file_path = os.path.join(upload_dir, unique_filename)
+                    
+                    file.save(file_path)
+                    image_url = f"/static/uploads/{unique_filename}"
+                    current_app.logger.info(f"Image saved locally: {unique_filename}")
+                    
+            except Exception as img_error:
+                current_app.logger.error(f"Image upload failed: {str(img_error)}")
+                return jsonify({
+                    "error": "image_upload_failed",
+                    "message": f"Failed to upload image: {str(img_error)}"
+                }), 500
 
     # Handle new fields
     gemstones = data.get("gemstones", "")
@@ -420,72 +438,122 @@ def get_item(item_id):
 def update_item(item_id):
     import os
     from werkzeug.utils import secure_filename
+    from app.utils.cloudinary_helper import upload_image, is_cloudinary_configured, delete_image
     
     db = current_app.extensions['mongo_db']
     oid = _oid(item_id)
     if not oid:
         return jsonify({"error": "bad_id"}), 400
+    
+    try:
+        # Handle both JSON and form data
+        if request.is_json:
+            data = request.get_json() or {}
+        else:
+            data = request.form.to_dict()
+            
+            # Handle numeric fields
+            for field in ['weight', 'price']:
+                if field in data and data[field]:
+                    try:
+                        data[field] = float(data[field])
+                    except ValueError:
+                        data[field] = 0
+                        
+        allowed = {"name", "category", "sub_category", "metal", "purity", "weight_unit", "weight", "price", "description", "attributes", "status", "default_location_id", "gemstones", "color", "style", "tags", "brand"}
+        update = {}
         
-    # Handle both JSON and form data
-    if request.is_json:
-        data = request.get_json() or {}
-    else:
-        data = request.form.to_dict()
-        
-        # Handle numeric fields
-        for field in ['weight', 'price']:
-            if field in data and data[field]:
-                try:
-                    data[field] = float(data[field])
-                except ValueError:
-                    data[field] = 0
+        for k, v in data.items():
+            if k in allowed:
+                if k == "default_location_id":
+                    update[k] = ObjectId(v) if v else None
+                elif k == "gemstones":
+                    if isinstance(v, str) and v:
+                        update[k] = [g.strip() for g in v.split(",") if g.strip()]
+                    else:
+                        update[k] = v if isinstance(v, list) else []
+                elif k == "tags":
+                    if isinstance(v, str) and v:
+                        update[k] = [t.strip() for t in v.split(",") if t.strip()]
+                    else:
+                        update[k] = v if isinstance(v, list) else []
+                else:
+                    update[k] = v
                     
-    allowed = {"name", "category", "sub_category", "metal", "purity", "weight_unit", "weight", "price", "description", "attributes", "status", "default_location_id", "gemstones", "color", "style", "tags", "brand"}
-    update = {}
-    
-    for k, v in data.items():
-        if k in allowed:
-            if k == "default_location_id":
-                update[k] = ObjectId(v) if v else None
-            elif k == "gemstones":
-                # Handle gemstones as comma-separated string or array
-                if isinstance(v, str) and v:
-                    update[k] = [g.strip() for g in v.split(",") if g.strip()]
-                else:
-                    update[k] = v if isinstance(v, list) else []
-            elif k == "tags":
-                # Handle tags as comma-separated string or array
-                if isinstance(v, str) and v:
-                    update[k] = [t.strip() for t in v.split(",") if t.strip()]
-                else:
-                    update[k] = v if isinstance(v, list) else []
-            else:
-                update[k] = v
-                
-    # Handle image upload
-    if 'image' in request.files:
-        file = request.files['image']
-        if file and file.filename:
-            filename = secure_filename(file.filename)
-            upload_dir = os.path.join(current_app.static_folder or 'static', 'uploads')
-            os.makedirs(upload_dir, exist_ok=True)
+        # Handle image upload
+        if 'image' in request.files:
+            file = request.files['image']
+            if file and file.filename:
+                try:
+                    # Get existing item to find old image for cleanup
+                    existing_item = db.items.find_one({"_id": oid})
+                    old_image = existing_item.get("image") if existing_item else None
+                    
+                    # Try Cloudinary first (for production)
+                    if is_cloudinary_configured():
+                        # Delete old image from Cloudinary if it exists
+                        if old_image and old_image.startswith("https://res.cloudinary.com"):
+                            # Extract public_id from Cloudinary URL
+                            try:
+                                # URL format: https://res.cloudinary.com/cloud_name/image/upload/v123456/folder/filename.jpg
+                                parts = old_image.split("/")
+                                if "upload" in parts:
+                                    upload_idx = parts.index("upload")
+                                    # public_id is everything after upload/ without extension
+                                    public_id_parts = parts[upload_idx + 2:]  # Skip version
+                                    public_id = "/".join(public_id_parts).rsplit(".", 1)[0]
+                                    delete_image(public_id)
+                            except Exception as del_err:
+                                current_app.logger.warning(f"Failed to delete old Cloudinary image: {del_err}")
+                        
+                        # Upload new image
+                        sku = existing_item.get("sku") if existing_item else item_id
+                        result = upload_image(
+                            file,
+                            folder="smartjewel/products",
+                            public_id=f"product_{sku}"
+                        )
+                        update["image"] = result['secure_url']
+                        current_app.logger.info(f"Image uploaded to Cloudinary: {result['public_id']}")
+                    else:
+                        # Fallback to local storage (development only)
+                        filename = secure_filename(file.filename)
+                        upload_dir = os.path.join(current_app.static_folder or 'static', 'uploads')
+                        os.makedirs(upload_dir, exist_ok=True)
+                        
+                        import uuid
+                        file_ext = os.path.splitext(filename)[1]
+                        unique_filename = f"{uuid.uuid4()}{file_ext}"
+                        file_path = os.path.join(upload_dir, unique_filename)
+                        
+                        file.save(file_path)
+                        update["image"] = f"/static/uploads/{unique_filename}"
+                        current_app.logger.info(f"Image saved locally: {unique_filename}")
+                        
+                except Exception as img_error:
+                    current_app.logger.error(f"Image upload failed: {str(img_error)}")
+                    return jsonify({
+                        "error": "image_upload_failed",
+                        "message": f"Failed to upload image: {str(img_error)}"
+                    }), 500
+        
+        if not update:
+            return jsonify({"error": "nothing_to_update"}), 400
             
-            import uuid
-            file_ext = os.path.splitext(filename)[1]
-            unique_filename = f"{uuid.uuid4()}{file_ext}"
-            file_path = os.path.join(upload_dir, unique_filename)
+        update["updated_at"] = _now(db)
+        res = db.items.update_one({"_id": oid}, {"$set": update})
+        
+        if res.matched_count == 0:
+            return jsonify({"error": "not_found"}), 404
             
-            file.save(file_path)
-            # Store relative path instead of full URL for environment portability
-            update["image"] = f"/static/uploads/{unique_filename}"
-    
-    if not update:
-        return jsonify({"error": "nothing_to_update"}), 400
-    update["updated_at"] = _now(db)
-    res = db.items.update_one({"_id": oid}, {"$set": update})
-    if res.matched_count == 0:
-        return jsonify({"error": "not_found"}), 404
-    return jsonify({"updated": True})
+        return jsonify({"updated": True})
+        
+    except Exception as e:
+        current_app.logger.error(f"Update item failed for {item_id}: {str(e)}")
+        return jsonify({
+            "error": "update_failed",
+            "message": str(e)
+        }), 500
 
 
 @bp.delete("/items/<item_id>")

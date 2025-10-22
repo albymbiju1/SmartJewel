@@ -12,3 +12,4 @@ APScheduler>=3.10
 pytz>=2024.1
 razorpay>=1.4.2
 mistralai>=0.1.0
+cloudinary>=1.36.0

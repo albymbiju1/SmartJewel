@@ -36,10 +36,13 @@ Thumbs.db
 test_*.html
 test_*.py
 
-# Markdown (except README)
+# Markdown (except README and documentation)
 *.md
 !README.md
 !readme.md
 !**/README.md
 !**/readme.md
+!CLOUDINARY_SETUP.md
+!DEPLOYMENT_CHECKLIST.md
+!EXISTING_IMAGES_GUIDE.md
 mongodb-installer.msi

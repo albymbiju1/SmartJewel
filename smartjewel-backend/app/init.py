@@ -20,9 +20,19 @@ def create_app():
     except Exception:
         pass
     
-    # Ensure static/uploads directory exists
+    # Ensure static/uploads directory exists (for local development)
     upload_dir = os.path.join(app.root_path, 'static', 'uploads')
     os.makedirs(upload_dir, exist_ok=True)
+    
+    # Initialize Cloudinary for image uploads
+    try:
+        from app.utils.cloudinary_helper import init_cloudinary
+        if init_cloudinary():
+            app.logger.info("Cloudinary initialized for cloud image storage")
+        else:
+            app.logger.info("Cloudinary not configured - using local file storage")
+    except Exception as e:
+        app.logger.warning(f"Cloudinary initialization failed: {e}")
     
     init_extensions(app)
 

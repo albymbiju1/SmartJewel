@@ -32,6 +32,10 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Test files
+test_*.html
+test_*.py
+
 # Markdown (except README)
 *.md
 !README.md

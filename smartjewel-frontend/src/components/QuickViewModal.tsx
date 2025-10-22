@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE_URL } from '../api';
 
@@ -21,6 +21,18 @@ interface QuickViewModalProps {
 }
 
 export const QuickViewModal: React.FC<QuickViewModalProps> = ({ open, product, onClose, onViewDetails }) => {
+  // Version timestamp for cache busting
+  const imageVersion = useMemo(() => Date.now(), []);
+  
+  const getImageUrl = (imagePath?: string) => {
+    if (!imagePath) return '';
+    const baseUrl = imagePath.startsWith('http') ? imagePath : `${API_BASE_URL}${imagePath}`;
+    if (!imagePath.startsWith('http')) {
+      return `${baseUrl}?v=${imageVersion}`;
+    }
+    return baseUrl;
+  };
+  
   return (
     <AnimatePresence>
       {open && product && (
@@ -42,7 +54,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({ open, product, o
               <div className="bg-gray-50 aspect-square">
                 {product.image ? (
                   <img
-                    src={product.image.startsWith('http') ? product.image : `${API_BASE_URL}${product.image}`}
+                    src={getImageUrl(product.image)}
                     alt={product.name}
                     className="w-full h-full object-cover"
                   />

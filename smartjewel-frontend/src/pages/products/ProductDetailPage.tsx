@@ -35,6 +35,18 @@ export const ProductDetailPage: React.FC = () => {
   const [rating, setRating] = useState<number>(0);
   const [reviews, setReviews] = useState<{ user: string; rating: number; comment: string; date: string }[]>([]);
 
+  // Version timestamp for cache busting
+  const imageVersion = useMemo(() => Date.now(), []);
+  
+  const getImageUrl = (imagePath?: string) => {
+    if (!imagePath) return '';
+    const baseUrl = imagePath.startsWith('http') ? imagePath : `${API_BASE_URL}${imagePath}`;
+    if (!imagePath.startsWith('http')) {
+      return `${baseUrl}?v=${imageVersion}`;
+    }
+    return baseUrl;
+  };
+
   useEffect(() => {
     const loadProduct = async () => {
       if (!id) return;
@@ -150,7 +162,7 @@ export const ProductDetailPage: React.FC = () => {
             <div className="p-6">
               <div className="aspect-square relative overflow-hidden rounded-lg border">
                 <img
-                  src={(activeImage || (product.image || '')).startsWith('http') ? (activeImage || (product.image || '')) : `${API_BASE_URL}${(activeImage || (product.image || ''))}`}
+                  src={getImageUrl(activeImage || product.image)}
                   alt={product.name}
                   className={`w-full h-full object-cover ${zoomed ? 'scale-150 cursor-zoom-out' : 'cursor-zoom-in'} transition-transform duration-300`}
                   onClick={() => setZoomed(z => !z)}
@@ -172,7 +184,7 @@ export const ProductDetailPage: React.FC = () => {
                 <div className="mt-3 grid grid-cols-5 gap-2">
                   {[product.image].map((img, i) => (
                     <button key={i} onClick={()=>{ setActiveImage(img); setZoomed(false); }} className={`aspect-square rounded overflow-hidden border ${activeImage===img ? 'ring-2 ring-amber-400' : ''}`}>
-                      <img src={img.startsWith('http') ? img : `${API_BASE_URL}${img}`} alt={`thumb-${i}`} className="w-full h-full object-cover" />
+                      <img src={getImageUrl(img)} alt={`thumb-${i}`} className="w-full h-full object-cover" />
                     </button>
                   ))}
                 </div>

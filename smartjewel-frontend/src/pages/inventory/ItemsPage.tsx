@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { api, API_BASE_URL } from '../../api';
 import { useAuth } from '../../contexts/AuthContext';
 import { RoleBasedNavigation } from '../../components/RoleBasedNavigation';
@@ -37,6 +37,18 @@ export const ItemsPage: React.FC = () => {
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [viewingItem, setViewingItem] = useState<Item | null>(null);
   // Simplified state management
+  
+  // Version timestamp for cache busting
+  const imageVersion = useMemo(() => Date.now(), []);
+  
+  const getImageUrl = (imagePath?: string) => {
+    if (!imagePath) return '';
+    const baseUrl = imagePath.startsWith('http') ? imagePath : `${API_BASE_URL}${imagePath}`;
+    if (!imagePath.startsWith('http')) {
+      return `${baseUrl}?v=${imageVersion}`;
+    }
+    return baseUrl;
+  };
   
   // Check permissions - admins get full access, others need specific permissions
   const isAdmin = !!(user?.roles?.includes('admin') || user?.role?.role_name?.toLowerCase() === 'admin');
@@ -203,7 +215,7 @@ export const ItemsPage: React.FC = () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         {item.image ? (
                           <img 
-                            src={item.image.startsWith('http') ? item.image : `${API_BASE_URL}${item.image}`} 
+                            src={getImageUrl(item.image)} 
                             alt={item.name} 
                             className="w-12 h-12 object-cover rounded-lg"
                             onError={(e) => {

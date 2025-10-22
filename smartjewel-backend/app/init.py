@@ -1,6 +1,7 @@
 import time
+import time
 import logging
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from app.config import Config
 from app.extensions import init_extensions, log
 from app.blueprints.core.routes import bp as core_bp
@@ -79,6 +80,27 @@ def create_app():
     # Store blueprint
     from app.blueprints.store import bp as store_bp
     app.register_blueprint(store_bp)
+
+    # Explicit static file serving route with CORS and cache control headers
+    @app.route('/static/<path:filename>')
+    def serve_static(filename):
+        import os
+        from flask import make_response
+        
+        try:
+            response = send_from_directory(app.static_folder, filename)
+            # Add CORS headers
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+            # Disable caching for now to ensure fresh images
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            return response
+        except Exception as e:
+            app.logger.error(f"Error serving static file {filename}: {str(e)}")
+            return jsonify({"error": "file_not_found"}), 404
 
     @app.route("/")
     def index():

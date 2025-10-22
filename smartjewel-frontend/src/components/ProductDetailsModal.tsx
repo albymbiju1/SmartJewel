@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { API_BASE_URL } from '../api';
 
 interface Item {
@@ -35,6 +35,18 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
   isOpen,
   onClose
 }) => {
+  // Version timestamp for cache busting
+  const imageVersion = useMemo(() => Date.now(), []);
+  
+  const getImageUrl = (imagePath?: string) => {
+    if (!imagePath) return '';
+    const baseUrl = imagePath.startsWith('http') ? imagePath : `${API_BASE_URL}${imagePath}`;
+    if (!imagePath.startsWith('http')) {
+      return `${baseUrl}?v=${imageVersion}`;
+    }
+    return baseUrl;
+  };
+  
   if (!isOpen || !item) return null;
 
   return (
@@ -62,7 +74,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
               <div>
                 {item.image ? (
                   <img 
-                    src={item.image.startsWith('http') ? item.image : `${API_BASE_URL}${item.image}`} 
+                    src={getImageUrl(item.image)} 
                     alt={item.name} 
                     className="w-full h-64 object-cover rounded-lg border"
                   />

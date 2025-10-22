@@ -22,6 +22,18 @@ export const AdvancedSearchPage: React.FC = () => {
 
   const q = (query.get('q') || '').trim();
 
+  // Version timestamp for cache busting
+  const imageVersion = useMemo(() => Date.now(), []);
+  
+  const getImageUrl = (imagePath?: string) => {
+    if (!imagePath) return '';
+    const baseUrl = imagePath.startsWith('http') ? imagePath : `${API_BASE_URL}${imagePath}`;
+    if (!imagePath.startsWith('http')) {
+      return `${baseUrl}?v=${imageVersion}`;
+    }
+    return baseUrl;
+  };
+
   const filters: FiltersState = useMemo(() => ({
     min_price: query.get('min_price') ? Number(query.get('min_price')) : undefined,
     max_price: query.get('max_price') ? Number(query.get('max_price')) : undefined,
@@ -137,7 +149,7 @@ export const AdvancedSearchPage: React.FC = () => {
                   <div key={p._id} className="card overflow-hidden hover:shadow-elevated transition-shadow">
                     <div className="aspect-square bg-gray-100">
                       {p.image ? (
-                        <img src={p.image.startsWith('http') ? p.image : `${API_BASE_URL}${p.image}`} alt={p.name} className="w-full h-full object-cover" />
+                        <img src={getImageUrl(p.image)} alt={p.name} className="w-full h-full object-cover" />
                       ) : null}
                     </div>
                     <div className="p-4">

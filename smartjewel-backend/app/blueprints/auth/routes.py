@@ -598,35 +598,18 @@ def firebase_login():
             except Exception as e:
                 log.error("auth.firebase_login.role_autocreate_failed", error=str(e))
                 return jsonify({"error": "role_not_found"}), 500
-        # New Google user: create as pending verification and send OTP
-        import random
-        cfg = current_app.config
-        otp_length = int(cfg.get("OTP_LENGTH", 6))
-        ttl_minutes = int(cfg.get("OTP_TTL_MINUTES", 10))
-        otp_code = ''.join(str(random.randint(0, 9)) for _ in range(otp_length))
-
+        # New Google user: auto-activate (no OTP for Google login)
         user_doc = {
             "full_name": name,
             "email": email,
             "firebase_uid": firebase_uid,
             "uid": firebase_uid,
             "role": {"_id": role_doc["_id"], "role_name": role_doc["role_name"]},
-            "status": "pending_verification",
+            "status": "active",
             "created_at": _now(db),
-            "otp": {
-                "code_hash": hash_password(otp_code),
-                "expires_at": _now(db) + timedelta(minutes=ttl_minutes),
-                "attempts": 0
-            }
         }
         ins = db.users.insert_one(user_doc)
-        log.info("auth.firebase_login.user_created", user_id=str(ins.inserted_id), email=email)
-        try:
-            subject, text_body, html_body = otp_email(name or "there", otp_code, ttl_minutes)
-            send_email(email, subject, text_body, html_body)
-            log.info("auth.firebase_login.otp_sent", email=email)
-        except Exception as e:
-            log.error("auth.firebase_login.otp_send_failed", email=email, error=str(e))
+        log.info("auth.firebase_login.user_created", user_id=str(ins.inserted_id), email=email, auto_active=True)
         user = db.users.find_one({"_id": ins.inserted_id})
     else:
         # Ensure firebase_uid is stored on primary user
@@ -648,8 +631,10 @@ def firebase_login():
 
     # Enforce verification for existing users before issuing tokens
     if user and user.get("status") != "active":
-        log.info("auth.firebase_login.account_unverified", email=user.get("email"))
-        return jsonify({"error": "account_unverified"}), 403
+        # Auto-activate on Google login (no OTP required)
+        db.users.update_one({"_id": user["_id"]}, {"$set": {"status": "active"}, "$unset": {"otp": ""}})
+        user = db.users.find_one({"_id": user["_id"]})
+        log.info("auth.firebase_login.auto_verified_google", email=user.get("email"))
 
     # Prepare role/claims similar to password login
     role_info = {}

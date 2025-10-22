@@ -70,11 +70,13 @@ export const LoginForm: React.FC<Props> = ({ onSuccess, switchToRegister }) => {
   };
 
   const handleGoogleSignIn = async () => {
+    let googleEmail: string | undefined;
     try {
       setIsGoogleSigningIn(true);
       setLoginError(null);
       
       const result = await firebaseAuthService.signInWithGoogle();
+      googleEmail = result?.user?.email || undefined;
       await loginWithFirebase(result.user);
       // After exchange, use tokens and user saved by AuthContext
       const access = localStorage.getItem('access_token') || '';
@@ -91,6 +93,14 @@ export const LoginForm: React.FC<Props> = ({ onSuccess, switchToRegister }) => {
         message = 'The authentication token expired. Please try signing in again.';
       } else if (error?.response?.data?.error === 'verify_failed') {
         message = 'Failed to verify authentication. Please check your internet connection and try again.';
+      } else if (error?.response?.data?.error === 'account_unverified') {
+        message = 'Please verify your email before signing in.';
+        setLoginError(message);
+        if (googleEmail) {
+          // Route to OTP verification with Google email prefilled
+          setTimeout(() => navigate('/verify-otp', { state: { email: googleEmail } }), 300);
+        }
+        return;
       } else if (error?.response?.data?.details) {
         message = error.response.data.details;
       } else if (error?.response?.data?.error) {

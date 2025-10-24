@@ -69,15 +69,35 @@ def list_customers():
     # Format customer data
     customer_list = []
     for customer in customers:
+        customer_id = customer["_id"]
+        
+        # Calculate statistics from orders
+        orders = list(db.orders.find({"user_id": customer_id}))
+        total_orders = len(orders)
+        total_spent = sum(float(order.get("amount", 0) or 0) for order in orders)
+        last_order_date = None
+        
+        if orders:
+            sorted_orders = sorted(orders, key=lambda x: x.get("created_at", datetime.utcnow()), reverse=True)
+            last_order_date = sorted_orders[0].get("created_at")
+        
+        statistics = {
+            "total_orders": total_orders,
+            "total_spent": round(total_spent, 2),
+            "avg_order_value": round((total_spent / total_orders) if total_orders else 0.0, 2),
+            "last_order_date": (_to_ist(last_order_date).isoformat() if _to_ist(last_order_date) else None)
+        }
+        
         customer_list.append({
-            "id": str(customer["_id"]),
+            "id": str(customer_id),
             "full_name": customer.get("full_name", ""),
             "email": customer.get("email", ""),
             "phone_number": customer.get("phone_number", ""),
             "status": customer.get("status", "active"),
             "created_at": customer.get("created_at"),
             "last_login": customer.get("last_login"),
-            "firebase_uid": customer.get("firebase_uid")
+            "firebase_uid": customer.get("firebase_uid"),
+            "statistics": statistics
         })
     
     return jsonify({

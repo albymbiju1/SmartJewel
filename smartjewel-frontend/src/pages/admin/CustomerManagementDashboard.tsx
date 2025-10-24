@@ -262,7 +262,7 @@ export const CustomerManagementDashboard: React.FC = () => {
                           {customer.statistics?.total_orders || 0}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {customer.statistics?.total_spent ? formatCurrency(customer.statistics.total_spent) : 'N/A'}
+                          {formatCurrency(customer.statistics?.total_spent || 0)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
@@ -400,13 +400,13 @@ export const CustomerManagementDashboard: React.FC = () => {
                       <div>
                         <span className="text-sm font-medium text-gray-500">Total Spent:</span>
                         <span className="ml-2 text-sm text-gray-900">
-                          {selectedCustomer.statistics?.total_spent ? formatCurrency(selectedCustomer.statistics.total_spent) : 'N/A'}
+                          {formatCurrency(selectedCustomer.statistics?.total_spent || 0)}
                         </span>
                       </div>
                       <div>
                         <span className="text-sm font-medium text-gray-500">Avg Order Value:</span>
                         <span className="ml-2 text-sm text-gray-900">
-                          {selectedCustomer.statistics?.avg_order_value ? formatCurrency(selectedCustomer.statistics.avg_order_value) : 'N/A'}
+                          {formatCurrency(selectedCustomer.statistics?.avg_order_value || 0)}
                         </span>
                       </div>
                       <div>

@@ -15,6 +15,10 @@ yarn-error.log*
 pnpm-debug.log*
 dist/
 
+generate_jwt_secret.py
+start-backend.bat
+test-backend.py
+
 # Environments & credentials
 .env
 .env.*

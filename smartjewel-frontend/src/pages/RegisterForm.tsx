@@ -18,7 +18,7 @@ export const RegisterForm: React.FC<Props> = ({ onSuccess, switchToLogin }) => {
   
   const { register, handleSubmit, formState: { errors, isSubmitting, isValid, touchedFields }, getValues } = useForm<FormValues>({ 
     resolver: zodResolver(registrationSchema),
-    mode: 'onChange',
+    mode: 'onBlur',
     criteriaMode: 'all'
   });
 
@@ -26,6 +26,10 @@ export const RegisterForm: React.FC<Props> = ({ onSuccess, switchToLogin }) => {
     const val = getValues(name);
     const hasValue = typeof val === 'string' ? val.length > 0 : !!val;
     return touchedFields[name] && !errors[name] && hasValue;
+  };
+
+  const shouldShowError = (name: keyof FormValues) => {
+    return touchedFields[name] && errors[name];
   };
 
   const onSubmit = async (values: FormValues) => {
@@ -99,10 +103,10 @@ export const RegisterForm: React.FC<Props> = ({ onSuccess, switchToLogin }) => {
               type="text"
               placeholder="Enter your full name"
               {...register('name')}
-              className={`w-full h-11 rounded-md border bg-white px-10 text-sm focus:outline-none focus:ring-2 ${errors.name ? 'border-red-500 focus:ring-red-200' : isFieldValid('name') ? 'border-emerald-500 focus:ring-emerald-200' : 'border-gray-300 focus:ring-[color:var(--brand-gold)]/30'}`}
+              className={`w-full h-11 rounded-md border bg-white px-10 text-sm focus:outline-none focus:ring-2 ${shouldShowError('name') ? 'border-red-500 focus:ring-red-200' : isFieldValid('name') ? 'border-emerald-500 focus:ring-emerald-200' : 'border-gray-300 focus:ring-[color:var(--brand-gold)]/30'}`}
             />
           </div>
-          {errors.name && <span className="text-xs text-red-600 mt-1 block">{errors.name.message}</span>}
+          {shouldShowError('name') && <span className="text-xs text-red-600 mt-1 block">{errors.name?.message}</span>}
         </div>
 
         <div>
@@ -117,10 +121,10 @@ export const RegisterForm: React.FC<Props> = ({ onSuccess, switchToLogin }) => {
               type="email"
               placeholder="Enter your email"
               {...register('email')}
-              className={`w-full h-11 rounded-md border bg-white px-10 text-sm focus:outline-none focus:ring-2 ${errors.email ? 'border-red-500 focus:ring-red-200' : isFieldValid('email') ? 'border-emerald-500 focus:ring-emerald-200' : 'border-gray-300 focus:ring-[color:var(--brand-gold)]/30'}`}
+              className={`w-full h-11 rounded-md border bg-white px-10 text-sm focus:outline-none focus:ring-2 ${shouldShowError('email') ? 'border-red-500 focus:ring-red-200' : isFieldValid('email') ? 'border-emerald-500 focus:ring-emerald-200' : 'border-gray-300 focus:ring-[color:var(--brand-gold)]/30'}`}
             />
           </div>
-          {errors.email && <span className="text-xs text-red-600 mt-1 block">{errors.email.message}</span>}
+          {shouldShowError('email') && <span className="text-xs text-red-600 mt-1 block">{errors.email?.message}</span>}
         </div>
 
         <div>
@@ -134,10 +138,10 @@ export const RegisterForm: React.FC<Props> = ({ onSuccess, switchToLogin }) => {
               type="tel"
               placeholder="Enter your phone number"
               {...register('phone')}
-              className={`w-full h-11 rounded-md border bg-white px-10 text-sm focus:outline-none focus:ring-2 ${errors.phone ? 'border-red-500 focus:ring-red-200' : isFieldValid('phone') ? 'border-emerald-500 focus:ring-emerald-200' : 'border-gray-300 focus:ring-[color:var(--brand-gold)]/30'}`}
+              className={`w-full h-11 rounded-md border bg-white px-10 text-sm focus:outline-none focus:ring-2 ${shouldShowError('phone') ? 'border-red-500 focus:ring-red-200' : isFieldValid('phone') ? 'border-emerald-500 focus:ring-emerald-200' : 'border-gray-300 focus:ring-[color:var(--brand-gold)]/30'}`}
             />
           </div>
-          {errors.phone && <span className="text-xs text-red-600 mt-1 block">{errors.phone.message}</span>}
+          {shouldShowError('phone') && <span className="text-xs text-red-600 mt-1 block">{errors.phone?.message}</span>}
         </div>
 
         <div>
@@ -153,7 +157,7 @@ export const RegisterForm: React.FC<Props> = ({ onSuccess, switchToLogin }) => {
               type={showPassword ? 'text' : 'password'}
               placeholder="Create a password"
               {...register('password')}
-              className={`w-full h-11 rounded-md border bg-white px-10 pr-10 text-sm focus:outline-none focus:ring-2 ${errors.password ? 'border-red-500 focus:ring-red-200' : isFieldValid('password') ? 'border-emerald-500 focus:ring-emerald-200' : 'border-gray-300 focus:ring-[color:var(--brand-gold)]/30'}`}
+              className={`w-full h-11 rounded-md border bg-white px-10 pr-10 text-sm focus:outline-none focus:ring-2 ${shouldShowError('password') ? 'border-red-500 focus:ring-red-200' : isFieldValid('password') ? 'border-emerald-500 focus:ring-emerald-200' : 'border-gray-300 focus:ring-[color:var(--brand-gold)]/30'}`}
             />
             <button
               type="button"
@@ -173,7 +177,7 @@ export const RegisterForm: React.FC<Props> = ({ onSuccess, switchToLogin }) => {
               )}
             </button>
           </div>
-          {errors.password && <span className="text-xs text-red-600 mt-1 block">{errors.password.message}</span>}
+          {shouldShowError('password') && <span className="text-xs text-red-600 mt-1 block">{errors.password?.message}</span>}
         </div>
 
         <div>
@@ -189,10 +193,10 @@ export const RegisterForm: React.FC<Props> = ({ onSuccess, switchToLogin }) => {
               type={showPassword ? 'text' : 'password'}
               placeholder="Confirm your password"
               {...register('confirmPassword')}
-              className={`w-full h-11 rounded-md border bg-white px-10 pr-10 text-sm focus:outline-none focus:ring-2 ${errors.confirmPassword ? 'border-red-500 focus:ring-red-200' : isFieldValid('confirmPassword') ? 'border-emerald-500 focus:ring-emerald-200' : 'border-gray-300 focus:ring-[color:var(--brand-gold)]/30'}`}
+              className={`w-full h-11 rounded-md border bg-white px-10 pr-10 text-sm focus:outline-none focus:ring-2 ${shouldShowError('confirmPassword') ? 'border-red-500 focus:ring-red-200' : isFieldValid('confirmPassword') ? 'border-emerald-500 focus:ring-emerald-200' : 'border-gray-300 focus:ring-[color:var(--brand-gold)]/30'}`}
             />
           </div>
-          {errors.confirmPassword && <span className="text-xs text-red-600 mt-1 block">{errors.confirmPassword.message}</span>}
+          {shouldShowError('confirmPassword') && <span className="text-xs text-red-600 mt-1 block">{errors.confirmPassword?.message}</span>}
         </div>
 
         <div className="flex items-start gap-2 text-sm text-gray-700">

@@ -15,12 +15,16 @@ export const emailField = z
 
 export const nameField = z
   .string()
+  .min(1, 'Name is required')
   .min(3, 'Name must be at least 3 characters')
-  .max(80, 'Name is too long');
+  .max(80, 'Name is too long')
+  .regex(/^[a-zA-Z\s]+$/, 'Full name can only contain letters and spaces');
 
 export const phoneField = z
   .string()
-  .regex(/^\d{10}$/, 'Phone number must be exactly 10 digits');
+  .min(1, 'Phone number is required')
+  .regex(/^[0-9\s\-+()]+$/, 'Phone number can only contain digits, spaces, hyphens, and parentheses')
+  .refine((value) => value.replace(/\D/g, '').length >= 10, 'Phone number must contain at least 10 digits');
 
 export const loginSchema = z.object({
   email: emailField,

@@ -30,6 +30,17 @@ interface StoreForm {
   opening_hours: string;
 }
 
+interface FormErrors {
+  name?: string;
+  location?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  manager?: string;
+  latitude?: string;
+  longitude?: string;
+}
+
 export const StoreManagementPage: React.FC = () => {
   const { user, isAuthenticated } = useAuth();
   const [stores, setStores] = useState<Store[]>([]);
@@ -48,9 +59,52 @@ export const StoreManagementPage: React.FC = () => {
     longitude: '',
     opening_hours: '',
   });
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
 
   const inputClasses =
     "w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow";
+
+  const validateField = (name: string, value: string): string | undefined => {
+    switch (name) {
+      case 'name':
+        if (!value.trim()) return 'Store name is required';
+        if (!/^[a-zA-Z0-9\s&\-().,]+$/.test(value)) return 'Store name can only contain letters, numbers, spaces, and basic punctuation';
+        return undefined;
+      case 'manager':
+        if (!value.trim()) return 'Manager name is required';
+        if (!/^[a-zA-Z\s'-]+$/.test(value)) return 'Manager name can only contain letters, spaces, hyphens, and apostrophes';
+        return undefined;
+      case 'location':
+        if (!value.trim()) return 'City/Locality is required';
+        if (!/^[a-zA-Z0-9\s,.-]+$/.test(value)) return 'Location can only contain letters, numbers, spaces, and basic punctuation';
+        return undefined;
+      case 'address':
+        if (!value.trim()) return 'Address is required';
+        if (!/^[a-zA-Z0-9\s,.\-#()]+$/.test(value)) return 'Address contains invalid characters';
+        return undefined;
+      case 'phone':
+        if (!value.trim()) return 'Phone number is required';
+        if (!/^[0-9\s\-+()]+$/.test(value)) return 'Phone number can only contain digits, spaces, hyphens, and parentheses';
+        if (value.replace(/\D/g, '').length < 10) return 'Phone number must be at least 10 digits';
+        return undefined;
+      case 'email':
+        if (!value.trim()) return 'Email is required';
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Please enter a valid email address';
+        return undefined;
+      case 'latitude':
+        if (value && (isNaN(parseFloat(value)) || parseFloat(value) < -90 || parseFloat(value) > 90)) {
+          return 'Latitude must be between -90 and 90';
+        }
+        return undefined;
+      case 'longitude':
+        if (value && (isNaN(parseFloat(value)) || parseFloat(value) < -180 || parseFloat(value) > 180)) {
+          return 'Longitude must be between -180 and 180';
+        }
+        return undefined;
+      default:
+        return undefined;
+    }
+  };
 
   const storesStats = React.useMemo(() => {
     const active = stores.filter((store) => store.status === 'active').length;
@@ -91,12 +145,29 @@ export const StoreManagementPage: React.FC = () => {
       ...prev,
       [name]: value
     }));
+    const error = validateField(name, value);
+    setFormErrors(prev => ({
+      ...prev,
+      [name]: error
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    const errors: FormErrors = {};
+    ['name', 'manager', 'location', 'address', 'phone', 'email', 'latitude', 'longitude'].forEach(field => {
+      const error = validateField(field, formData[field as keyof StoreForm]);
+      if (error) errors[field as keyof FormErrors] = error;
+    });
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      alert('Please fix the validation errors before submitting');
+      return;
+    }
+
     try {
-      // Clean up form data - convert empty latitude/longitude to null/undefined
       const cleanedData = {
         name: formData.name,
         location: formData.location,
@@ -110,10 +181,8 @@ export const StoreManagementPage: React.FC = () => {
       };
 
       if (editingStore) {
-        // Update store
         await api.patch(`/stores/${editingStore.id}`, cleanedData);
       } else {
-        // Create new store
         await api.post('/stores', cleanedData);
       }
       setShowForm(false);
@@ -198,6 +267,7 @@ export const StoreManagementPage: React.FC = () => {
       longitude: '',
       opening_hours: '',
     });
+    setFormErrors({});
   };
 
   const formatDate = (dateString: string) => {
@@ -280,9 +350,10 @@ export const StoreManagementPage: React.FC = () => {
                               value={formData.name}
                               onChange={handleFormChange}
                               required
-                              className={inputClasses}
+                              className={`${inputClasses} ${formErrors.name ? 'border-red-500 ring-red-200' : ''}`}
                               placeholder="Central Avenue Boutique"
                             />
+                            {formErrors.name && <p className="mt-1 text-xs text-red-600">{formErrors.name}</p>}
                           </div>
 
                           <div>
@@ -293,9 +364,10 @@ export const StoreManagementPage: React.FC = () => {
                               value={formData.location}
                               onChange={handleFormChange}
                               required
-                              className={inputClasses}
+                              className={`${inputClasses} ${formErrors.location ? 'border-red-500 ring-red-200' : ''}`}
                               placeholder="Bandra West, Mumbai"
                             />
+                            {formErrors.location && <p className="mt-1 text-xs text-red-600">{formErrors.location}</p>}
                           </div>
 
                           <div>
@@ -306,9 +378,10 @@ export const StoreManagementPage: React.FC = () => {
                               value={formData.manager}
                               onChange={handleFormChange}
                               required
-                              className={inputClasses}
+                              className={`${inputClasses} ${formErrors.manager ? 'border-red-500 ring-red-200' : ''}`}
                               placeholder="Priya Sharma"
                             />
+                            {formErrors.manager && <p className="mt-1 text-xs text-red-600">{formErrors.manager}</p>}
                           </div>
 
                           <div className="md:col-span-2">
@@ -319,9 +392,10 @@ export const StoreManagementPage: React.FC = () => {
                               value={formData.address}
                               onChange={handleFormChange}
                               required
-                              className={inputClasses}
+                              className={`${inputClasses} ${formErrors.address ? 'border-red-500 ring-red-200' : ''}`}
                               placeholder="Unit 3, High Street Phoenix Mall, Lower Parel, Mumbai"
                             />
+                            {formErrors.address && <p className="mt-1 text-xs text-red-600">{formErrors.address}</p>}
                           </div>
                         </div>
                       </div>
@@ -342,9 +416,10 @@ export const StoreManagementPage: React.FC = () => {
                             value={formData.phone}
                             onChange={handleFormChange}
                             required
-                            className={`${inputClasses} py-3 text-base`}
+                            className={`${inputClasses} py-3 text-base ${formErrors.phone ? 'border-red-500 ring-red-200' : ''}`}
                             placeholder="+91 98765 43210"
                           />
+                          {formErrors.phone && <p className="mt-1 text-xs text-red-600">{formErrors.phone}</p>}
                         </div>
 
                         <div className="md:col-span-2">
@@ -355,9 +430,10 @@ export const StoreManagementPage: React.FC = () => {
                             value={formData.email}
                             onChange={handleFormChange}
                             required
-                            className={`${inputClasses} py-3 text-base`}
+                            className={`${inputClasses} py-3 text-base ${formErrors.email ? 'border-red-500 ring-red-200' : ''}`}
                             placeholder="bandra.smartjewel@stores.com"
                           />
+                          {formErrors.email && <p className="mt-1 text-xs text-red-600">{formErrors.email}</p>}
                         </div>
 
                         <div className="md:col-span-2">
@@ -391,9 +467,10 @@ export const StoreManagementPage: React.FC = () => {
                             value={formData.latitude}
                             onChange={handleFormChange}
                             step="0.000001"
-                            className={inputClasses}
+                            className={`${inputClasses} ${formErrors.latitude ? 'border-red-500 ring-red-200' : ''}`}
                             placeholder="19.0660"
                           />
+                          {formErrors.latitude && <p className="mt-1 text-xs text-red-600">{formErrors.latitude}</p>}
                         </div>
                         <div>
                           <label className="mb-2 block text-sm font-medium text-gray-700">Longitude</label>
@@ -403,9 +480,10 @@ export const StoreManagementPage: React.FC = () => {
                             value={formData.longitude}
                             onChange={handleFormChange}
                             step="0.000001"
-                            className={inputClasses}
+                            className={`${inputClasses} ${formErrors.longitude ? 'border-red-500 ring-red-200' : ''}`}
                             placeholder="72.8777"
                           />
+                          {formErrors.longitude && <p className="mt-1 text-xs text-red-600">{formErrors.longitude}</p>}
                         </div>
                       </div>
                     </div>
@@ -439,7 +517,8 @@ export const StoreManagementPage: React.FC = () => {
                     </button>
                     <button
                       type="submit"
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-lg transition-all duration-200 hover:from-blue-700 hover:to-indigo-700 hover:shadow-xl sm:w-auto"
+                      disabled={Object.keys(formErrors).some(key => formErrors[key as keyof FormErrors])}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-lg transition-all duration-200 hover:from-blue-700 hover:to-indigo-700 hover:shadow-xl sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />

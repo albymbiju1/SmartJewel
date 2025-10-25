@@ -569,6 +569,120 @@ def delete_item(item_id):
     return jsonify({"deleted": True})
 
 
+@bp.post("/items/import")
+@require_permissions("inventory.create")
+def import_items():
+    """Import items from CSV data. Accepts JSON array of items."""
+    db = current_app.extensions['mongo_db']
+    
+    try:
+        data = request.get_json() or {}
+        items_to_import = data.get("items", [])
+        
+        if not items_to_import:
+            return jsonify({"error": "no_items", "message": "No items to import"}), 400
+        
+        if not isinstance(items_to_import, list):
+            return jsonify({"error": "invalid_format", "message": "Items must be an array"}), 400
+        
+        imported_count = 0
+        failed_count = 0
+        errors = []
+        
+        for idx, item_data in enumerate(items_to_import):
+            try:
+                required = ["sku", "name", "category", "metal", "purity", "weight_unit"]
+                missing = [f for f in required if not item_data.get(f)]
+                if missing:
+                    errors.append(f"Row {idx + 1}: Missing required fields: {', '.join(missing)}")
+                    failed_count += 1
+                    continue
+                
+                if db.items.find_one({"sku": item_data["sku"]}):
+                    errors.append(f"Row {idx + 1}: SKU '{item_data['sku']}' already exists")
+                    failed_count += 1
+                    continue
+                
+                gemstones = item_data.get("gemstones", "")
+                if isinstance(gemstones, str) and gemstones:
+                    gemstones_list = [g.strip() for g in gemstones.split(",") if g.strip()]
+                else:
+                    gemstones_list = gemstones if isinstance(gemstones, list) else []
+                
+                tags = item_data.get("tags", "")
+                if isinstance(tags, str) and tags:
+                    tags_list = [t.strip() for t in tags.split(";") if t.strip()]
+                else:
+                    tags_list = tags if isinstance(tags, list) else []
+                
+                weight = item_data.get("weight")
+                price = item_data.get("price")
+                if weight:
+                    try:
+                        weight = float(weight)
+                    except (ValueError, TypeError):
+                        weight = 0
+                
+                if price:
+                    try:
+                        price = float(price)
+                    except (ValueError, TypeError):
+                        price = 0
+                
+                doc = {
+                    "sku": item_data["sku"],
+                    "name": item_data["name"],
+                    "category": item_data["category"],
+                    "sub_category": item_data.get("sub_category", ""),
+                    "metal": item_data["metal"],
+                    "purity": item_data["purity"],
+                    "weight_unit": item_data["weight_unit"],
+                    "weight": weight or 0,
+                    "price": price or 0,
+                    "description": item_data.get("description", ""),
+                    "image": None,
+                    "gemstones": gemstones_list,
+                    "color": item_data.get("color", ""),
+                    "style": item_data.get("style", ""),
+                    "tags": tags_list,
+                    "brand": item_data.get("brand", "Smart Jewel"),
+                    "default_location_id": _oid(item_data.get("default_location_id")) if item_data.get("default_location_id") else None,
+                    "attributes": item_data.get("attributes", {}),
+                    "status": item_data.get("status", "active"),
+                    "created_at": _now(db),
+                    "updated_at": _now(db),
+                }
+                db.items.insert_one(doc)
+                imported_count += 1
+                
+            except Exception as e:
+                errors.append(f"Row {idx + 1}: {str(e)}")
+                failed_count += 1
+        
+        response = {
+            "success": imported_count > 0,
+            "imported": imported_count,
+            "failed": failed_count,
+            "total": len(items_to_import),
+            "message": f"Successfully imported {imported_count} items"
+        }
+        
+        if errors and len(errors) <= 10:
+            response["errors"] = errors
+        elif errors:
+            response["error_count"] = len(errors)
+            response["first_errors"] = errors[:5]
+        
+        return jsonify(response), 201 if imported_count > 0 else 400
+        
+    except Exception as e:
+        current_app.logger.error(f"CSV import failed: {str(e)}")
+        return jsonify({
+            "error": "import_failed",
+            "message": str(e)
+        }), 500
+
+
 @bp.post("/stock/move")
 @require_permissions("inventory.flow")
 def stock_move():

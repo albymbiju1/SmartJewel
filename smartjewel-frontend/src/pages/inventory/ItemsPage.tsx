@@ -3,6 +3,7 @@ import { api, API_BASE_URL } from '../../api';
 import { useAuth } from '../../contexts/AuthContext';
 import { RoleBasedNavigation } from '../../components/RoleBasedNavigation';
 import { AddItemForm } from '../../components/AddItemForm';
+import { CsvImportModal } from '../../components/CsvImportModal';
 
 interface Item { 
   _id: string; 
@@ -34,8 +35,14 @@ export const ItemsPage: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showCsvImportModal, setShowCsvImportModal] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [viewingItem, setViewingItem] = useState<Item | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const itemsPerPage = 10;
   // Simplified state management
   
   // Version timestamp for cache busting
@@ -52,9 +59,57 @@ export const ItemsPage: React.FC = () => {
   
   // Check permissions - admins get full access, others need specific permissions
   const isAdmin = !!(user?.roles?.includes('admin') || user?.role?.role_name?.toLowerCase() === 'admin');
-  const canCreate = isAdmin || !!(user?.perms?.includes('inventory.create') || user?.permissions?.includes('inventory.create'));
-  const canEdit = isAdmin || !!(user?.perms?.includes('inventory.update') || user?.permissions?.includes('inventory.update'));
-  const canDelete = isAdmin; // delete restricted to admin only
+  const canCreate = isAdmin || !!(
+    user?.perms?.includes('inventory.create') || 
+    user?.permissions?.includes('inventory.create') ||
+    user?.perms?.includes('inventory.modify') || 
+    user?.permissions?.includes('inventory.modify')
+  );
+  const canEdit = isAdmin || !!(
+    user?.perms?.includes('inventory.update') || 
+    user?.permissions?.includes('inventory.update') ||
+    user?.perms?.includes('inventory.modify') || 
+    user?.permissions?.includes('inventory.modify')
+  );
+  const canDelete = isAdmin || !!(
+    user?.perms?.includes('inventory.delete') || 
+    user?.permissions?.includes('inventory.delete') ||
+    user?.perms?.includes('inventory.modify') || 
+    user?.permissions?.includes('inventory.modify')
+  ); // Inventory staff can also delete
+
+  // Get unique categories from items
+  const categories = useMemo(() => {
+    const uniqueCategories = new Set(items.map(item => item.category).filter(Boolean));
+    return ['All', ...Array.from(uniqueCategories).sort()];
+  }, [items]);
+
+  // Filter items based on search and category
+  const filteredItems = useMemo(() => {
+    return items.filter(item => {
+      const matchesSearch = 
+        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.sku.toLowerCase().includes(searchTerm.toLowerCase());
+
+      const matchesCategory = 
+        selectedCategory === '' ||
+        selectedCategory === 'All' ||
+        item.category === selectedCategory;
+
+      return matchesSearch && matchesCategory;
+    });
+  }, [items, searchTerm, selectedCategory]);
+
+  // Pagination calculations based on filtered items
+  const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = filteredItems.slice(indexOfFirstItem, indexOfLastItem);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedCategory]);
   
 
   const load = async () => {
@@ -162,25 +217,134 @@ export const ItemsPage: React.FC = () => {
 
 
   return (
-    <RoleBasedNavigation>
+    <RoleBasedNavigation sidebarCollapsed={sidebarCollapsed}>
       <div className="space-y-6">
         {/* Header */}
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex justify-between items-center">
-            <div>
+            <div className="flex-1">
               <h1 className="text-2xl font-bold text-gray-900">Jewelry Items</h1>
-              <p className="text-gray-600 mt-1">Manage your jewelry inventory</p>
+              <p className="text-gray-600 mt-1">
+                Manage your jewelry inventory • {items.length} total items
+                {(searchTerm || selectedCategory) && (
+                  <span className="text-blue-600"> • {filteredItems.length} filtered</span>
+                )}
+              </p>
             </div>
-            {/* Show Add New Item button for users with create permission */}
-            {canCreate && (
-              <button 
-                onClick={openAddModal}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 inline-flex items-center space-x-2"
+            <div className="flex items-center space-x-3">
+              {/* Sidebar Toggle */}
+              <button
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                className="border border-gray-300 px-3 py-2 rounded-lg hover:bg-gray-50 inline-flex items-center space-x-2 text-gray-700"
+                title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  {sidebarCollapsed ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                  )}
                 </svg>
-                <span>Add New Item</span>
+                <span className="text-sm">{sidebarCollapsed ? 'Expand' : 'Collapse'}</span>
+              </button>
+              {/* Show Add New Item button for users with create permission */}
+              {canCreate && (
+                <>
+                  <button 
+                    onClick={() => setShowCsvImportModal(true)}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 inline-flex items-center space-x-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    <span>Import CSV</span>
+                  </button>
+                  <button 
+                    onClick={openAddModal}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 inline-flex items-center space-x-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    <span>Add New Item</span>
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Search and Filter Bar */}
+        <div className="bg-white rounded-lg shadow-sm p-4">
+          <div className="flex flex-wrap gap-3">
+            {/* Search Input */}
+            <div className="flex-1 min-w-[250px]">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search by name or SKU..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                  >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Category Filter */}
+            <div className="w-full sm:w-64">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                  </svg>
+                </div>
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none bg-white transition-all cursor-pointer"
+                >
+                  {categories.map((category, idx) => (
+                    <option key={idx} value={category === 'All' ? '' : category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            {/* Clear Filters Button */}
+            {(searchTerm || selectedCategory) && (
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setSelectedCategory('');
+                }}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors inline-flex items-center space-x-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span>Clear Filters</span>
               </button>
             )}
           </div>
@@ -194,25 +358,25 @@ export const ItemsPage: React.FC = () => {
               <p className="mt-2 text-gray-600">Loading items...</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead className="bg-gray-50">
+            <div className="overflow-x-auto rounded-xl border border-gray-200">
+              <table className="min-w-full table-auto text-sm">
+                <thead className="bg-gray-50 sticky top-0 z-10">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Image</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Brand</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Metal</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Image</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">SKU</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Name</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Category</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Brand</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Metal</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Price</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Status</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-700">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {items.map(item => (
-                    <tr key={item._id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
+                <tbody className="divide-y divide-gray-100">
+                  {currentItems.map(item => (
+                    <tr key={item._id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-2 whitespace-nowrap">
                         {item.image ? (
                           <img 
                             src={getImageUrl(item.image)} 
@@ -231,20 +395,20 @@ export const ItemsPage: React.FC = () => {
                           </div>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.sku}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.name}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{item.category}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{item.brand || 'Smart Jewel'}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{item.metal} ({item.purity})</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">₹{item.price?.toLocaleString() || 'N/A'}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-2 whitespace-nowrap font-medium text-gray-900">{item.sku}</td>
+                      <td className="px-4 py-2 whitespace-nowrap text-gray-900">{item.name}</td>
+                      <td className="px-4 py-2 whitespace-nowrap text-gray-600">{item.category}</td>
+                      <td className="px-4 py-2 whitespace-nowrap text-gray-600">{item.brand || 'Smart Jewel'}</td>
+                      <td className="px-4 py-2 whitespace-nowrap text-gray-600">{item.metal} ({item.purity})</td>
+                      <td className="px-4 py-2 whitespace-nowrap text-gray-900">₹{item.price?.toLocaleString() || 'N/A'}</td>
+                      <td className="px-4 py-2 whitespace-nowrap">
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                           item.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                         }`}>
                           {item.status}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <td className="px-4 py-2 whitespace-nowrap text-right">
                         <div className="flex justify-end space-x-2">
                           <button
                             onClick={() => openDetailsModal(item)}
@@ -282,21 +446,85 @@ export const ItemsPage: React.FC = () => {
                       </td>
                     </tr>
                   ))}
-                  {items.length === 0 && (
+                  {currentItems.length === 0 && (
                     <tr>
                       <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
                         <div className="flex flex-col items-center">
-                          <svg className="w-12 h-12 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                          </svg>
-                          <p className="text-lg font-medium">No items found</p>
-                          <p className="text-gray-400 mt-1">Get started by adding your first jewelry item</p>
+                          {items.length === 0 ? (
+                            <>
+                              <svg className="w-12 h-12 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                              </svg>
+                              <p className="text-lg font-medium">No items found</p>
+                              <p className="text-gray-400 mt-1">Get started by adding your first jewelry item</p>
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-12 h-12 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                              </svg>
+                              <p className="text-lg font-medium">No items match your filters</p>
+                              <p className="text-gray-400 mt-1">Try adjusting your search or category filter</p>
+                              <button
+                                onClick={() => {
+                                  setSearchTerm('');
+                                  setSelectedCategory('');
+                                }}
+                                className="mt-4 px-4 py-2 text-sm text-blue-600 hover:text-blue-700 font-medium"
+                              >
+                                Clear all filters
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
                   )}
                 </tbody>
               </table>
+            </div>
+          )}
+          
+          {/* Pagination */}
+          {!isLoading && filteredItems.length > 0 && (
+            <div className="flex justify-between items-center px-6 py-4 border-t border-gray-200">
+              <div className="text-sm text-gray-600">
+                Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, filteredItems.length)} of {filteredItems.length} items
+                {(searchTerm || selectedCategory) && (
+                  <span className="text-gray-400"> (filtered from {items.length} total)</span>
+                )}
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Previous
+                </button>
+                <div className="flex items-center space-x-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                        currentPage === page
+                          ? 'bg-blue-600 text-white'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -342,6 +570,14 @@ export const ItemsPage: React.FC = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* CSV Import Modal */}
+        {showCsvImportModal && (
+          <CsvImportModal
+            onClose={() => setShowCsvImportModal(false)}
+            onSuccess={load}
+          />
         )}
       </div>
     </RoleBasedNavigation>

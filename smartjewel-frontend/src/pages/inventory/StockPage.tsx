@@ -55,7 +55,12 @@ export const StockPage: React.FC = () => {
 
   // Check permissions
   const isAdmin = !!(user?.roles?.includes('admin') || user?.role?.role_name?.toLowerCase() === 'admin');
-  const canManageStock = isAdmin || !!(user?.perms?.includes('inventory.update') || user?.permissions?.includes('inventory.update'));
+  const canManageStock = isAdmin || !!(
+    user?.perms?.includes('inventory.update') || 
+    user?.permissions?.includes('inventory.update') ||
+    user?.perms?.includes('inventory.modify') || 
+    user?.permissions?.includes('inventory.modify')
+  );
 
   const loadStockData = async () => {
     try {

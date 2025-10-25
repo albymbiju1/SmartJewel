@@ -5,9 +5,10 @@ import { getNavigationForRole, NavItem } from '../config/roleNavigation';
 
 interface RoleBasedNavigationProps {
   children: React.ReactNode;
+  sidebarCollapsed?: boolean;
 }
 
-export const RoleBasedNavigation: React.FC<RoleBasedNavigationProps> = ({ children }) => {
+export const RoleBasedNavigation: React.FC<RoleBasedNavigationProps> = ({ children, sidebarCollapsed = false }) => {
   const { user, isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -174,29 +175,55 @@ export const RoleBasedNavigation: React.FC<RoleBasedNavigationProps> = ({ childr
       <div className="flex h-[calc(100vh-5rem)] overflow-hidden">
         {/* Left Sidebar (for items like Add, Edit, Approve Discounts) */}
         {navigation.leftSidebarItems && navigation.leftSidebarItems.length > 0 && (
-          <div className="w-72 bg-white shadow-lg border-r border-gray-200 h-full overflow-y-auto">
+          <div className={`bg-white shadow-lg border-r border-gray-200 h-full overflow-y-auto transition-all duration-300 ${
+            sidebarCollapsed ? 'w-16' : 'w-72'
+          }`}>
             <div className="h-full py-6">
-              <div className="px-4 mb-4">
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Quick Actions</h3>
-              </div>
-              <nav className="space-y-2 px-4">
-                {navigation.leftSidebarItems.map((item) => (
-                  <button
-                    key={item.key}
-                    onClick={() => handleNavClick(item)}
-                    className={`w-full text-left px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200 flex items-center space-x-3 ${
-                      isActiveRoute(item.href)
-                        ? 'bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 border-l-4 border-blue-600 shadow-md'
-                        : 'text-gray-700 hover:bg-gray-50 hover:text-blue-600 hover:shadow-sm'
-                    }`}
-                  >
-                    <div className={`w-2 h-2 rounded-full ${
-                      isActiveRoute(item.href) ? 'bg-blue-600' : 'bg-gray-400'
-                    }`}></div>
-                    <span>{item.label}</span>
-                  </button>
-                ))}
-              </nav>
+              {!sidebarCollapsed && (
+                <>
+                  <div className="px-4 mb-4">
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Quick Actions</h3>
+                  </div>
+                  <nav className="space-y-2 px-4">
+                    {navigation.leftSidebarItems.map((item) => (
+                      <button
+                        key={item.key}
+                        onClick={() => handleNavClick(item)}
+                        className={`w-full text-left px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200 flex items-center space-x-3 ${
+                          isActiveRoute(item.href)
+                            ? 'bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 border-l-4 border-blue-600 shadow-md'
+                            : 'text-gray-700 hover:bg-gray-50 hover:text-blue-600 hover:shadow-sm'
+                        }`}
+                      >
+                        <div className={`w-2 h-2 rounded-full ${
+                          isActiveRoute(item.href) ? 'bg-blue-600' : 'bg-gray-400'
+                        }`}></div>
+                        <span>{item.label}</span>
+                      </button>
+                    ))}
+                  </nav>
+                </>
+              )}
+              {sidebarCollapsed && (
+                <div className="flex flex-col items-center space-y-3">
+                  {navigation.leftSidebarItems.map((item) => (
+                    <button
+                      key={item.key}
+                      onClick={() => handleNavClick(item)}
+                      className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                        isActiveRoute(item.href)
+                          ? 'bg-blue-600 text-white shadow-md'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                      title={item.label}
+                    >
+                      <div className={`w-2 h-2 rounded-full ${
+                        isActiveRoute(item.href) ? 'bg-white' : 'bg-gray-600'
+                      }`}></div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -210,29 +237,55 @@ export const RoleBasedNavigation: React.FC<RoleBasedNavigationProps> = ({ childr
 
           {/* Right Sidebar (for navigation items like Items, Stock, etc.) */}
           {navigation.sidebarItems && navigation.sidebarItems.length > 0 && (
-            <div className="w-72 bg-white shadow-lg border-l border-gray-200 h-full overflow-y-auto">
+            <div className={`bg-white shadow-lg border-l border-gray-200 h-full overflow-y-auto transition-all duration-300 ${
+              sidebarCollapsed ? 'w-16' : 'w-72'
+            }`}>
               <div className="h-full py-6">
-                <div className="px-4 mb-4">
-                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Navigation</h3>
-                </div>
-                <nav className="space-y-2 px-4">
-                  {navigation.sidebarItems.map((item) => (
-                    <button
-                      key={item.key}
-                      onClick={() => handleNavClick(item)}
-                      className={`w-full text-left px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200 flex items-center space-x-3 ${
-                        isActiveRoute(item.href)
-                          ? 'bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 border-l-4 border-blue-600 shadow-md'
-                          : 'text-gray-700 hover:bg-gray-50 hover:text-blue-600 hover:shadow-sm'
-                      }`}
-                    >
-                      <div className={`w-2 h-2 rounded-full ${
-                        isActiveRoute(item.href) ? 'bg-blue-600' : 'bg-gray-400'
-                      }`}></div>
-                      <span>{item.label}</span>
-                    </button>
-                  ))}
-                </nav>
+                {!sidebarCollapsed && (
+                  <>
+                    <div className="px-4 mb-4">
+                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Navigation</h3>
+                    </div>
+                    <nav className="space-y-2 px-4">
+                      {navigation.sidebarItems.map((item) => (
+                        <button
+                          key={item.key}
+                          onClick={() => handleNavClick(item)}
+                          className={`w-full text-left px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200 flex items-center space-x-3 ${
+                            isActiveRoute(item.href)
+                              ? 'bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 border-l-4 border-blue-600 shadow-md'
+                              : 'text-gray-700 hover:bg-gray-50 hover:text-blue-600 hover:shadow-sm'
+                          }`}
+                        >
+                          <div className={`w-2 h-2 rounded-full ${
+                            isActiveRoute(item.href) ? 'bg-blue-600' : 'bg-gray-400'
+                          }`}></div>
+                          <span>{item.label}</span>
+                        </button>
+                      ))}
+                    </nav>
+                  </>
+                )}
+                {sidebarCollapsed && (
+                  <div className="flex flex-col items-center space-y-3">
+                    {navigation.sidebarItems.map((item) => (
+                      <button
+                        key={item.key}
+                        onClick={() => handleNavClick(item)}
+                        className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                          isActiveRoute(item.href)
+                            ? 'bg-blue-600 text-white shadow-md'
+                            : 'text-gray-600 hover:bg-gray-100'
+                        }`}
+                        title={item.label}
+                      >
+                        <div className={`w-2 h-2 rounded-full ${
+                          isActiveRoute(item.href) ? 'bg-white' : 'bg-gray-600'
+                        }`}></div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}

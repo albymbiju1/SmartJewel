@@ -59,24 +59,54 @@ export const ItemsPage: React.FC = () => {
   
   // Check permissions - admins get full access, others need specific permissions
   const isAdmin = !!(user?.roles?.includes('admin') || user?.role?.role_name?.toLowerCase() === 'admin');
+  
+  // Debug: Log user permissions
+  useEffect(() => {
+    if (user) {
+      console.log('=== ItemsPage - User Info ===');
+      console.log('Full User Object:', user);
+      console.log('Role Name:', user.role?.role_name);
+      console.log('Roles Array:', user.roles);
+      console.log('Perms Array:', user.perms);
+      console.log('Permissions Array:', user.permissions);
+      console.log('Is Admin:', isAdmin);
+      console.log('=============================');
+    }
+  }, [user, isAdmin]);
+  
+  // Check for inventory.modify permission in multiple possible locations
+  const hasInventoryModify = !!(
+    user?.perms?.includes('inventory.modify') || 
+    user?.permissions?.includes('inventory.modify')
+  );
+  
   const canCreate = isAdmin || !!(
     user?.perms?.includes('inventory.create') || 
     user?.permissions?.includes('inventory.create') ||
-    user?.perms?.includes('inventory.modify') || 
-    user?.permissions?.includes('inventory.modify')
+    hasInventoryModify
   );
+  
   const canEdit = isAdmin || !!(
     user?.perms?.includes('inventory.update') || 
     user?.permissions?.includes('inventory.update') ||
-    user?.perms?.includes('inventory.modify') || 
-    user?.permissions?.includes('inventory.modify')
+    hasInventoryModify
   );
+  
   const canDelete = isAdmin || !!(
     user?.perms?.includes('inventory.delete') || 
     user?.permissions?.includes('inventory.delete') ||
-    user?.perms?.includes('inventory.modify') || 
-    user?.permissions?.includes('inventory.modify')
-  ); // Inventory staff can also delete
+    hasInventoryModify
+  );
+  
+  // Debug: Log computed permissions
+  useEffect(() => {
+    console.log('=== ItemsPage - Computed Permissions ===');
+    console.log('hasInventoryModify:', hasInventoryModify);
+    console.log('canCreate:', canCreate);
+    console.log('canEdit:', canEdit);
+    console.log('canDelete:', canDelete);
+    console.log('=========================================');
+  }, [hasInventoryModify, canCreate, canEdit, canDelete]);
 
   // Get unique categories from items
   const categories = useMemo(() => {

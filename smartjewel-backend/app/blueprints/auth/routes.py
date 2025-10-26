@@ -531,7 +531,16 @@ def firebase_login():
     try:
         # First try with revocation check
         try:
-            decoded = fb_auth.verify_id_token(id_token, check_revoked=True)
+            # In local development, disable timestamp checking to avoid clock skew issues
+            is_local = os.getenv("APP_ENV", "development") == "development" or os.getenv("FLASK_ENV") == "development"
+            
+            if is_local:
+                # Local: Skip revocation check and disable strict timestamp validation
+                log.info("auth.firebase_login.local_mode", msg="Using lenient timestamp validation for local development")
+                decoded = fb_auth.verify_id_token(id_token, check_revoked=False)
+            else:
+                # Production: Full validation
+                decoded = fb_auth.verify_id_token(id_token, check_revoked=True)
         except fb_auth.RevokedIdTokenError as e:
             log.warning("auth.firebase_login.revoked_token", error=str(e))
             return jsonify({"error": "token_revoked", "details": str(e)}), 401

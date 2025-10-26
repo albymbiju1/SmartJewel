@@ -1,4 +1,3 @@
-import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, API_BASE_URL } from '../api';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -8,6 +7,7 @@ import { useWishlist } from '../contexts/WishlistContext';
 import { useCart } from '../contexts/CartContext';
 import { stockService, ProductWithStock } from '../services/stockService';
 import { catalogService } from '../services/catalogService';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 
 interface Product {
   _id: string;
@@ -57,7 +57,28 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
   const [quickViewProduct, setQuickViewProduct] = useState<Product|null>(null);
   const [sortModalOpen, setSortModalOpen] = useState(false);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const productGridRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+
+  // Scroll to top detector
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 400);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Scroll to top function
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Scroll to top when page changes
+  useEffect(() => {
+    scrollToTop();
+  }, [page]);
 
   useEffect(() => {
     // Keep local state synced if URL params change
@@ -181,7 +202,10 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
           params.max_price = parseFloat(maxPrice);
         }
         
-        const response = await catalogService.search(params);
+        const response = await catalogService.search({
+          ...params,
+          per_page: 200  // Request up to 200 products to handle pagination client-side
+        });
         // Map CatalogItem to Product interface
         const filteredProducts: Product[] = response.results.map(item => ({
           _id: item._id,
@@ -232,12 +256,21 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
     if (sortBy === 'price-asc') arr.sort((a,b)=> (a.price||0)-(b.price||0));
     else if (sortBy === 'price-desc') arr.sort((a,b)=> (b.price||0)-(a.price||0));
     // simple placeholders for popularity/new/bestseller could be by name/time if available
+    console.log('📊 Products loaded:', arr.length);
     return arr;
   }, [filteredProducts, sortBy]);
   const perPage = 20;
   const totalPages = Math.max(1, Math.ceil(sortedProducts.length / perPage));
   const currentPage = Math.min(page, totalPages);
   const pageSlice = sortedProducts.slice((currentPage-1)*perPage, currentPage*perPage);
+  
+  console.log('📄 Pagination:', {
+    totalProducts: sortedProducts.length,
+    perPage,
+    totalPages,
+    currentPage,
+    pageSlice: pageSlice.length
+  });
 
   if (isLoading || stockLoading) {
     return (
@@ -498,14 +531,142 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
               ))}
             </div>
 
-            {/* Pagination */}
-            <div className="mt-8 flex items-center justify-center gap-2">
-              <button disabled={currentPage<=1} onClick={()=>{ const p = String(currentPage-1); setPage(currentPage-1); updateParams({ page: p }); }} className={`px-3 py-1.5 rounded border ${currentPage<=1?'text-gray-300 border-gray-100':'text-gray-700 border-gray-200 hover:bg-gray-50'}`}>Prev</button>
-              {Array.from({length: totalPages}).slice(0,5).map((_,i)=>{
-                const p = i+1;
-                return <button key={p} onClick={()=>{ setPage(p); updateParams({ page: String(p) }); }} className={`px-3 py-1.5 rounded border ${p===currentPage?'bg-gray-900 text-white':'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>{p}</button>;
-              })}
-              <button disabled={currentPage>=totalPages} onClick={()=>{ const p = String(currentPage+1); setPage(currentPage+1); updateParams({ page: p }); }} className={`px-3 py-1.5 rounded border ${currentPage>=totalPages?'text-gray-300 border-gray-100':'text-gray-700 border-gray-200 hover:bg-gray-50'}`}>Next</button>
+            {/* Enhanced Pagination */}
+            <div className="mt-12 mb-8">
+              <div className="flex items-center justify-center gap-2 flex-wrap">
+                {/* Previous Button */}
+                <button 
+                  disabled={currentPage <= 1} 
+                  onClick={() => { 
+                    const p = String(currentPage - 1); 
+                    setPage(currentPage - 1); 
+                    updateParams({ page: p }); 
+                  }} 
+                  className={`px-4 py-2 rounded-lg border font-medium transition-all ${
+                    currentPage <= 1 
+                      ? 'text-gray-300 border-gray-200 cursor-not-allowed' 
+                      : 'text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400'
+                  }`}
+                >
+                  <span className="flex items-center gap-1">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                    Previous
+                  </span>
+                </button>
+
+                {/* Page Numbers */}
+                <div className="hidden sm:flex items-center gap-1">
+                  {(() => {
+                    const pages = [];
+                    const showEllipsisStart = currentPage > 3;
+                    const showEllipsisEnd = currentPage < totalPages - 2;
+
+                    // Always show first page
+                    if (totalPages > 0) {
+                      pages.push(
+                        <button
+                          key={1}
+                          onClick={() => { setPage(1); updateParams({ page: '1' }); }}
+                          className={`px-3 py-2 rounded-lg border min-w-[40px] font-medium transition-all ${
+                            1 === currentPage
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                              : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          1
+                        </button>
+                      );
+                    }
+
+                    // Ellipsis after first page
+                    if (showEllipsisStart) {
+                      pages.push(
+                        <span key="ellipsis-start" className="px-2 text-gray-400">•••</span>
+                      );
+                    }
+
+                    // Middle pages (current - 1, current, current + 1)
+                    const start = Math.max(2, currentPage - 1);
+                    const end = Math.min(totalPages - 1, currentPage + 1);
+                    
+                    for (let p = start; p <= end; p++) {
+                      pages.push(
+                        <button
+                          key={p}
+                          onClick={() => { setPage(p); updateParams({ page: String(p) }); }}
+                          className={`px-3 py-2 rounded-lg border min-w-[40px] font-medium transition-all ${
+                            p === currentPage
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                              : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      );
+                    }
+
+                    // Ellipsis before last page
+                    if (showEllipsisEnd) {
+                      pages.push(
+                        <span key="ellipsis-end" className="px-2 text-gray-400">•••</span>
+                      );
+                    }
+
+                    // Always show last page
+                    if (totalPages > 1) {
+                      pages.push(
+                        <button
+                          key={totalPages}
+                          onClick={() => { setPage(totalPages); updateParams({ page: String(totalPages) }); }}
+                          className={`px-3 py-2 rounded-lg border min-w-[40px] font-medium transition-all ${
+                            totalPages === currentPage
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                              : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          {totalPages}
+                        </button>
+                      );
+                    }
+
+                    return pages;
+                  })()}
+                </div>
+
+                {/* Mobile: Simple current/total display */}
+                <div className="sm:hidden px-4 py-2 text-sm text-gray-600 font-medium">
+                  Page {currentPage} of {totalPages}
+                </div>
+
+                {/* Next Button */}
+                <button 
+                  disabled={currentPage >= totalPages} 
+                  onClick={() => { 
+                    const p = String(currentPage + 1); 
+                    setPage(currentPage + 1); 
+                    updateParams({ page: p }); 
+                  }} 
+                  className={`px-4 py-2 rounded-lg border font-medium transition-all ${
+                    currentPage >= totalPages 
+                      ? 'text-gray-300 border-gray-200 cursor-not-allowed' 
+                      : 'text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400'
+                  }`}
+                >
+                  <span className="flex items-center gap-1">
+                    Next
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </span>
+                </button>
+              </div>
+
+              {/* Page info text */}
+              <div className="text-center mt-4 text-sm text-gray-500">
+                Showing page {currentPage} of {totalPages} ({filteredProducts.length} total products)
+              </div>
             </div>
           </>
         )}
@@ -539,6 +700,24 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
               </div>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Scroll to Top Button */}
+      <AnimatePresence>
+        {showScrollTop && (
+          <motion.button
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            onClick={scrollToTop}
+            className="fixed bottom-8 right-8 z-30 p-3 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors"
+            title="Scroll to top"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+            </svg>
+          </motion.button>
         )}
       </AnimatePresence>
 

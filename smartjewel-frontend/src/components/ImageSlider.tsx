@@ -267,23 +267,6 @@ export default function ImageSlider() {
         <span className="mx-1">/</span>
         <span className="font-mono">{String(slides.length).padStart(2, '0')}</span>
       </div>
-
-      {/* Auto-play control */}
-      <button
-        className="absolute bottom-5 right-6 w-10 h-10 flex items-center justify-center rounded-full bg-white/70 hover:bg-white text-gray-900 shadow-md"
-        onClick={() => setIsAutoPlaying(!isAutoPlaying)}
-        aria-label={isAutoPlaying ? 'Pause slideshow' : 'Play slideshow'}
-      >
-        {isAutoPlaying ? (
-          <svg viewBox="0 0 24 24" fill="currentColor">
-            <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-          </svg>
-        ) : (
-          <svg viewBox="0 0 24 24" fill="currentColor">
-            <path d="M8 5v14l11-7z" />
-          </svg>
-        )}
-      </button>
     </section>
   );
 }

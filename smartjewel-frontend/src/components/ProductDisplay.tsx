@@ -8,6 +8,8 @@ import { useCart } from '../contexts/CartContext';
 import { stockService, ProductWithStock } from '../services/stockService';
 import { catalogService } from '../services/catalogService';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { flyToCart } from '../utils/flyToCart';
+import { Filter as LucideFilter, Heart as HeartIcon, LayoutGrid, List as ListIcon, SlidersHorizontal, ShoppingCart as CartIcon } from 'lucide-react';
 
 interface Product {
   _id: string;
@@ -23,6 +25,8 @@ interface Product {
   image?: string;
   status: string;
   quantity?: number;
+  createdAt?: string;
+  isBestseller?: boolean;
 }
 
 interface ProductDisplayProps {
@@ -60,6 +64,7 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
   const [showScrollTop, setShowScrollTop] = useState(false);
   const productGridRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const [density, setDensity] = useState<'normal'|'dense'>('normal');
 
   // Scroll to top detector
   useEffect(() => {
@@ -93,6 +98,13 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
 
   const normalizeCategory = (c: string) => c.toLowerCase().replace(/\s+/g, '-');
   const toTitleCase = (s: string) => s.replace(/-/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+  const isNewProduct = (createdAt?: string) => {
+    if (!createdAt) return false;
+    const created = new Date(createdAt).getTime();
+    if (Number.isNaN(created)) return false;
+    const days = (Date.now() - created) / (1000*60*60*24);
+    return days <= 30;
+  };
 
   // Load stock data for products
   const loadStockData = async (products: Product[]) => {
@@ -220,7 +232,9 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
           image: item.image,
           description: '', // CatalogItem doesn't have description
           status: 'active', // Default status
-          quantity: item.quantity
+          quantity: item.quantity,
+          createdAt: (item as any).createdAt || (item as any).created_at,
+          isBestseller: (item as any).isBestseller ?? (item as any).is_bestseller
         }));
         
         setProducts(filteredProducts);
@@ -273,14 +287,22 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
   });
 
   if (isLoading || stockLoading) {
+    // Skeleton grid placeholders
+    const skeletonItems = Array.from({ length: 12 }, (_, i) => i);
     return (
-      <div className="min-h-screen bg-gray-50 py-12">
-        <div className="container mx-auto px-6">
-          <div className="text-center">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            <p className="mt-4 text-gray-600">
-              {isLoading ? 'Loading our beautiful collection...' : 'Checking stock availability...'}
-            </p>
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-[1440px] mx-auto px-4 md:px-6 py-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
+            {skeletonItems.map((i) => (
+              <div key={i} className="card overflow-hidden animate-pulse">
+                <div className="aspect-square bg-gray-200" />
+                <div className="p-4 space-y-3">
+                  <div className="h-4 bg-gray-200 rounded w-3/4" />
+                  <div className="h-3 bg-gray-200 rounded w-1/2" />
+                  <div className="h-5 bg-gray-200 rounded w-1/3" />
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -288,65 +310,86 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
   }
 
   return (
-    <div className="min-h-screen bg-[#fafafa]">
-      <div className="max-w-7xl mx-auto px-4 md:px-8 py-10">
-        {/* Sticky filter/sort bar */}
-        <div className="sticky top-[90px] z-40">
-          <div className="flex flex-wrap items-center justify-between bg-white shadow-sm rounded-2xl p-4 mb-6 border border-gray-100">
-            <div className="flex items-center gap-3">
-              <button onClick={()=>setFilterDrawerOpen(true)} className="bg-gray-50 text-gray-700 px-3 py-1 rounded-md border">Filter</button>
-              <button onClick={()=>setFilterDrawerOpen(true)} className="bg-gray-50 text-gray-700 px-3 py-1 rounded-md border">Show More</button>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="hidden md:flex items-center gap-1" role="group">
-                <button onClick={()=>{ setViewMode('grid'); updateParams({ view: 'grid' }); }} className={`px-2 py-1 rounded ${viewMode==='grid'?"bg-gray-900 text-white":"border border-gray-200 text-gray-700"}`}>Grid</button>
-                <button onClick={()=>{ setViewMode('list'); updateParams({ view: 'list' }); }} className={`px-2 py-1 rounded ${viewMode==='list'?"bg-gray-900 text-white":"border border-gray-200 text-gray-700"}`}>List</button>
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-[1440px] mx-auto px-4 md:px-6 py-4">
+        <div className="flex flex-col gap-4">
+          {/* Main content */}
+          <section className="flex-1 min-w-0">
+            {/* Top Controls Bar */}
+            <div className="flex items-center justify-between gap-3 mb-3 bg-gray-50 rounded-lg shadow-sm px-3 py-2" role="toolbar" aria-label="Products controls">
+              <div className="flex items-center gap-2">
+                <button onClick={()=>setFilterDrawerOpen(true)} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-gray-200 text-gray-800 bg-white hover:bg-gray-50" aria-haspopup="dialog" aria-controls="filters-drawer">
+                  <LucideFilter className="w-5 h-5" strokeWidth={1.5} />
+                  <span className="text-sm">Filter</span>
+                </button>
+                {/* Breadcrumb */}
+                <div className="hidden md:flex items-center text-sm text-gray-500" role="navigation" aria-label="Breadcrumb">
+                  <button onClick={()=>navigate('/')} className="hover:text-gray-700">Home</button>
+                  <span className="mx-2">›</span>
+                  <button onClick={()=>navigate('/products')} className="hover:text-gray-700">Products</button>
+                  {category && category !== 'all' && (<><span className="mx-2">›</span><span className="capitalize text-gray-700">{category}</span></>)}
+                </div>
+                {/* Mobile trimmed breadcrumb */}
+                <div className="flex md:hidden items-center text-xs text-gray-500" role="navigation" aria-label="Breadcrumb">
+                  <button onClick={()=>navigate('/')} className="hover:text-gray-700">Home</button>
+                  <span className="mx-1">›</span>
+                  <span className="truncate max-w-[120px]">
+                    {category && category !== 'all' ? `${category}` : 'Products'}
+                  </span>
+                </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-500">Sort by:</span>
-                <select
-                  className="border rounded-md px-2 py-1 text-sm"
-                  value={sortBy}
-                  onChange={(e)=>{ const v = e.target.value; setSortBy(v); updateParams({ sort: v }); }}
-                >
-                  <option value="popularity">Popularity</option>
-                  <option value="price-asc">Price: Low to High</option>
-                  <option value="price-desc">Price: High to Low</option>
-                  <option value="new">Newest</option>
-                </select>
+                {/* View toggles */}
+                <button onClick={()=>{ setViewMode('grid'); updateParams({ view: 'grid' }); }} className={`p-2 rounded-md border ${viewMode==='grid'?'bg-gray-900 text-white border-gray-900':'border-gray-200 text-gray-700 hover:bg-gray-50'}`} title="Grid view">
+                  <LayoutGrid className="w-5 h-5" strokeWidth={1.5} />
+                </button>
+                <button onClick={()=>{ setViewMode('list'); updateParams({ view: 'list' }); }} className={`p-2 rounded-md border ${viewMode==='list'?'bg-gray-900 text-white border-gray-900':'border-gray-200 text-gray-700 hover:bg-gray-50'}`} title="List view">
+                  <ListIcon className="w-5 h-5" strokeWidth={1.5} />
+                </button>
+                {/* Sort icon button */}
+                <button onClick={()=>setSortModalOpen(true)} className="p-2 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50" title="Sort" aria-haspopup="dialog" aria-expanded={sortModalOpen}>
+                  <SlidersHorizontal className="w-5 h-5" strokeWidth={1.5} />
+                </button>
+                {/* Density toggle */}
+                <div className="relative">
+                  <button onClick={()=>setDensity(density==='dense'?'normal':'dense')} className="px-2 py-1.5 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm" aria-pressed={density==='dense'} title="Toggle dense view">
+                    {density==='dense' ? 'Dense' : 'Comfortable'}
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
+            {/* Pill filter bar */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {priceRanges.map(pr => (
+                <span key={pr} className="pill inline-flex items-center gap-2 px-4 py-2">
+                  <span className="text-sm">{pr}</span>
+                  <button onClick={()=>{ const next = priceRanges.filter(x=>x!==pr); setPriceRanges(next); updateParams({ price: next }); }} className="text-gray-500 hover:text-gray-700">×</button>
+                </span>
+              ))}
+              {selectedMetals.map(m => (
+                <span key={m} className="pill inline-flex items-center gap-2 px-4 py-2">
+                  <span className="text-sm capitalize">{m}</span>
+                  <button onClick={()=>{ const next = selectedMetals.filter(x=>x!==m); setSelectedMetals(next); updateParams({ metal: next }); }} className="text-gray-500 hover:text-gray-700">×</button>
+                </span>
+              ))}
+              {selectedPurities.map(p => (
+                <span key={p} className="pill inline-flex items-center gap-2 px-4 py-2">
+                  <span className="text-sm">{p}</span>
+                  <button onClick={()=>{ const next = selectedPurities.filter(x=>x!==p); setSelectedPurities(next); updateParams({ purity: next }); }} className="text-gray-500 hover:text-gray-700">×</button>
+                </span>
+              ))}
+              {urlCategories.map(c=> (
+                <span key={c} className="pill inline-flex items-center gap-2 px-4 py-2">
+                  <span className="text-sm capitalize">{c.replace('-', ' ')}</span>
+                </span>
+              ))}
+              <button onClick={()=>setFilterDrawerOpen(true)} className="pill inline-flex items-center gap-2 px-4 py-2 hover:shadow">
+                <span className="text-sm font-medium">+ Show More</span>
+              </button>
+            </div>
 
-        {/* Active filter pills */}
-        <div className="flex items-center gap-2 flex-wrap mb-4">
-          {priceRanges.map(pr => (
-            <span key={pr} className="pill inline-flex items-center gap-2 px-4 py-2">
-              <span className="text-sm">{pr}</span>
-              <button onClick={()=>{ const next = priceRanges.filter(x=>x!==pr); setPriceRanges(next); updateParams({ price: next }); }} className="text-gray-500 hover:text-gray-700">×</button>
-            </span>
-          ))}
-          {selectedMetals.map(m => (
-            <span key={m} className="pill inline-flex items-center gap-2 px-4 py-2">
-              <span className="text-sm capitalize">{m}</span>
-              <button onClick={()=>{ const next = selectedMetals.filter(x=>x!==m); setSelectedMetals(next); updateParams({ metal: next }); }} className="text-gray-500 hover:text-gray-700">×</button>
-            </span>
-          ))}
-          {selectedPurities.map(p => (
-            <span key={p} className="pill inline-flex items-center gap-2 px-4 py-2">
-              <span className="text-sm">{p}</span>
-              <button onClick={()=>{ const next = selectedPurities.filter(x=>x!==p); setSelectedPurities(next); updateParams({ purity: next }); }} className="text-gray-500 hover:text-gray-700">×</button>
-            </span>
-          ))}
-          {urlCategories.map(c=> (
-            <span key={c} className="pill inline-flex items-center gap-2 px-4 py-2">
-              <span className="text-sm capitalize">{c.replace('-', ' ')}</span>
-            </span>
-          ))}
-        </div>
-
-        <div className="text-gray-600 mb-6">Showing {pageSlice.length ? ((currentPage-1)*perPage+1) : 0}–{(currentPage-1)*perPage + pageSlice.length} of {filteredProducts.length} products</div>
+            <div className="text-gray-600">Showing {pageSlice.length ? ((currentPage-1)*perPage+1) : 0}–{(currentPage-1)*perPage + pageSlice.length} of {filteredProducts.length} products</div>
+        
 
         {/* Active filter badges (secondary row) */}
         <div className="flex flex-wrap gap-2 mb-4">
@@ -382,17 +425,11 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
           </div>
         ) : (
           <>
-            <div className="flex justify-between items-center mb-6">
-              <p className="text-gray-600">
-                Showing {(currentPage-1)*perPage + pageSlice.length} of {filteredProducts.length} products
-              </p>
-            </div>
-
-            <div className={`${viewMode==='grid' ? 'product-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 scroll-mt-[100px]' : 'product-grid space-y-4 scroll-mt-[100px]'}`}>
+            <div className={`${viewMode==='grid' ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6' : 'space-y-4'}`}>
               {pageSlice.map((product, idx) => (
                 <motion.div
                   key={product._id}
-                  className={`card bg-white shadow-md hover:shadow-lg transition group cursor-pointer overflow-hidden ${viewMode==='list' ? 'flex' : ''}`}
+                  className={`card overflow-hidden transition-all group cursor-pointer ${viewMode==='list' ? 'flex' : 'flex flex-col h-full'} hover:shadow-xl hover:scale-[1.02]`}
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: idx * 0.02 }}
@@ -404,7 +441,7 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
                         src={product.image.startsWith('http') ? product.image : `${API_BASE_URL}${product.image}`}
                         alt={product.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        loading="eager"
+                        loading="lazy"
                         crossOrigin="anonymous"
                         onLoad={(e) => {
                           console.log('✅ Image loaded:', product.sku, product.image);
@@ -424,37 +461,50 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
                     </div>
+                    {/* Badges */}
+                    <div className="absolute top-2 left-2 flex flex-col gap-1">
+                      {(product as any).isBestseller && (
+                        <span className="px-2 py-0.5 text-xs rounded-full bg-rose-100 text-rose-700 border border-rose-200">Bestseller</span>
+                      )}
+                      {isNewProduct((product as any).createdAt) && (
+                        <span className="px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700 border border-green-200">New</span>
+                      )}
+                    </div>
                     {/* Wishlist (always visible like reference) */}
                     <div className="absolute top-2 right-2 flex flex-col gap-2">
                       <button
-                        title="Toggle Wishlist"
+                        title={isWishlisted(product._id) ? 'Remove from Wishlist' : 'Add to Wishlist'}
+                        aria-label={isWishlisted(product._id) ? 'Remove from Wishlist' : 'Add to Wishlist'}
+                        aria-pressed={isWishlisted(product._id)}
+                        role="button"
+                        tabIndex={0}
                         className="p-2 rounded-full bg-white/90 shadow hover:bg-white"
                         onClick={(e)=>{
                           e.stopPropagation();
                           const ev = new CustomEvent('sj:toggleWishlist', { detail: { productId: product._id, name: product.name, price: product.price, image: product.image, metal: product.metal, purity: product.purity } });
                           window.dispatchEvent(ev);
                         }}
+                        onKeyDown={(e)=>{
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const ev = new CustomEvent('sj:toggleWishlist', { detail: { productId: product._id, name: product.name, price: product.price, image: product.image, metal: product.metal, purity: product.purity } });
+                            window.dispatchEvent(ev);
+                          }
+                        }}
                       >
                         {/* Heart reflects wishlist state */}
-                        <svg
-                          className={`w-5 h-5 ${isWishlisted(product._id) ? 'text-rose-600' : 'text-gray-400'}`}
-                          viewBox="0 0 24 24"
-                          fill={isWishlisted(product._id) ? 'currentColor' : 'none'}
-                          stroke="currentColor"
-                          strokeWidth="1.5"
-                        >
-                          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-                        </svg>
+                        <HeartIcon className={`w-5 h-5 ${isWishlisted(product._id) ? 'text-rose-600' : 'text-gray-400'}`} strokeWidth={1.5} fill={isWishlisted(product._id) ? 'currentColor' : 'none'} />
                       </button>
                     </div>
                   </div>
 
-                  <div className="p-4 flex-1">
+                  <div className={`${density==='dense' ? 'p-3' : 'p-4'} flex flex-col flex-1`}>
                     <div className="mb-2">
-                      <h3 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                      <h3 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors leading-none min-h-[3rem]">
                         {product.name}
                       </h3>
-                      <p className="text-sm text-gray-500">{product.category}</p>
+                      <p className="text-sm text-gray-500 leading-none">{product.category}</p>
                     </div>
 
                     <div className="flex items-center justify-between mb-3">
@@ -469,15 +519,40 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
                     </div>
 
                     {product.price && (
-                      <div className="space-y-2">
+                      <div className="mt-auto pt-2">
                         <div className="flex items-center justify-between gap-3">
-                          <span className="text-lg font-bold text-gray-900">₹{product.price.toLocaleString()}</span>
+                          <div className="product-price flex items-baseline gap-1 whitespace-nowrap">
+                            <span className="rupee text-lg leading-none">₹</span>
+                            <span className="amount text-lg font-bold text-gray-900 leading-none">{product.price.toLocaleString()}</span>
+                          </div>
                           <div className="flex items-center gap-2">
-                            <button onClick={(e) => { e.stopPropagation(); setQuickViewProduct(product); setQuickViewOpen(true); }} className="px-3 py-1 rounded-md border border-gray-200 text-sm hover:bg-gray-50">Quick View</button>
+                            <button
+                              onClick={(e)=>{ 
+                                e.stopPropagation(); 
+                                const card = (e.currentTarget as HTMLElement).closest('.card');
+                                const img = card?.querySelector('img');
+                                const ev = new CustomEvent('sj:addToCart', { detail: {
+                                  productId: product._id,
+                                  sku: product.sku,
+                                  name: product.name,
+                                  price: product.price || 0,
+                                  image: product.image || '',
+                                  metal: product.metal,
+                                  purity: product.purity,
+                                  quantity: 1,
+                                  sourceElement: img || undefined
+                                }});
+                                window.dispatchEvent(ev);
+                              }}
+                              aria-label="Add to cart"
+                              className="w-10 h-10 flex items-center justify-center rounded-md border border-gray-300 hover:bg-gray-100 transition"
+                              title="Add to cart"
+                            >
+                              <CartIcon className="w-5 h-5 text-gray-600" strokeWidth={1.5} />
+                            </button>
                             <button 
                               onClick={(e) => { 
                                 e.stopPropagation(); 
-                                // Emit a global Buy Now event to centralize auth check and navigation
                                 const ev = new CustomEvent('sj:buyNow', { detail: {
                                   productId: product._id,
                                   sku: product.sku,
@@ -492,13 +567,11 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
                                 window.dispatchEvent(ev);
                               }} 
                               disabled={product.stockStatus === 'out_of_stock'}
-                              className={`px-3 py-1 rounded-md text-sm transition-colors ${
-                                product.stockStatus === 'out_of_stock' 
-                                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                                  : 'bg-orange-600 text-white hover:bg-orange-700'
-                              }`}
+                              className={`h-10 px-4 flex items-center justify-center rounded-md text-sm font-medium leading-none whitespace-nowrap transition ${product.stockStatus === 'out_of_stock' ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-orange-500 text-white hover:bg-orange-600'}`}
+                              aria-label={product.stockStatus === 'out_of_stock' ? 'Out of Stock' : 'Buy Now'}
+                              title={product.stockStatus === 'out_of_stock' ? 'Out of Stock' : 'Buy Now'}
                             >
-                              {product.stockStatus === 'out_of_stock' ? 'Out of Stock' : 'Buy Now'}
+                              Buy Now
                             </button>
                           </div>
                         </div>                    
@@ -654,6 +727,8 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
             </div>
           </>
         )}
+          </section>
+        </div>
       </div>
 
       {/* Quick View Modal */}

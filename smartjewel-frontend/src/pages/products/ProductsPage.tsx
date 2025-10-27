@@ -83,13 +83,11 @@ export const ProductsPage: React.FC = () => {
   return (
     <>
       <Navbar />
-      <div className="pt-0 bg-[#fafafa] min-h-screen">
-        <ProductDisplay 
-          category={category || 'all'} 
-          title={categoryData.title}
-          description={categoryData.description}
-        />
-      </div>
+      <ProductDisplay 
+        category={category || 'all'} 
+        title={categoryData.title}
+        description={categoryData.description}
+      />
     </>
   );
 };

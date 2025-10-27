@@ -16,7 +16,7 @@ interface Props {
 }
 
 const METALS = ['Gold','Silver','Platinum','Diamond'];
-const PURITIES = ['24k','22k','18k','14k'];
+const PURITIES = ['24K','22K','18K','14K'];
 
 export const FiltersPanel: React.FC<Props> = ({ value, onChange, onApply }) => {
   const [local, setLocal] = useState<FiltersState>(value);

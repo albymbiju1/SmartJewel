@@ -39,8 +39,8 @@ export const AdvancedSearchPage: React.FC = () => {
     max_price: query.get('max_price') ? Number(query.get('max_price')) : undefined,
     min_weight: query.get('min_weight') ? Number(query.get('min_weight')) : undefined,
     max_weight: query.get('max_weight') ? Number(query.get('max_weight')) : undefined,
-    metal: query.get('metal') ? query.get('metal')!.split(',') : undefined,
-    purity: query.get('purity') ? query.get('purity')!.split(',') : undefined,
+    metal: query.get('metal') ? query.get('metal')!.split(',').map(m => m.trim()) : undefined,
+    purity: query.get('purity') ? query.get('purity')!.split(',').map(p => p.trim()) : undefined,
   }), [query]);
 
   // Sync page from query
@@ -58,8 +58,8 @@ export const AdvancedSearchPage: React.FC = () => {
     if ('max_price' in next) setOrDel('max_price', next.max_price);
     if ('min_weight' in next) setOrDel('min_weight', next.min_weight);
     if ('max_weight' in next) setOrDel('max_weight', next.max_weight);
-    if ('metal' in next) setOrDel('metal', next.metal);
-    if ('purity' in next) setOrDel('purity', next.purity);
+    if ('metal' in next) setOrDel('metal', next.metal?.map(m => m.trim()) || []);
+    if ('purity' in next) setOrDel('purity', next.purity?.map(p => p.trim()) || []);
     setOrDel('page', next.page ?? 1);
     navigate(`/search?${sp.toString()}`);
   };
@@ -79,7 +79,15 @@ export const AdvancedSearchPage: React.FC = () => {
           page,
           per_page: perPage,
         } as any;
+        
+        // Log the search parameters for debugging
+        console.log('Search params:', params);
+        
         const res = await catalogService.search(params);
+        
+        // Log the response for debugging
+        console.log('Search response:', res);
+        
         setResults(res.results || []);
         setTotal(res.pagination?.total || 0);
       } catch (e) {
@@ -91,7 +99,7 @@ export const AdvancedSearchPage: React.FC = () => {
       }
     };
     fetch();
-  }, [q, page, perPage, filters.min_price, filters.max_price, filters.min_weight, filters.max_weight, (filters.metal||[]).join(','), (filters.purity||[]).join(',')]);
+  }, [q, page, perPage, filters.min_price, filters.max_price, filters.min_weight, filters.max_weight, JSON.stringify(filters.metal), JSON.stringify(filters.purity)]);
 
   const totalPages = Math.max(1, Math.ceil(total / perPage));
 
@@ -146,7 +154,7 @@ export const AdvancedSearchPage: React.FC = () => {
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {results.map((p) => (
-                  <div key={p._id} className="card overflow-hidden hover:shadow-elevated transition-shadow">
+                  <div key={p._id} className="card overflow-hidden hover:shadow-elevated transition-shadow cursor-pointer" onClick={() => navigate(`/product/${p._id}`)}>
                     <div className="aspect-square bg-gray-100">
                       {p.image ? (
                         <img src={getImageUrl(p.image)} alt={p.name} className="w-full h-full object-cover" />

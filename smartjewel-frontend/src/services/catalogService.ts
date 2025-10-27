@@ -52,7 +52,10 @@ function toQuery(params: SearchParams): URLSearchParams {
   if (params.min_price != null) q.set('min_price', String(params.min_price));
   if (params.max_price != null) q.set('max_price', String(params.max_price));
   if (params.metal?.length) q.set('metal', params.metal.join(','));
-  if (params.purity?.length) q.set('purity', params.purity.join(','));
+  if (params.purity?.length) {
+    console.log('Purity params being sent:', params.purity);
+    q.set('purity', params.purity.join(','));
+  }
   if (params.min_weight != null) q.set('min_weight', String(params.min_weight));
   if (params.max_weight != null) q.set('max_weight', String(params.max_weight));
   // Handle both single category and multiple categories
@@ -74,7 +77,9 @@ function toQuery(params: SearchParams): URLSearchParams {
 export const catalogService = {
   async search(params: SearchParams): Promise<SearchResponse> {
     const qs = toQuery(params).toString();
+    console.log('Catalog search request:', `/catalog/search${qs ? `?${qs}` : ''}`);
     const { data } = await api.get(`/catalog/search${qs ? `?${qs}` : ''}`);
+    console.log('Catalog search response:', data);
     return data as SearchResponse;
   },
   async suggestions(q: string, limit = 7): Promise<string[]> {

@@ -98,7 +98,11 @@ def _build_match_from_args(args):
     # Purity filter (comma-separated)
     purities = _split_csv(args.get('purity'))
     if purities:
-        match["purity"] = {"$in": purities}
+        # Make case-insensitive by converting to regex patterns
+        regex_patterns = [f"^{purity}$" for purity in purities]
+        match["purity"] = {"$regex": "|".join(regex_patterns), "$options": "i"}
+        print(f"Purity filter - Requested: {purities}")
+    print(f"All args: {args}")
     # Price range
     min_price = _parse_float(args.get('min_price'))
     max_price = _parse_float(args.get('max_price'))
@@ -221,6 +225,11 @@ def search_products():
             pipeline.append({"$match": match})
     else:
         pipeline.append({"$match": match})
+    
+    # Log the match query for debugging
+    print(f"Match query: {match}")
+    if q:
+        print(f"Text search query: {q}")
 
     # Sorting
     sort_spec = _sort_stage(request.args)

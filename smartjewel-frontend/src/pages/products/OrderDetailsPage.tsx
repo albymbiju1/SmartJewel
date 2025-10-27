@@ -501,25 +501,7 @@ export const OrderDetailsPage: React.FC = () => {
               </ul>
             </div>
 
-            {/* Rate Your Experience */}
-            {(order.statusHistory?.[order.statusHistory.length-1]?.status || '').toLowerCase() === 'delivered' && (
-              <div className="bg-white rounded-lg border border-gray-200 p-4">
-                <h2 className="text-base font-medium text-gray-900 mb-3">Rate your experience</h2>
-                <div className="flex items-center gap-1 mb-3">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button key={star} className="text-gray-300 hover:text-yellow-400">
-                      <Star className="w-6 h-6 fill-current" />
-                    </button>
-                  ))}
-                </div>
-                <button
-                  onClick={() => handleRateReview(order.items[0]?.id)}
-                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  Write a review
-                </button>
-              </div>
-            )}
+            {/* Customer review section removed as per requirement */}
           </div>
 
           {/* Right Column: Sidebar */}

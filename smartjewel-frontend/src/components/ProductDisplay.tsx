@@ -288,81 +288,65 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Breadcrumb */}
-      <div className="bg-white border-b">
-        <div className="container mx-auto px-6 py-3 text-sm text-gray-600 flex items-center gap-2">
-          <button onClick={() => navigate('/')} className="hover:text-blue-600">Home</button>
-          <span>/</span>
-          <button onClick={() => navigate('/products')} className="hover:text-blue-600">Products</button>
-          {category && category !== 'all' && (<><span>/</span><span className="capitalize text-gray-900">{category}</span></>)}
-        </div>
-      </div>
-      {/* Hero Section */}
-      <div className="bg-gradient-to-r from-amber-50 to-orange-50 py-16">
-        <div className="container mx-auto px-6 text-center">
-          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">{title}</h1>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">{description}</p>
-        </div>
-      </div>
-
-      <div className="container mx-auto px-6 py-12">
-        {/* Top section - title and controls */}
-        <div className="flex flex-col gap-4 mb-6">
-          <div className="flex items-center justify-between">
-            <div className="text-2xl font-semibold text-gray-900">
-              {title} <span className="text-gray-500 text-base">({filteredProducts.length} results)</span>
+    <div className="min-h-screen bg-[#fafafa]">
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-10">
+        {/* Sticky filter/sort bar */}
+        <div className="sticky top-[90px] z-40">
+          <div className="flex flex-wrap items-center justify-between bg-white shadow-sm rounded-2xl p-4 mb-6 border border-gray-100">
+            <div className="flex items-center gap-3">
+              <button onClick={()=>setFilterDrawerOpen(true)} className="bg-gray-50 text-gray-700 px-3 py-1 rounded-md border">Filter</button>
+              <button onClick={()=>setFilterDrawerOpen(true)} className="bg-gray-50 text-gray-700 px-3 py-1 rounded-md border">Show More</button>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <div className="hidden md:flex items-center gap-1" role="group">
-                <button onClick={()=>{ setViewMode('grid'); updateParams({ view: 'grid' }); }} className={`px-2 py-1 rounded ${viewMode==='grid'?'bg-gray-900 text-white':'border border-gray-200 text-gray-700'}`}>Grid</button>
-                <button onClick={()=>{ setViewMode('list'); updateParams({ view: 'list' }); }} className={`px-2 py-1 rounded ${viewMode==='list'?'bg-gray-900 text-white':'border border-gray-200 text-gray-700'}`}>List</button>
+                <button onClick={()=>{ setViewMode('grid'); updateParams({ view: 'grid' }); }} className={`px-2 py-1 rounded ${viewMode==='grid'?"bg-gray-900 text-white":"border border-gray-200 text-gray-700"}`}>Grid</button>
+                <button onClick={()=>{ setViewMode('list'); updateParams({ view: 'list' }); }} className={`px-2 py-1 rounded ${viewMode==='list'?"bg-gray-900 text-white":"border border-gray-200 text-gray-700"}`}>List</button>
               </div>
-              <button onClick={()=>setSortModalOpen(true)} className="inline-flex items-center gap-2 px-3 py-2 rounded-full border border-gray-200 text-gray-800 bg-white hover:shadow">
-                <span className="text-sm">Sort By:</span>
-                <span className="font-medium">{sortBy === 'price-asc' ? 'Price: Low to High' : sortBy === 'price-desc' ? 'Price: High to Low' : sortBy === 'new' ? 'New Arrivals' : sortBy === 'bestseller' ? 'Best Sellers' : 'Popularity'}</span>
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
-              </button>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-500">Sort by:</span>
+                <select
+                  className="border rounded-md px-2 py-1 text-sm"
+                  value={sortBy}
+                  onChange={(e)=>{ const v = e.target.value; setSortBy(v); updateParams({ sort: v }); }}
+                >
+                  <option value="popularity">Popularity</option>
+                  <option value="price-asc">Price: Low to High</option>
+                  <option value="price-desc">Price: High to Low</option>
+                  <option value="new">Newest</option>
+                </select>
+              </div>
             </div>
           </div>
-
-          {/* Pill filter bar */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <button onClick={()=>setFilterDrawerOpen(true)} className="pill inline-flex items-center gap-2 px-4 py-2 hover:shadow">
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 6h18M6 12h12M9 18h6"/></svg>
-              <span className="text-sm font-medium">Filter</span>
-            </button>
-            {priceRanges.map(pr => (
-              <span key={pr} className="pill inline-flex items-center gap-2 px-4 py-2">
-                <span className="text-sm">{pr}</span>
-                <button onClick={()=>{ const next = priceRanges.filter(x=>x!==pr); setPriceRanges(next); updateParams({ price: next }); }} className="text-gray-500 hover:text-gray-700">×</button>
-              </span>
-            ))}
-            {selectedMetals.map(m => (
-              <span key={m} className="pill inline-flex items-center gap-2 px-4 py-2">
-                <span className="text-sm capitalize">{m}</span>
-                <button onClick={()=>{ const next = selectedMetals.filter(x=>x!==m); setSelectedMetals(next); updateParams({ metal: next }); }} className="text-gray-500 hover:text-gray-700">×</button>
-              </span>
-            ))}
-            {selectedPurities.map(p => (
-              <span key={p} className="pill inline-flex items-center gap-2 px-4 py-2">
-                <span className="text-sm">{p}</span>
-                <button onClick={()=>{ const next = selectedPurities.filter(x=>x!==p); setSelectedPurities(next); updateParams({ purity: next }); }} className="text-gray-500 hover:text-gray-700">×</button>
-              </span>
-            ))}
-            
-            {urlCategories.map(c=> (
-              <span key={c} className="pill inline-flex items-center gap-2 px-4 py-2">
-                <span className="text-sm capitalize">{c.replace('-', ' ')}</span>
-              </span>
-            ))}
-            <button onClick={()=>setFilterDrawerOpen(true)} className="pill inline-flex items-center gap-2 px-4 py-2 hover:shadow">
-              <span className="text-sm font-medium">+ Show More</span>
-            </button>
-          </div>
-
-          <div className="text-gray-600">Showing {pageSlice.length ? ((currentPage-1)*perPage+1) : 0}–{(currentPage-1)*perPage + pageSlice.length} of {filteredProducts.length} products</div>
         </div>
+
+        {/* Active filter pills */}
+        <div className="flex items-center gap-2 flex-wrap mb-4">
+          {priceRanges.map(pr => (
+            <span key={pr} className="pill inline-flex items-center gap-2 px-4 py-2">
+              <span className="text-sm">{pr}</span>
+              <button onClick={()=>{ const next = priceRanges.filter(x=>x!==pr); setPriceRanges(next); updateParams({ price: next }); }} className="text-gray-500 hover:text-gray-700">×</button>
+            </span>
+          ))}
+          {selectedMetals.map(m => (
+            <span key={m} className="pill inline-flex items-center gap-2 px-4 py-2">
+              <span className="text-sm capitalize">{m}</span>
+              <button onClick={()=>{ const next = selectedMetals.filter(x=>x!==m); setSelectedMetals(next); updateParams({ metal: next }); }} className="text-gray-500 hover:text-gray-700">×</button>
+            </span>
+          ))}
+          {selectedPurities.map(p => (
+            <span key={p} className="pill inline-flex items-center gap-2 px-4 py-2">
+              <span className="text-sm">{p}</span>
+              <button onClick={()=>{ const next = selectedPurities.filter(x=>x!==p); setSelectedPurities(next); updateParams({ purity: next }); }} className="text-gray-500 hover:text-gray-700">×</button>
+            </span>
+          ))}
+          {urlCategories.map(c=> (
+            <span key={c} className="pill inline-flex items-center gap-2 px-4 py-2">
+              <span className="text-sm capitalize">{c.replace('-', ' ')}</span>
+            </span>
+          ))}
+        </div>
+
+        <div className="text-gray-600 mb-6">Showing {pageSlice.length ? ((currentPage-1)*perPage+1) : 0}–{(currentPage-1)*perPage + pageSlice.length} of {filteredProducts.length} products</div>
 
         {/* Active filter badges (secondary row) */}
         <div className="flex flex-wrap gap-2 mb-4">
@@ -404,11 +388,11 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
               </p>
             </div>
 
-            <div className={`${viewMode==='grid' ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6' : 'space-y-4'}`}>
+            <div className={`${viewMode==='grid' ? 'product-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 scroll-mt-[100px]' : 'product-grid space-y-4 scroll-mt-[100px]'}`}>
               {pageSlice.map((product, idx) => (
                 <motion.div
                   key={product._id}
-                  className={`card overflow-hidden hover:shadow-elevated transition-shadow group cursor-pointer ${viewMode==='list' ? 'flex' : ''}`}
+                  className={`card bg-white shadow-md hover:shadow-lg transition group cursor-pointer overflow-hidden ${viewMode==='list' ? 'flex' : ''}`}
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: idx * 0.02 }}

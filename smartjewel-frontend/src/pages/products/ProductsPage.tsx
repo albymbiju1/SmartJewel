@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ProductDisplay } from '../../components/ProductDisplay';
+import Navbar from '../../components/Navbar';
 
 export const ProductsPage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -80,10 +81,15 @@ export const ProductsPage: React.FC = () => {
   }, [category]);
 
   return (
-    <ProductDisplay 
-      category={category || 'all'} 
-      title={categoryData.title}
-      description={categoryData.description}
-    />
+    <>
+      <Navbar />
+      <div className="pt-0 bg-[#fafafa] min-h-screen">
+        <ProductDisplay 
+          category={category || 'all'} 
+          title={categoryData.title}
+          description={categoryData.description}
+        />
+      </div>
+    </>
   );
 };

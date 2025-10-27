@@ -10,6 +10,10 @@ interface OrderItem {
   qty: number;
   price: number;
   imageUrl?: string;
+  metal?: string;
+  purity?: string | number;
+  size?: string;
+  category?: string;
 }
 
 interface StatusHistoryEntry {
@@ -75,20 +79,27 @@ const MyOrdersPage: React.FC = () => {
         const data: OrderSummary[] = res.data?.orders || [];
         setOrders(data);
 
-        // Fetch product images
+        // Fetch product details (images and attributes)
         const productIds = new Set<string>();
         data.forEach(o => o.items.forEach(i => productIds.add(i.id)));
         if (productIds.size > 0) {
           try {
             const productsRes = await api.get('/inventory/products');
             const products = productsRes.data.products || [];
-            const idToImage = new Map(products.map((p: any) => [p._id, p.image]));
+            const idToProduct = new Map<any, any>(products.map((p: any) => [p._id, p]));
             setOrders(data.map(o => ({
               ...o,
-              items: o.items.map(i => ({
-                ...i,
-                imageUrl: idToImage.get(i.id)
-              }))
+              items: o.items.map(i => {
+                const p: any = idToProduct.get(i.id) || {};
+                return {
+                  ...i,
+                  imageUrl: p?.image || i.imageUrl,
+                  metal: p?.metal || i.metal,
+                  purity: p?.purity || i.purity,
+                  size: p?.size || p?.ring_size || i.size,
+                  category: p?.category || i.category,
+                } as OrderItem;
+              })
             })));
           } catch (e) {
             console.warn('Failed to fetch product images:', e);
@@ -287,9 +298,10 @@ const MyOrdersPage: React.FC = () => {
               {filteredOrders.map((o) => {
                 const status = getCurrentStatus(o.statusHistory);
                 const firstItem = o.items[0];
-                const metal = '18k Yellow Gold';
-                const carat = '0.75';
-                const ringSize = '6';
+                const details: string[] = [];
+                if (firstItem?.metal) details.push(`Metal: ${firstItem.metal}`);
+                if (firstItem?.purity) details.push(`Purity: ${firstItem.purity}`);
+                if (firstItem?.size) details.push(`Size: ${firstItem.size}`);
                 const imageUrl = (firstItem.imageUrl?.startsWith('http') ? firstItem.imageUrl : firstItem.imageUrl ? `${API_BASE_URL}${firstItem.imageUrl}` : 'https://via.placeholder.com/80x80?text=Jewelry');
                 const isDelivered = status === 'delivered';
                 const isCancelledRefunded = o.cancellation?.approved && o.cancellation?.refundDetails?.status === 'processed';
@@ -308,7 +320,9 @@ const MyOrdersPage: React.FC = () => {
                       <img src={imageUrl} alt={firstItem.name} className="w-20 h-20 object-contain rounded border border-gray-200 mr-4" />
                       <div className="flex-1">
                         <h4 className="text-xl font-semibold text-gray-900">{firstItem.name}</h4>
-                        <p className="text-sm text-gray-600">Metal: {metal}, Carat: {carat}, Ring Size: {ringSize}</p>
+                        {details.length > 0 && (
+                          <p className="text-sm text-gray-600">{details.join(', ')}</p>
+                        )}
                         {o.items.length > 1 && <p className="text-sm text-gray-600">and {o.items.length - 1} more items</p>}
                       </div>
                       <div className="text-xl font-bold text-gray-900 mr-6">{toINR(o.amount)}</div>

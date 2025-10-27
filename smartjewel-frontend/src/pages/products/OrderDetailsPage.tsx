@@ -78,6 +78,10 @@ interface Order {
     refundProcessed?: boolean;
     refundDetails?: any;
   };
+  // Optional pricing fields present in some orders
+  mrp?: number;
+  discount?: number;
+  payment_method?: string;
 }
 
 interface TimelineStep {
@@ -197,15 +201,27 @@ export const OrderDetailsPage: React.FC = () => {
     const hist = ord.statusHistory || [];
     const steps = ['created','paid','shipped','delivered'];
     const last = (hist[hist.length-1]?.status || '').toLowerCase();
+    // Consider paid if payment shows success, even if statusHistory missed the 'paid' push
+    const hasPaidInHistory = hist.some(h => (h.status || '').toLowerCase() === 'paid');
+    const paymentShowsPaid = ((ord.payment?.status || '').toLowerCase() === 'paid') || !!(ord.payment?.transactionId);
+    const isPaid = hasPaidInHistory || paymentShowsPaid;
+
+    // Compute effective last index: at least 'paid' when isPaid, unless shipped/delivered are present
+    const deliveredIdx = hist.findIndex(h => (h.status || '').toLowerCase() === 'delivered');
+    const shippedIdx = hist.findIndex(h => (h.status || '').toLowerCase() === 'shipped');
+    let lastIdx = steps.indexOf(last);
+    if (deliveredIdx !== -1) lastIdx = steps.indexOf('delivered');
+    else if (shippedIdx !== -1) lastIdx = steps.indexOf('shipped');
+    else if (isPaid) lastIdx = Math.max(lastIdx, steps.indexOf('paid'));
+
     return steps.map((s) => {
       const entry = hist.find(h => (h.status || '').toLowerCase() === s);
       const idx = steps.indexOf(s);
-      const lastIdx = steps.indexOf(last);
       return {
         id: s,
         title: s.charAt(0).toUpperCase() + s.slice(1),
         description: s === 'paid' ? 'Payment confirmed' : s === 'shipped' ? 'Order shipped' : s === 'delivered' ? 'Order delivered' : 'Order created',
-        status: lastIdx > idx ? 'completed' : lastIdx === idx ? 'current' : 'upcoming',
+        status: lastIdx >= idx ? 'completed' : 'upcoming',
         date: entry?.timestamp || entry?.at || ord.createdAt,
         icon: s === 'shipped' ? '🚚' : s === 'delivered' ? '🏠' : '✅',
       } as TimelineStep;
@@ -213,8 +229,103 @@ export const OrderDetailsPage: React.FC = () => {
   };
 
   const handleDownloadInvoice = () => {
-    // Implement invoice download
-    console.log('Download invoice for order:', orderId);
+    if (!order) return;
+    const created = order.createdAt ? new Date(order.createdAt).toLocaleString('en-IN') : '';
+    const customer = order.customer || {};
+    const shippingAddr = order.shipping?.address || customer.address || '';
+    const rows = (order.items || []).map((it, idx) => `
+      <tr>
+        <td style="padding:8px;border:1px solid #ddd">${idx + 1}</td>
+        <td style="padding:8px;border:1px solid #ddd">${it.name || ''}</td>
+        <td style="padding:8px;border:1px solid #ddd;text-align:center">${it.qty || 1}</td>
+        <td style="padding:8px;border:1px solid #ddd;text-align:right">₹${(it.price || 0).toLocaleString('en-IN')}</td>
+        <td style="padding:8px;border:1px solid #ddd;text-align:right">₹${((it.price || 0) * (it.qty || 1)).toLocaleString('en-IN')}</td>
+      </tr>`).join('');
+    const html = `<!doctype html>
+    <html>
+    <head>
+      <meta charset="utf-8" />
+      <title>Invoice #${order.orderId}</title>
+      <style>
+        body{font-family: Arial, Helvetica, sans-serif; color:#111}
+        .container{max-width:800px;margin:24px auto;padding:24px;border:1px solid #eee}
+        .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+        .title{font-size:20px;font-weight:700}
+        table{width:100%;border-collapse:collapse;margin-top:12px}
+        .muted{color:#555;font-size:12px}
+        .right{text-align:right}
+      </style>
+    </head>
+    <body onload="setTimeout(function(){window.print();}, 300);">
+      <div class="container">
+        <div class="header">
+          <div>
+            <div class="title">SmartJewel</div>
+            <div class="muted">www.smartjewel.com</div>
+          </div>
+          <div class="right">
+            <div><strong>Invoice</strong></div>
+            <div class="muted">#${order.orderId}</div>
+            <div class="muted">Date: ${created}</div>
+          </div>
+        </div>
+        <hr/>
+        <div style="display:flex;gap:24px;margin-top:12px">
+          <div style="flex:1">
+            <div><strong>Billed To</strong></div>
+            <div>${customer.name || ''}</div>
+            <div class="muted">${customer.email || ''}</div>
+            <div class="muted">${customer.phone || ''}</div>
+          </div>
+          <div style="flex:1">
+            <div><strong>Ship To</strong></div>
+            <div class="muted">${shippingAddr || ''}</div>
+          </div>
+        </div>
+        <table style="margin-top:16px">
+          <thead>
+            <tr>
+              <th style="padding:8px;border:1px solid #ddd;width:40px">#</th>
+              <th style="padding:8px;border:1px solid #ddd;text-align:left">Item</th>
+              <th style="padding:8px;border:1px solid #ddd;width:80px">Qty</th>
+              <th style="padding:8px;border:1px solid #ddd;width:140px">Price</th>
+              <th style="padding:8px;border:1px solid #ddd;width:160px">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+        <div style="display:flex;justify-content:flex-end;margin-top:16px">
+          <table style="width:320px;border-collapse:collapse">
+            <tr><td style="padding:8px;border:1px solid #ddd">Subtotal</td><td style="padding:8px;border:1px solid #ddd;text-align:right">₹${(order.amount || 0).toLocaleString('en-IN')}</td></tr>
+            <tr><td style="padding:8px;border:1px solid #ddd">Tax</td><td style="padding:8px;border:1px solid #ddd;text-align:right">Included</td></tr>
+            <tr><td style="padding:8px;border:1px solid #ddd"><strong>Total</strong></td><td style="padding:8px;border:1px solid #ddd;text-align:right"><strong>₹${(order.amount || 0).toLocaleString('en-IN')}</strong></td></tr>
+            <tr><td style="padding:8px;border:1px solid #ddd">Payment</td><td style="padding:8px;border:1px solid #ddd;text-align:right">${(order.payment?.status || 'paid').toString().toUpperCase()}</td></tr>
+          </table>
+        </div>
+        <p class="muted" style="margin-top:24px">This is a system-generated invoice.</p>
+      </div>
+    </body>
+    </html>`;
+    try {
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const win = window.open(url, '_blank', 'width=900,height=1000');
+      if (!win) {
+        // Popup blocked: fallback to download
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `invoice-${order.orderId}.html`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+      // Revoke after some time to allow load
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (e) {
+      console.error('Failed to open invoice window', e);
+    }
   };
 
   const handleTrackOrder = () => {
@@ -298,13 +409,25 @@ export const OrderDetailsPage: React.FC = () => {
                 {order.orderId}
               </span>
             </nav>
-            <div className="text-right">
-              <div className="text-xl font-bold text-gray-900 flex items-center gap-1">
-                ₹{(order.amount || 0).toLocaleString('en-IN')}
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <div className="text-xl font-bold text-gray-900 flex items-center gap-1">
+                  ₹{(order.amount || 0).toLocaleString('en-IN')}
+                </div>
+                <div className="text-xs text-gray-500 uppercase tracking-wider">
+                  {order.payment?.currency || 'INR'}
+                </div>
               </div>
-              <div className="text-xs text-gray-500 uppercase tracking-wider">
-                {order.payment?.currency || 'INR'}
-              </div>
+              {(((order.payment?.status || '').toLowerCase() === 'paid') || !!order.payment?.transactionId) && (
+                <button
+                  onClick={handleDownloadInvoice}
+                  className="inline-flex items-center gap-2 px-3 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors"
+                  title="Download Invoice"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  <span className="text-sm font-medium">Invoice</span>
+                </button>
+              )}
             </div>
           </div>
         </div>

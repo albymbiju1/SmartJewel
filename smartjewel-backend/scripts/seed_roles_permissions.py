@@ -23,6 +23,7 @@ ROLE_PERMS = {
     # Inventory Staff (Staff Type 3)
     "Staff_L3": [
         "inventory.modify",
+        "inventory.delete",
         "tag.assign",
         "inventory.flow.view",
     ],

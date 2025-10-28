@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../../contexts/CartContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../api';
 import { stockService } from '../../services/stockService';
 
@@ -14,6 +15,7 @@ interface CustomerForm {
 
 export const CheckoutPage: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { items, cartTotal, updateQuantity, removeFromCart, clearCart } = useCart();
 
   // Form + UI state
@@ -30,6 +32,18 @@ export const CheckoutPage: React.FC = () => {
   const subtotal = useMemo(() => Math.max(0, items.reduce((s, it) => s + (it.price || 0) * it.quantity, 0)), [items]);
   const taxes = useMemo(() => Math.round(subtotal * taxRate), [subtotal]);
   const total = useMemo(() => subtotal + taxes + shipping, [subtotal, taxes, shipping]);
+
+  // Load customer data from profile when component mounts
+  useEffect(() => {
+    if (user) {
+      setForm({
+        name: user.full_name || '',
+        email: user.email || '',
+        phone: user.phone_number || '',
+        address: user.address || ''
+      });
+    }
+  }, [user]);
 
   // Load Razorpay checkout script lazily
   useEffect(() => {

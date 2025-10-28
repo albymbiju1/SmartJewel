@@ -135,6 +135,7 @@ ROLE_PERMISSIONS = {
         "inventory.read",
         "inventory.create",
         "inventory.update",
+        "inventory.delete",
         "inventory.flow",
         "inventory.tag.assign",
         "inventory.location.read"

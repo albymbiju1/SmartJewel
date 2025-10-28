@@ -557,7 +557,7 @@ def update_item(item_id):
 
 
 @bp.delete("/items/<item_id>")
-@require_any_role("admin")
+@require_permissions("inventory.delete")
 def delete_item(item_id):
     db = current_app.extensions['mongo_db']
     oid = _oid(item_id)

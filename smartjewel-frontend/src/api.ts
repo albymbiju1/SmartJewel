@@ -46,7 +46,7 @@ api.interceptors.request.use(
       method: config.method,
       url: config.url,
       hasAuthHeader: !!authHeader,
-      authHeaderStart: authHeader ? authHeader.substring(0, 30) : 'NONE'
+      authHeaderStart: authHeader ? String(authHeader).substring(0, 30) : 'NONE'
     });
     return config;
   },
@@ -74,8 +74,6 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-
-// Removed get_db function as it referenced Flask backend code
 
 // Export normalized API base for asset URL composition
 export const API_BASE_URL = API_BASE;

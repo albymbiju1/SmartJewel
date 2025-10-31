@@ -164,12 +164,14 @@ def create_staff():
     if db.users.find_one({"email": email_l}):
         return jsonify({"error": "email_in_use"}), 409
     role = data["level"]
+    role_doc = db.roles.find_one({"role_name": role})
     roles = [role]
     perms = _expand_permissions(roles)
     user_doc = {
         "email": email_l,
         "name": data["name"],
         "password_hash": hash_password(data["password"]),
+        "role": {"_id": str(role_doc["_id"]), "role_name": role} if role_doc else None,
         "roles": roles,
         "permissions": perms,
         "is_active": True,
@@ -208,7 +210,7 @@ def login():
         }
     
     roles_claim = user.get("roles") or ([role_doc["role_name"]] if role_doc and role_doc.get("role_name") else [])
-    perms_claim = role_doc["permissions"] if role_doc and role_doc.get("permissions") else user.get("permissions", [])
+    perms_claim = role_doc["permissions"] if role_doc and role_doc.get("permissions") else user.get("permissions", []) or []
 
     claims = {
         "role": role_info,
@@ -332,13 +334,36 @@ def request_otp():
 def refresh():
     claims = get_jwt()
     identity = claims["sub"]
-    access = create_access_token(identity=identity, additional_claims={
+    
+    # Ensure role info is JSON-serializable
+    role_info = claims.get("role", {})
+    if role_info:
+        # Make sure _id is a string, not ObjectId
+        role_id = role_info.get("_id")
+        if role_id:
+            # Ensure it's a string even if it's already converted
+            role_info = {
+                "_id": str(role_id),
+                "role_name": role_info.get("role_name", "")
+            }
+        else:
+            role_info = {
+                "_id": "",
+                "role_name": role_info.get("role_name", "")
+            }
+    
+    # Ensure all claims are JSON serializable
+    safe_claims = {
+        "role": role_info,
         "roles": claims.get("roles", []),
         "perms": claims.get("perms", []),
         "branch_id": claims.get("branch_id"),
         "email": claims.get("email"),
         "name": claims.get("name"),
-    })
+        "firebase_uid": claims.get("firebase_uid"),
+    }
+    
+    access = create_access_token(identity=identity, additional_claims=safe_claims)
     return jsonify({"access_token": access}), 200
 
 @bp.post("/logout")
@@ -614,7 +639,7 @@ def firebase_login():
             "email": email,
             "firebase_uid": firebase_uid,
             "uid": firebase_uid,
-            "role": {"_id": role_doc["_id"], "role_name": role_doc["role_name"]},
+            "role": {"_id": str(role_doc["_id"]), "role_name": role_doc["role_name"]},
             "status": "active",
             "created_at": _now(db),
         }
@@ -633,7 +658,7 @@ def firebase_login():
                 if not (user.get("role") and user["role"].get("role_name") == "Admin"):
                     admin_role = db.roles.find_one({"role_name": "Admin"})
                     if admin_role:
-                        db.users.update_one({"_id": user["_id"]}, {"$set": {"role": {"_id": admin_role["_id"], "role_name": "Admin"}}})
+                        db.users.update_one({"_id": user["_id"]}, {"$set": {"role": {"_id": str(admin_role["_id"]), "role_name": "Admin"}}})
                         log.info("auth.firebase_login.promote_admin", user_id=str(user["_id"]))
                         user = db.users.find_one({"_id": user["_id"]})
             except Exception:

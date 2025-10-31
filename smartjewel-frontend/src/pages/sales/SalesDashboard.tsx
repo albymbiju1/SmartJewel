@@ -1,30 +1,61 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { RoleBasedNavigation } from '../../components/RoleBasedNavigation';
 
 export const SalesDashboard: React.FC = () => {
+  const [sku, setSku] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [horizon, setHorizon] = useState<7 | 30>(7);
+  const [forecast, setForecast] = useState<{
+    daily: { date: string; forecast: number }[];
+    totals: { sum_7?: number; sum_30?: number };
+  } | null>(null);
+
+  const fetchForecast = async (selectedHorizon: 7 | 30) => {
+    if (!sku) {
+      setError('Enter an SKU to forecast');
+      return;
+    }
+    setHorizon(selectedHorizon);
+    setLoading(true);
+    setError(null);
+    setForecast(null);
+    try {
+      const res = await fetch('http://localhost:8085/ml/inventory/forecast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sku, horizon_days: selectedHorizon, recent_history: [] }),
+      });
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+      const data = await res.json();
+      setForecast({ daily: data.daily || [], totals: data.totals || {} });
+    } catch (e: any) {
+      setError(e.message || 'Failed to fetch forecast');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <RoleBasedNavigation>
       <div className="space-y-6">
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-2xl font-semibold text-gray-900 mb-4">Sales Dashboard</h2>
           <p className="text-gray-600 mb-6">Welcome to your sales workspace. Manage customers and sales transactions.</p>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Today's Sales */}
             <div className="bg-green-50 p-4 rounded-lg">
               <h3 className="font-semibold text-green-900">Today's Sales</h3>
               <p className="text-2xl font-bold text-green-600 mt-2">₹45,000</p>
               <p className="text-sm text-green-700 mt-1">8 transactions</p>
             </div>
 
-            {/* Pending Orders */}
             <div className="bg-yellow-50 p-4 rounded-lg">
               <h3 className="font-semibold text-yellow-900">Pending Orders</h3>
               <p className="text-2xl font-bold text-yellow-600 mt-2">3</p>
               <p className="text-sm text-yellow-700 mt-1">Requires follow-up</p>
             </div>
 
-            {/* Customer Visits */}
             <div className="bg-blue-50 p-4 rounded-lg">
               <h3 className="font-semibold text-blue-900">Customer Visits</h3>
               <p className="text-2xl font-bold text-blue-600 mt-2">15</p>
@@ -33,7 +64,6 @@ export const SalesDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Quick Actions */}
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -45,7 +75,7 @@ export const SalesDashboard: React.FC = () => {
               </div>
               <span className="text-sm font-medium">New Sale</span>
             </button>
-            
+
             <button className="p-4 text-center border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
               <div className="text-blue-600 mb-2">
                 <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -75,7 +105,54 @@ export const SalesDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Recent Transactions */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Sales Forecast</h3>
+          <div className="flex flex-col md:flex-row md:items-end gap-3 mb-4">
+            <div className="flex-1">
+              <label className="block text-sm text-gray-700 mb-1">SKU</label>
+              <input value={sku} onChange={(e) => setSku(e.target.value)} className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200" placeholder="Enter SKU" />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => fetchForecast(7)} disabled={loading} className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">7 days</button>
+              <button onClick={() => fetchForecast(30)} disabled={loading} className="px-4 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50">30 days</button>
+            </div>
+          </div>
+          {error && <div className="text-sm text-red-600 mb-3">{error}</div>}
+          {loading && <div className="text-sm text-gray-500">Loading forecast...</div>}
+          {!loading && forecast && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 rounded bg-blue-50">
+                  <div className="text-sm text-blue-900">Total next 7 days</div>
+                  <div className="text-2xl font-semibold text-blue-700">{forecast.totals.sum_7 ?? 0}</div>
+                </div>
+                <div className="p-4 rounded bg-indigo-50">
+                  <div className="text-sm text-indigo-900">Total next 30 days</div>
+                  <div className="text-2xl font-semibold text-indigo-700">{forecast.totals.sum_30 ?? 0}</div>
+                </div>
+              </div>
+              <div className="overflow-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-600">
+                      <th className="py-2 pr-4">Date</th>
+                      <th className="py-2">Forecast Qty</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {forecast.daily.slice(0, horizon).map((d) => (
+                      <tr key={d.date} className="border-t">
+                        <td className="py-2 pr-4">{d.date}</td>
+                        <td className="py-2">{d.forecast}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Transactions</h3>
           <div className="space-y-3">
@@ -89,7 +166,7 @@ export const SalesDashboard: React.FC = () => {
                 <p className="text-xs text-gray-500">2 hours ago</p>
               </div>
             </div>
-            
+
             <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-900">Diamond Earrings - Customer: Anjali Menon</p>
@@ -100,7 +177,7 @@ export const SalesDashboard: React.FC = () => {
                 <p className="text-xs text-gray-500">4 hours ago</p>
               </div>
             </div>
-            
+
             <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-900">Wedding Chain - Customer: Lakshmi Pillai</p>
@@ -114,7 +191,6 @@ export const SalesDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Customer Recommendations */}
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Today's Customer Recommendations</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

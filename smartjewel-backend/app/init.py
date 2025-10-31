@@ -1,17 +1,50 @@
 import time
-import time
 import logging
+import json
+from bson import ObjectId
 from flask import Flask, jsonify, request, send_from_directory
 from app.config import Config
+from flask.json.provider import DefaultJSONProvider
 from app.extensions import init_extensions, log
 from app.blueprints.core.routes import bp as core_bp
 from app.blueprints.auth.routes import bp as auth_bp
 from app.blueprints.staff import bp as staff_bp
 from app.blueprints.customers.routes import bp as customers_bp
+from app.blueprints.inventory.routes import bp as inventory_bp
+from app.blueprints.payments import bp as payments_bp
+from app.blueprints.market import bp as market_bp
+from app.blueprints.catalog.routes import bp as catalog_bp
+from app.blueprints.orders.routes import bp as orders_bp
+from app.blueprints.admin_orders.routes import bp as admin_orders_bp
+from app.blueprints.webhooks.razorpay_webhook import bp as webhooks_bp
+from app.blueprints.store import bp as store_bp
+from app.blueprints.store_manager.routes import bp as store_manager_bp
+
+# ---- GLOBAL ObjectId JSON PATCH ----
+def default_json(obj):
+    if isinstance(obj, ObjectId):
+        return str(obj)
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+json._default_encoder = json.JSONEncoder(default=default_json)
+
+class MongoJSONProvider(DefaultJSONProvider):
+    def dumps(self, obj, **kwargs):
+        kwargs.setdefault('default', default_json)
+        return json.dumps(obj, **kwargs)
+    def loads(self, s, **kwargs):
+        return json.loads(s, **kwargs)
 
 def create_app():
     import os
+    from flask import jsonify as flask_jsonify
+    import flask
     app = Flask(__name__, static_folder='static')
+    app.json_provider_class = MongoJSONProvider
+    # Still set legacy encoder for very old extensions, if any
+    try:
+        app.json_encoder = MongoJSONProvider
+    except Exception:
+        pass
     app.config.from_object(Config)
     # Ensure INFO-level logs (so scheduler startup and job registration are visible)
     try:
@@ -91,12 +124,19 @@ def create_app():
     from app.blueprints.store import bp as store_bp
     app.register_blueprint(store_bp)
 
+    # Store Manager blueprint
+    from app.blueprints.store_manager.routes import bp as store_manager_bp
+    app.register_blueprint(store_manager_bp)
+
     # Explicit static file serving route with CORS and cache control headers
     @app.route('/static/<path:filename>')
     def serve_static(filename):
         import os
         from flask import make_response
         
+        if app.static_folder is None:
+            return jsonify({"error": "static_folder_not_configured"}), 500
+            
         try:
             response = send_from_directory(app.static_folder, filename)
             # Add CORS headers
@@ -117,7 +157,7 @@ def create_app():
         # List all routes for debugging
         output = []
         for rule in app.url_map.iter_rules():
-            methods = ','.join(sorted(rule.methods - {"HEAD", "OPTIONS"}))
+            methods = ','.join(sorted((rule.methods or set()).difference({"HEAD", "OPTIONS"})))
             output.append(f"{methods} {rule}")
         return {"routes": output}
 
@@ -131,7 +171,7 @@ def create_app():
 
     @app.before_request
     def _start_timer():
-        request._start = time.time()
+        request._start = time.time()  # type: ignore
 
     @app.after_request
     def _log_request(response):

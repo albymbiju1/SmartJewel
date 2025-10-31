@@ -12,6 +12,9 @@ ROLE_PERMS = {
         "product.manage",
         "analytics.view.store",
         "shift.view",
+        "orders.manage",
+        "appointments.manage",
+        "inventory.read",  # Added this permission for store manager to view inventory stats
     ],
     # Sales Executive (Staff Type 2)
     "Staff_L2": [

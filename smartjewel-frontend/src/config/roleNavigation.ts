@@ -1,4 +1,4 @@
-export interface NavItem {
+export type NavItem = {
   label: string;
   key: string;
   href?: string;
@@ -33,13 +33,12 @@ export const ROLE_NAVIGATION: Record<string, RoleNavigation> = {
       { label: 'Sales', key: 'sales', href: '/admin/sales' },
       { label: 'Inventory', key: 'inventory_details', href: '/admin/inventory' },
       { label: 'Customers', key: 'customers', href: '/admin/customers' },
-      { label: 'Engagement', key: 'engagement', href: '/admin/engagement' },
-      { label: 'Logs', key: 'logs', href: '/admin/logs' },
+      // Removed Engagement and Logs as per user request
     ],
     leftSidebarItems: [
       { label: 'Items (CRUD)', key: 'items', href: '/inventory/items' },
       { label: 'Stock', key: 'stock', href: '/inventory/stock' },
-      { label: 'Tags', key: 'tags', href: '/inventory/tags' },
+      // Removed Tags as per user request
       { label: 'Stores', key: 'stores', href: '/admin/stores' },
       { label: 'View Orders', key: 'view_orders', href: '/admin/orders' },
     ]
@@ -48,19 +47,18 @@ export const ROLE_NAVIGATION: Record<string, RoleNavigation> = {
   // Store Manager (Staff Type 1) Navigation
   store_manager: {
     mainTabs: [
+      { label: 'Dashboard', key: 'dashboard', href: '/store/dashboard' },
       { label: 'Products', key: 'products', href: '/store/products' },
       { label: 'Inventory', key: 'inventory', href: '/store/inventory' },
-      { label: 'Reports', key: 'reports', href: '/store/reports' },
-      { label: 'Staff', key: 'staff', href: '/store/staff' },
+      { label: 'Orders', key: 'orders', href: '/store/orders' },
     ],
     sidebarItems: [
-      { label: 'Tags', key: 'tags', href: '/inventory/tags' },
+      // Removed Tags as per user request
       { label: 'BOM', key: 'bom', href: '/inventory/bom' },
       { label: 'Valuation', key: 'valuation', href: '/inventory/valuation' },
     ],
     leftSidebarItems: [
-      { label: 'Add', key: 'add', href: '/store/add' },
-      { label: 'Edit', key: 'edit', href: '/store/edit' },
+      { label: 'Appointments', key: 'appointments', href: '/store/appointments' },
       { label: 'Approve Discounts', key: 'approve_discounts', href: '/store/approve-discounts' },
     ]
   },
@@ -93,7 +91,7 @@ export const ROLE_NAVIGATION: Record<string, RoleNavigation> = {
     sidebarItems: [
       { label: 'Items', key: 'items', href: '/inventory/items' },
       { label: 'Stock Movements', key: 'stock_movements', href: '/inventory/stock' },
-      { label: 'Tags (RFID/Barcode)', key: 'tags', href: '/inventory/tags' },
+      // Removed Tags as per user request
       { label: 'Locations', key: 'locations', href: '/inventory/locations' },
       { label: 'Valuation', key: 'valuation', href: '/inventory/valuation' },
       { label: 'BOM', key: 'bom', href: '/inventory/bom' },

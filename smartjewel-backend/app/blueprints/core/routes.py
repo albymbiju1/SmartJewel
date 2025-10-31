@@ -93,3 +93,73 @@ def admin_dashboard_stats():
     
     print(f"Dashboard stats response: {stats}")
     return jsonify(stats)
+
+@bp.get("/admin/dashboard/recent-activity")
+@require_roles("Admin")
+def admin_dashboard_recent_activity():
+    """Get recent activity for the admin dashboard"""
+    db = current_app.extensions['mongo_db']
+    
+    print("=== Dashboard Recent Activity Endpoint Called ===")
+    
+    activities = []
+    
+    try:
+        # Get recent orders (last 5)
+        recent_orders = list(db.orders.find().sort("createdAt", -1).limit(5))
+        for order in recent_orders:
+            customer_name = order.get("customer", {}).get("name", "Unknown Customer")
+            order_amount = order.get("amount", 0)
+            order_status = order.get("status", "unknown")
+            created_at = order.get("createdAt") or order.get("created_at")
+            
+            activities.append({
+                "type": "order",
+                "title": f"New order placed by {customer_name}",
+                "description": f"Order amount: ₹{order_amount:,}, Status: {order_status}",
+                "timestamp": created_at.isoformat() if created_at else None,
+                "icon": "shopping-cart"
+            })
+        
+        # Get recent inventory updates (last 5)
+        recent_items = list(db.items.find().sort("updated_at", -1).limit(5))
+        for item in recent_items:
+            item_name = item.get("name", "Unknown Item")
+            item_sku = item.get("sku", "N/A")
+            updated_at = item.get("updated_at")
+            
+            activities.append({
+                "type": "inventory",
+                "title": f"Inventory item updated",
+                "description": f"{item_name} (SKU: {item_sku})",
+                "timestamp": updated_at.isoformat() if updated_at else None,
+                "icon": "package"
+            })
+        
+        # Get recent customer registrations (last 5)
+        recent_customers = list(db.users.find({"role.role_name": "Customer"}).sort("created_at", -1).limit(5))
+        for customer in recent_customers:
+            customer_name = customer.get("full_name", "Unknown Customer")
+            customer_email = customer.get("email", "N/A")
+            created_at = customer.get("created_at")
+            
+            activities.append({
+                "type": "customer",
+                "title": f"New customer registered",
+                "description": f"{customer_name} ({customer_email})",
+                "timestamp": created_at.isoformat() if created_at else None,
+                "icon": "user"
+            })
+        
+        # Sort all activities by timestamp and take the most recent 6
+        activities.sort(key=lambda x: x["timestamp"] if x["timestamp"] else "", reverse=True)
+        activities = activities[:6]
+        
+        print(f"Dashboard recent activity response: {activities}")
+        return jsonify(activities)
+        
+    except Exception as e:
+        print(f"Error fetching recent activity: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify([]), 200

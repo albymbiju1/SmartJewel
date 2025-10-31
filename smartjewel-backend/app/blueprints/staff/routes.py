@@ -14,12 +14,14 @@ class StaffSchema(Schema):
     phone_number = fields.String(required=False, allow_none=True)
     role_id = fields.String(required=True)
     status = fields.String(validate=lambda v: v in ["active", "inactive"], required=False)
+    store_id = fields.String(required=False, allow_none=True)
 
 class StaffUpdateSchema(Schema):
     full_name = fields.String(required=False)
     phone_number = fields.String(required=False)
     role_id = fields.String(required=False)
     status = fields.String(validate=lambda v: v in ["active", "inactive"], required=False)
+    store_id = fields.String(required=False, allow_none=True)
 
 class RoleSchema(Schema):
     role_name = fields.String(required=True)
@@ -86,17 +88,36 @@ def list_staff():
     page = int(request.args.get("page") or 1)
     limit = min(int(request.args.get("limit") or 20), 100)
 
-    filt = {}
+    # Build filters with proper AND semantics
+    and_terms = []
     if q:
-        filt["$or"] = [
-            {"full_name": {"$regex": q, "$options": "i"}},
-            {"email": {"$regex": q, "$options": "i"}},
-            {"phone_number": {"$regex": q, "$options": "i"}},
-        ]
+        and_terms.append({
+            "$or": [
+                {"full_name": {"$regex": q, "$options": "i"}},
+                {"email": {"$regex": q, "$options": "i"}},
+                {"phone_number": {"$regex": q, "$options": "i"}},
+            ]
+        })
     if status:
-        filt["status"] = status
-    if role_id and _oid(role_id):
-        filt["role._id"] = _oid(role_id)
+        and_terms.append({"status": status})
+    if role_id:
+        # Support both legacy ObjectId storage and string storage of role._id
+        rid_oid = _oid(role_id)
+        if rid_oid:
+            and_terms.append({
+                "$or": [
+                    {"role._id": rid_oid},
+                    {"role._id": role_id},
+                ]
+            })
+        else:
+            and_terms.append({"role._id": role_id})
+
+    # Exclude non-staff roles
+    and_terms.append({"role.role_name": {"$nin": ["Customer", "Admin"]}})
+
+    # Final filter
+    filt = {"$and": and_terms} if and_terms else {"role.role_name": {"$nin": ["Customer", "Admin"]}}
 
     # Newest first: prefer created_at desc, fallback by _id desc
     sort_spec = [("created_at", -1), ("_id", -1)]
@@ -110,6 +131,7 @@ def list_staff():
             "phone_number": u.get("phone_number"),
             "status": u.get("status") or ("active" if u.get("is_active", True) else "inactive"),
             "role": {"_id": str(u["role"]["_id"]) , "role_name": u["role"]["role_name"]} if u.get("role") else None,
+            "store_id": (str(u.get("store_id")) if isinstance(u.get("store_id"), ObjectId) else u.get("store_id")),
         })
     total = db.users.count_documents(filt)
     return jsonify({"items": items, "page": page, "limit": limit, "total": total})
@@ -136,10 +158,13 @@ def create_staff():
         "full_name": payload["full_name"],
         "email": email_l,
         "phone_number": payload.get("phone_number"),
-        "role": {"_id": role["_id"], "role_name": role["role_name"]},
+        "role": {"_id": str(role["_id"]), "role_name": role["role_name"]},
         "status": payload.get("status") or "active",
         "created_at": _now(db),
     }
+    # Optional store assignment at creation
+    if payload.get("store_id") and _oid(payload.get("store_id")):
+        user_doc["store_id"] = str(_oid(payload.get("store_id")))
     ins = db.users.insert_one(user_doc)
     return jsonify({"id": str(ins.inserted_id)}), 201
 
@@ -158,7 +183,8 @@ def get_staff(id):
         "phone_number": u.get("phone_number"),
         "status": u.get("status") or ("active" if u.get("is_active", True) else "inactive"),
         "role": {"_id": str(u["role"]["_id"]) , "role_name": u["role"]["role_name"]} if u.get("role") else None,
-        "created_at": u.get("created_at"),
+        "store_id": (str(u.get("store_id")) if isinstance(u.get("store_id"), ObjectId) else u.get("store_id")),
+        "created_at": (u.get("created_at").isoformat() if hasattr(u.get("created_at"), "isoformat") else u.get("created_at")),
     })
 
 @bp.put("/staff/<id>")
@@ -181,7 +207,14 @@ def update_staff(id):
         role = db.roles.find_one({"_id": _oid(payload["role_id"])})
         if not role:
             return jsonify({"error": "role_not_found"}), 404
-        update["role"] = {"_id": role["_id"], "role_name": role["role_name"]}
+        update["role"] = {"_id": str(role["_id"]), "role_name": role["role_name"]}
+    if "store_id" in payload:
+        # allow clearing by sending empty or null
+        sid = payload.get("store_id")
+        if sid and _oid(sid):
+            update["store_id"] = str(_oid(sid))
+        else:
+            update["store_id"] = None
     res = db.users.update_one({"_id": _oid(id)}, {"$set": update})
     if res.matched_count == 0:
         return jsonify({"error": "not_found"}), 404
@@ -271,6 +304,10 @@ def list_shift_schedules(id):
     schedules = []
     for s in db.shift_schedules.find({"staff_id": str(_oid(id))}):
         s["id"] = str(s.pop("_id"))
+        # Ensure all ObjectIds are converted to strings
+        for key, value in s.items():
+            if isinstance(value, ObjectId):
+                s[key] = str(value)
         schedules.append(s)
     return jsonify({"items": schedules})
 
@@ -395,6 +432,10 @@ def query_shift_schedules():
     items = []
     for s in db.shift_schedules.find(filt).limit(200):
         s["id"] = str(s.pop("_id"))
+        # Ensure all ObjectIds are converted to strings
+        for key, value in s.items():
+            if isinstance(value, ObjectId):
+                s[key] = str(value)
         items.append(s)
     return jsonify({"items": items})
 
@@ -420,6 +461,10 @@ def list_shift_logs():
     logs = []
     for l in db.shift_logs.find(filt).sort("clock_in", -1).limit(500):
         l["id"] = str(l.pop("_id"))
+        # Ensure all ObjectIds are converted to strings
+        for key, value in l.items():
+            if isinstance(value, ObjectId):
+                l[key] = str(value)
         logs.append(l)
     return jsonify({"items": logs})
 

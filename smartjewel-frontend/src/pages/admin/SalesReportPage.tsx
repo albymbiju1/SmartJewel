@@ -40,6 +40,11 @@ export const SalesReportPage: React.FC = () => {
   const [dailySales, setDailySales] = useState<DailySalesData[]>([]);
   const [statusBreakdown, setStatusBreakdown] = useState<StatusBreakdown[]>([]);
 
+  const [forecastLoading, setForecastLoading] = useState(false);
+  const [forecastError, setForecastError] = useState<string | null>(null);
+  const [horizon, setHorizon] = useState<7 | 30>(7);
+  const [forecast, setForecast] = useState<{ daily: { date: string; forecast: number }[]; totals: { sum_7?: number; sum_30?: number } } | null>(null);
+
   const [dateFrom, setDateFrom] = useState(() => {
     const date = new Date();
     date.setDate(date.getDate() - 30);
@@ -146,6 +151,23 @@ export const SalesReportPage: React.FC = () => {
   useEffect(() => {
     fetchSalesData();
   }, [dateFrom, dateTo, statusFilter, page]);
+
+  const fetchForecast = async (selectedHorizon: 7 | 30) => {
+    setHorizon(selectedHorizon);
+    setForecastLoading(true);
+    setForecastError(null);
+    setForecast(null);
+    try {
+      const params = new URLSearchParams({ horizon: String(selectedHorizon) });
+      const res = await api.get(`/api/admin/orders/forecast-total?${params.toString()}`);
+      const data = res.data || {};
+      setForecast({ daily: data.daily || [], totals: data.totals || {} });
+    } catch (e: any) {
+      setForecastError(e?.response?.data?.error || e?.message || 'Failed to fetch forecast');
+    } finally {
+      setForecastLoading(false);
+    }
+  };
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
@@ -281,6 +303,54 @@ export const SalesReportPage: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Total Sales Forecast</h3>
+          <div className="flex items-end gap-3 mb-4">
+            <div className="flex gap-2">
+              <button onClick={() => fetchForecast(7)} disabled={forecastLoading} className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-50">Next 7 days</button>
+              <button onClick={() => fetchForecast(30)} disabled={forecastLoading} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm hover:bg-indigo-700 disabled:opacity-50">Next 30 days</button>
+            </div>
+          </div>
+          {forecastError && <div className="text-sm text-red-600 mb-3">{forecastError}</div>}
+          {forecastLoading && <div className="text-sm text-gray-500">Loading forecast...</div>}
+          {!forecastLoading && forecast && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {horizon === 7 && (
+                  <div className="p-4 rounded bg-blue-50">
+                    <div className="text-sm text-blue-900">Total next 7 days</div>
+                    <div className="text-2xl font-semibold text-blue-700">{forecast.totals.sum_7 ?? 0}</div>
+                  </div>
+                )}
+                {horizon === 30 && (
+                  <div className="p-4 rounded bg-indigo-50">
+                    <div className="text-sm text-indigo-900">Total next 30 days</div>
+                    <div className="text-2xl font-semibold text-indigo-700">{forecast.totals.sum_30 ?? 0}</div>
+                  </div>
+                )}
+              </div>
+              <div className="overflow-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-600">
+                      <th className="py-2 pr-4">Date</th>
+                      <th className="py-2">Forecast Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {forecast.daily.slice(0, horizon).map((d) => (
+                      <tr key={d.date} className="border-t">
+                        <td className="py-2 pr-4">{d.date}</td>
+                        <td className="py-2">{d.forecast}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* KPI Cards */}

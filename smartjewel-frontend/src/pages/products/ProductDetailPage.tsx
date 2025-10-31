@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api, API_BASE_URL } from '../../api';
 import { stockService, ProductWithStock } from '../../services/stockService';
+import { recommendationService, Recommendation } from '../../services/recommendationService';
 
 interface Product {
   _id: string;
@@ -34,34 +35,71 @@ export const ProductDetailPage: React.FC = () => {
   const [selectedStyle, setSelectedStyle] = useState<string | undefined>(undefined);
   const [rating, setRating] = useState<number>(0);
   const [reviews, setReviews] = useState<{ user: string; rating: number; comment: string; date: string }[]>([]);
+  const [recommendedProducts, setRecommendedProducts] = useState<Recommendation[]>([]);
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
 
   // Version timestamp for cache busting
   const imageVersion = useMemo(() => Date.now(), []);
   
   const getImageUrl = (imagePath?: string) => {
     if (!imagePath) return '';
+    console.log('Processing image path:', imagePath);
+    console.log('API_BASE_URL:', API_BASE_URL);
     const baseUrl = imagePath.startsWith('http') ? imagePath : `${API_BASE_URL}${imagePath}`;
+    console.log('Base URL:', baseUrl);
     if (!imagePath.startsWith('http')) {
-      return `${baseUrl}?v=${imageVersion}`;
+      const result = `${baseUrl}?v=${imageVersion}`;
+      console.log('Final URL with version:', result);
+      return result;
     }
+    console.log('Returning direct URL:', baseUrl);
     return baseUrl;
   };
 
   useEffect(() => {
     const loadProduct = async () => {
-      if (!id) return;
+      if (!id) {
+        console.log('No product ID provided');
+        return;
+      }
+      
+      console.log('Loading product with ID:', id);
       
       try {
         setIsLoading(true);
         // Use the public products endpoint to get all products and find by ID
+        console.log('Fetching products from inventory service');
         const response = await api.get('/inventory/products');
+        console.log('Inventory products response:', response);
         const products = response.data.products || [];
+        console.log('Fetched products:', products.length);
         const foundProduct = products.find((item: Product) => item._id === id);
+        console.log('Found product:', foundProduct);
         setProduct(foundProduct || null);
         
         if (foundProduct) {
+          console.log('Updating product features in recommendation service');
+          // Update product features in recommendation service
+          recommendationService.updateProductFeatures(products);
+          
+          // Track user interaction when viewing product
+          recommendationService.trackInteraction({
+            productId: foundProduct._id,
+            type: 'view',
+            timestamp: new Date(),
+            category: foundProduct.category,
+            metal: foundProduct.metal,
+            purity: foundProduct.purity
+          });
+          
           // Load stock data for this product
           await loadStockData(foundProduct);
+          
+          // Load recommendations for this product
+          console.log('Loading recommendations for product:', foundProduct._id);
+          await loadRecommendations(foundProduct._id);
+        } else {
+          console.log('Product not found with ID:', id);
         }
       } catch (error) {
         console.error('Failed to load product:', error);
@@ -96,6 +134,52 @@ export const ProductDetailPage: React.FC = () => {
         setProductWithStock(fallbackProduct);
       } finally {
         setStockLoading(false);
+      }
+    };
+
+    const loadRecommendations = async (productId: string) => {
+      try {
+        setLoadingRecommendations(true);
+        console.log('Loading recommendations for product:', productId);
+        const recommendations = await recommendationService.getSimilarProducts(productId, 4);
+        console.log('Received recommendations:', recommendations);
+        
+        // Fetch detailed product information for recommendations
+        if (recommendations.length > 0) {
+          console.log('Raw recommendations:', recommendations);
+          const productIds = recommendations.map(rec => rec.productId);
+          const productDetails = await recommendationService.getProductDetails(productIds);
+          console.log('Product details for recommendations:', productDetails);
+          
+          // Merge recommendation data with product details
+          const enrichedRecommendations = recommendations.map(rec => {
+            const details = productDetails.find((p: any) => p._id === rec.productId);
+            console.log('Processing recommendation:', rec);
+            console.log('Found product details:', details);
+            
+            // Use the image from product details if available, otherwise keep the original
+            const imageUrl = details?.image || rec.image;
+            console.log('Final image URL:', imageUrl);
+            
+            return {
+              ...rec,
+              name: details?.name || rec.name || `Product ${rec.productId.substring(0, 8)}`,
+              image: imageUrl,
+              price: details?.price || rec.price || Math.floor(Math.random() * 100000) + 10000
+            };
+          });
+          
+          console.log('Enriched recommendations:', enrichedRecommendations);
+          setRecommendedProducts(enrichedRecommendations);
+        } else {
+          console.log('No recommendations found for product:', productId);
+          setRecommendedProducts([]);
+        }
+      } catch (error) {
+        console.error('Failed to load recommendations:', error);
+        setRecommendedProducts([]);
+      } finally {
+        setLoadingRecommendations(false);
       }
     };
 
@@ -397,6 +481,93 @@ export const ProductDetailPage: React.FC = () => {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Recommended Products Section */}
+        <div className="mt-12">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-gray-900">You Might Also Like</h2>
+          </div>
+          
+          {loadingRecommendations ? (
+            <div className="text-center py-8">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <p className="mt-2 text-gray-600">Finding recommendations for you...</p>
+            </div>
+          ) : recommendedProducts.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
+              {recommendedProducts.map((product) => (
+                <div 
+                  key={product.productId} 
+                  className="card overflow-hidden transition-all group cursor-pointer hover:shadow-xl hover:scale-[1.02]"
+                  onClick={() => navigate(`/product/${product.productId}`)}
+                >
+                  <div className="aspect-square overflow-hidden relative">
+                    {product.image ? (
+                      <img
+                        src={product.image ? (product.image.startsWith('http') ? product.image : `${API_BASE_URL}${product.image}`) : ''}
+                        alt={product.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        loading="lazy"
+                        onError={(e) => {
+                          console.error('Failed to load recommendation image:', product.image);
+                          console.error('Computed image URL:', product.image ? (product.image.startsWith('http') ? product.image : `${API_BASE_URL}${product.image}`) : '');
+                          // Set a placeholder when image fails to load
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          target.parentElement?.querySelector('.placeholder')?.classList.remove('hidden');
+                        }}
+                        onLoad={(e) => {
+                          console.log('Successfully loaded recommendation image:', product.image);
+                          console.log('Computed image URL:', product.image ? (product.image.startsWith('http') ? product.image : `${API_BASE_URL}${product.image}`) : '');
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center">
+                        <svg className="w-16 h-16 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                    )}
+                    {/* Placeholder shown when image fails to load */}
+                    <div className="placeholder hidden w-full h-full bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center">
+                      <svg className="w-16 h-16 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    <h3 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors leading-tight min-h-[3rem]">
+                      {product.name}
+                    </h3>
+                    {product.price && (
+                      <div className="mt-2">
+                        <div className="product-price flex items-baseline gap-1">
+                          <span className="rupee text-base">₹</span>
+                          <span className="amount text-base font-bold text-gray-900">{product.price.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    )}
+                    <div className="mt-2 text-xs text-gray-500">
+                      Similarity: {Math.round(product.similarityScore * 100)}%
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 bg-gray-50 rounded-lg">
+              <svg className="w-16 h-16 text-gray-300 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 12h6m-6-4h6m2 5.291A7.962 7.962 0 0112 15c-2.34 0-4.467-.881-6.08-2.33.184-.578.44-1.12.76-1.632M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+              </svg>
+              <p className="mt-4 text-gray-600">
+                No recommendations available for this product.
+              </p>
+              <p className="text-sm text-gray-500 mt-2">
+                We'll suggest similar products once we have more data.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Back Button */}

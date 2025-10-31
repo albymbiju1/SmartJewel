@@ -4,6 +4,7 @@ from app.utils.authz import require_any_role
 from bson import ObjectId
 from datetime import datetime
 
+import requests
 bp = Blueprint("admin_orders", __name__, url_prefix="/api/admin/orders")
 
 
@@ -43,7 +44,7 @@ def _normalize_order(order: dict) -> dict:
             "status": order.get("delivery_status") or None,
         }
     return {
-        "orderId": str(order.get("_id")),
+        "orderId": str(order.get("_id", "")),
         "items": order.get("items", []),
         "statusHistory": order.get("statusHistory", []),
         "shipping": shipping,
@@ -457,185 +458,8 @@ def maintenance_force_auto_mark():
     return jsonify({
         "ok": True,
         "processed": count_processed,
-        "updated": count_updated,
-        "message": f"Auto-marked {count_updated} orders out of {count_processed} processed"
+        "updated": count_updated
     })
-
-
-@bp.route("/<order_id>/cancel", methods=["OPTIONS"])  # preflight
-def options_cancel(order_id):
-    return ("", 204)
-
-
-@bp.route("/<order_id>/cancel", methods=["PATCH"]) 
-@require_any_role("Admin", "Staff_L3")
-@jwt_required()
-def admin_handle_cancellation(order_id: str):
-    """Approve or reject a cancellation request with Razorpay refund integration.
-
-    Body: { action: 'approve' | 'reject', notes?: string }
-    If approved: set status to 'cancelled', update cancellation fields, and process Razorpay refund if payment captured.
-    If rejected: set cancellation.rejectedAt and keep order status as-is.
-    """
-    db = current_app.extensions.get('mongo_db')
-    if db is None:
-        return jsonify({"error": "db_unavailable"}), 503
-    try:
-        oid = ObjectId(order_id)
-    except Exception:
-        return jsonify({"error": "invalid_order_id"}), 400
-
-    from flask import request
-    body = request.get_json() or {}
-    action = (body.get("action") or "").strip().lower()
-    notes = (body.get("notes") or "").strip() or None
-    if action not in ("approve", "reject"):
-        return jsonify({"error": "validation_failed", "details": {"action": ["must be 'approve' or 'reject'"]}}), 400
-
-    order = db.orders.find_one({"_id": oid})
-    if not order:
-        return jsonify({"error": "not_found"}), 404
-
-    cancellation = order.get("cancellation") or {}
-    if not cancellation.get("requested"):
-        return jsonify({"error": "no_request"}), 400
-
-    actor = get_jwt_identity()
-    now = datetime.utcnow()
-
-    update = {"$set": {"updatedAt": now}}
-    push_hist = []
-
-    if action == "approve":
-        # Update cancellation
-        update["$set"].update({
-            "cancellation.requested": True,
-            "cancellation.approved": True,
-            "cancellation.approvedAt": now,
-            "cancellation.adminNotes": notes,
-        })
-        
-        # Check if this is a paid Razorpay order that needs refund
-        is_razorpay = order.get("provider") == "razorpay" or order.get("payment_provider") == "razorpay"
-        payment_id = order.get("payment_id") or order.get("razorpay_payment_id")
-        is_paid = (order.get("status") or "").lower() == "paid" or (order.get("payment_status") or "").lower() == "paid"
-        
-        refund_details = {}
-        
-        if is_razorpay and payment_id and is_paid:
-            # Process actual Razorpay refund
-            try:
-                from app.utils.razorpay_utils import process_refund, inr_paise
-                
-                # Get refund amount - try different amount fields
-                amount_rupees = (
-                    order.get("totalAmount") or 
-                    order.get("amount") or 
-                    (order.get("provider_order") or {}).get("amount", 0)
-                )
-                
-                # If provider_order.amount is in paise, convert to rupees first
-                if (order.get("provider_order") or {}).get("amount"):
-                    provider_amount = order.get("provider_order").get("amount")
-                    if provider_amount > 1000:  # Likely in paise
-                        amount_rupees = provider_amount / 100
-                    else:
-                        amount_rupees = provider_amount
-                
-                amount_paise = inr_paise(amount_rupees)
-                
-                refund_result = process_refund(
-                    payment_id=payment_id,
-                    amount_paise=amount_paise,
-                    notes=f"Order cancellation: {notes}" if notes else "Order cancellation"
-                )
-                
-                if refund_result["success"]:
-                    refund_details = {
-                        "provider": "razorpay",
-                        "refundId": refund_result["refund"]["id"],
-                        "amount": refund_result["refund"]["amount"],
-                        "currency": refund_result["refund"]["currency"],
-                        "status": refund_result["refund"]["status"],
-                        "speed": refund_result["refund"].get("speed", "normal"),  # Speed may not be present
-                        "processedAt": refund_result["processed_at"],
-                        "notes": notes,
-                        "razorpayResponse": refund_result["refund"]
-                    }
-                    update["$set"]["cancellation.refundProcessed"] = True
-                    push_hist.append({"status": "refund processed", "timestamp": now, "by": actor, "notes": f"Razorpay refund ID: {refund_result['refund']['id']}"})
-                else:
-                    # Refund failed - still approve cancellation but mark refund as failed
-                    refund_details = {
-                        "provider": "razorpay",
-                        "failed": True,
-                        "error": refund_result.get("error"),
-                        "message": refund_result.get("message"),
-                        "processedAt": now.isoformat(),
-                        "notes": notes
-                    }
-                    update["$set"]["cancellation.refundProcessed"] = False
-                    push_hist.append({"status": "refund failed", "timestamp": now, "by": actor, "notes": f"Refund error: {refund_result.get('message')}"})
-                    
-            except Exception as e:
-                # Refund processing failed - still approve cancellation
-                refund_details = {
-                    "provider": "razorpay",
-                    "failed": True,
-                    "error": "processing_error",
-                    "message": str(e),
-                    "processedAt": now.isoformat(),
-                    "notes": notes
-                }
-                update["$set"]["cancellation.refundProcessed"] = False
-                push_hist.append({"status": "refund failed", "timestamp": now, "by": actor, "notes": f"Refund processing error: {str(e)}"})
-                
-        elif is_paid:
-            # Non-Razorpay paid order - manual refund required
-            refund_details = {
-                "provider": order.get("provider") or "manual",
-                "manualRefundRequired": True,
-                "amount": order.get("totalAmount") or order.get("amount") or 0,
-                "currency": "INR",
-                "processedAt": now.isoformat(),
-                "notes": f"Manual refund required for {order.get('provider', 'unknown')} payment. {notes}" if notes else f"Manual refund required for {order.get('provider', 'unknown')} payment"
-            }
-            update["$set"]["cancellation.refundProcessed"] = False
-            push_hist.append({"status": "manual refund required", "timestamp": now, "by": actor, "notes": "Manual refund processing required"})
-        else:
-            # Unpaid order - no refund needed
-            refund_details = {
-                "provider": order.get("provider") or "none",
-                "noRefundRequired": True,
-                "reason": "Order was not paid",
-                "processedAt": now.isoformat(),
-                "notes": notes
-            }
-            update["$set"]["cancellation.refundProcessed"] = True
-            
-        if refund_details:
-            update["$set"]["cancellation.refundDetails"] = refund_details
-
-        # Push status history entries
-        push_hist.append({"status": "cancellation approved", "timestamp": now, "by": actor, "notes": notes})
-        push_hist.append({"status": "cancelled", "timestamp": now, "by": actor})
-        update["$set"]["status"] = "cancelled"
-    else:
-        # reject
-        update["$set"].update({
-            "cancellation.requested": False,
-            "cancellation.rejectedAt": now,
-            "cancellation.adminNotes": notes,
-        })
-        push_hist.append({"status": "cancellation rejected", "timestamp": now, "by": actor, "notes": notes})
-
-    if push_hist:
-        update.setdefault("$push", {}).setdefault("statusHistory", {"$each": push_hist})
-
-    db.orders.update_one({"_id": oid}, update)
-
-    doc = db.orders.find_one({"_id": oid})
-    return jsonify({"order": _normalize_order(doc)})
 
 
 @bp.route("/<order_id>/refund-status", methods=["GET"])
@@ -685,3 +509,76 @@ def get_refund_status(order_id: str):
             
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@bp.route("/forecast-total", methods=["OPTIONS"])  # preflight
+def options_forecast_total():
+    return ("", 204)
+
+
+@bp.route("/forecast-total", methods=["GET"]) 
+@require_any_role("Admin", "Staff_L3")
+@jwt_required()
+def forecast_total_sales():
+    db = current_app.extensions.get('mongo_db')
+    if db is None:
+        return jsonify({"error": "db_unavailable"}), 503
+
+    try:
+        horizon = int(request.args.get("horizon", "7"))
+    except Exception:
+        horizon = 7
+    horizon = 30 if horizon >= 30 else 7
+
+    pipeline = [
+        {"$match": {"deleted": {"$ne": True}}},
+        {"$match": {"$or": [
+            {"payment_status": {"$regex": "^paid$", "$options": "i"}},
+            {"status": {"$regex": "^paid$", "$options": "i"}},
+            {"statusHistory": {"$elemMatch": {"status": {"$regex": "^paid$", "$options": "i"}}}}
+        ]}},
+        {"$addFields": {
+            "_createdAtConv": {"$convert": {"input": "$createdAt", "to": "date", "onError": None, "onNull": None}},
+            "_created_atConv": {"$convert": {"input": "$created_at", "to": "date", "onError": None, "onNull": None}},
+        }},
+        {"$addFields": {
+            "_date": {"$ifNull": ["$_createdAtConv", {"$ifNull": ["$_created_atConv", {"$toDate": "$_id"}]}]},
+            "_amount_choose": {"$ifNull": ["$totalAmount", {"$ifNull": ["$amount", None]}]},
+            "_provider_amount": {"$ifNull": ["$provider_order.amount", 0]}
+        }},
+        {"$addFields": {
+            "_amount": {"$ifNull": ["$_amount_choose", {"$divide": ["$_provider_amount", 100]}]}
+        }},
+    ]
+
+    try:
+        from datetime import timedelta
+        cutoff = datetime.utcnow() - timedelta(days=120)
+        pipeline.append({"$match": {"_date": {"$gte": cutoff}}})
+    except Exception:
+        pass
+
+    pipeline.extend([
+        {"$addFields": {"_dayStr": {"$dateToString": {"date": "$_date", "format": "%Y-%m-%d"}}}},
+        {"$group": {"_id": {"day": "$_dayStr"}, "qty": {"$sum": {"$ifNull": ["$_amount", 0]}}, "orders": {"$sum": 1}}},
+        {"$project": {"_id": 0, "date": "$_id.day", "qty": 1}},
+        {"$sort": {"date": 1}}
+    ])
+
+    cursor = db.orders.aggregate(pipeline)
+    history = [{"date": d.get("date"), "qty": float(d.get("qty") or 0)} for d in cursor if d.get("date")]
+
+    try:
+        ml_url = current_app.config.get("ML_FORECAST_URL") or "http://localhost:8085/ml/inventory/forecast"
+        payload = {"sku": "TOTAL_SALES_AMOUNT", "horizon_days": horizon, "recent_history": history}
+        resp = requests.post(ml_url, json=payload, timeout=10)
+        if resp.status_code != 200:
+            return jsonify({"error": "ml_service_error", "status": resp.status_code, "body": resp.text}), 502
+        data = resp.json()
+        return jsonify({
+            "horizon_days": horizon,
+            "daily": data.get("daily", []),
+            "totals": data.get("totals", {})
+        })
+    except Exception as e:
+        return jsonify({"error": "ml_proxy_failed", "message": str(e)}), 500

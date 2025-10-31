@@ -7,7 +7,7 @@ export const getRoleBasedRedirectPath = (roleName: string): string => {
     case 'admin':
       return '/admin/dashboard';
     case 'store_manager':
-      return '/store/products'; 
+      return '/store/dashboard'; 
     case 'sales_executive':
       return '/sales/pos';
     case 'inventory_staff':

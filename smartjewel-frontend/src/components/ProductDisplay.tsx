@@ -10,6 +10,7 @@ import { catalogService } from '../services/catalogService';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { flyToCart } from '../utils/flyToCart';
 import { Filter as LucideFilter, Heart as HeartIcon, LayoutGrid, List as ListIcon, SlidersHorizontal, ShoppingCart as CartIcon } from 'lucide-react';
+import { recommendationService } from '../services/recommendationService';
 
 interface Product {
   _id: string;
@@ -27,6 +28,15 @@ interface Product {
   quantity?: number;
   createdAt?: string;
   isBestseller?: boolean;
+}
+
+// Add interface for recommendations
+interface Recommendation {
+  productId: string;
+  similarityScore: number;
+  name: string;
+  image?: string;
+  price?: number;
 }
 
 interface ProductDisplayProps {
@@ -115,6 +125,9 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
 
     try {
       setStockLoading(true);
+      
+      // Update product features in recommendation service
+      recommendationService.updateProductFeatures(products);
       
       // Use the quantity directly from products since it's now included in the API response
       const productsWithStockData: ProductWithStock[] = products.map(product => {
@@ -214,32 +227,38 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
           params.max_price = parseFloat(maxPrice);
         }
         
-        const response = await catalogService.search({
-          ...params,
-          per_page: 200  // Request up to 200 products to handle pagination client-side
-        });
-        // Map CatalogItem to Product interface
-        const filteredProducts: Product[] = response.results.map(item => ({
-          _id: item._id,
-          sku: item.sku,
-          name: item.name,
-          category: item.category,
-          metal: item.metal,
-          purity: item.purity,
-          weight: item.weight,
-          weight_unit: item.weight_unit || 'g',
-          price: item.price,
-          image: item.image,
-          description: '', // CatalogItem doesn't have description
-          status: 'active', // Default status
-          quantity: item.quantity,
-          createdAt: (item as any).createdAt || (item as any).created_at,
-          isBestseller: (item as any).isBestseller ?? (item as any).is_bestseller
-        }));
+        // Add pagination
+        params.page = page;
+        params.per_page = viewMode === 'list' ? 10 : 20;
         
-        setProducts(filteredProducts);
-        // Load stock data for the filtered products
-        await loadStockData(filteredProducts);
+        const response = await catalogService.search(params);
+        setProducts(response.results.map(item => ({
+          ...item,
+          status: 'active', // Default status for products
+          weight_unit: item.weight_unit || 'g' // Default weight unit
+        })));
+        setProductsWithStock(response.results.map(item => ({
+          ...item,
+          status: 'active', // Default status for products
+          weight_unit: item.weight_unit || 'g', // Default weight unit
+          quantity: item.quantity !== undefined ? item.quantity : 0,
+          stockStatus: stockService.getStockStatus(item.quantity !== undefined ? item.quantity : 0),
+          stockDisplayText: stockService.getStockDisplayText(item.quantity !== undefined ? item.quantity : 0)
+        })));
+        
+        // Update product features in recommendation service
+        recommendationService.updateProductFeatures(response.results);
+        
+        // Track user interaction with this category
+        if (category) {
+          recommendationService.trackInteraction({
+            productId: 'category_view',
+            type: 'view',
+            timestamp: new Date(),
+            category: category
+          });
+        }
+        
       } catch (error) {
         console.error('Failed to load products:', error);
       } finally {
@@ -248,7 +267,39 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
     };
 
     loadProducts();
-  }, [category, searchParams]);
+  }, [category, searchParams, page, viewMode]);
+
+  // Load recommendations for a specific product
+  const loadRecommendations = async (productId: string) => {
+    try {
+      const recommendations = await recommendationService.getSimilarProducts(productId, 4);
+      
+      // Fetch detailed product information for recommendations
+      if (recommendations.length > 0) {
+        const productIds = recommendations.map(rec => rec.productId);
+        const productDetails = await recommendationService.getProductDetails(productIds);
+        
+        // Merge recommendation data with product details
+        const enrichedRecommendations = recommendations.map(rec => {
+          const details = productDetails.find((p: any) => p._id === rec.productId);
+          return {
+            ...rec,
+            name: details?.name || rec.name,
+            image: details?.image || rec.image,
+            price: details?.price || rec.price
+          };
+        });
+        
+        setRecommendedProducts(enrichedRecommendations);
+        setShowRecommendations(enrichedRecommendations.length > 0);
+      } else {
+        setShowRecommendations(false);
+      }
+    } catch (error) {
+      console.error('Failed to load recommendations:', error);
+      setShowRecommendations(false);
+    }
+  };
 
   // Since we're using the catalog service which handles filtering on the backend,
   // we don't need client-side filtering anymore
@@ -727,9 +778,8 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
             </div>
           </>
         )}
-          </section>
-        </div>
-      </div>
+      </section>
+    </div>
 
       {/* Quick View Modal */}
       <QuickViewModal
@@ -797,6 +847,9 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
           </motion.div>
         )}
       </AnimatePresence>
+      </div>
     </div>
   );
 };
+
+export default ProductDisplay;

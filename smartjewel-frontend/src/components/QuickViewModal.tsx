@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE_URL } from '../api';
+import { recommendationService } from '../services/recommendationService';
 
 export interface QuickViewProduct {
   _id: string;
@@ -23,6 +24,21 @@ interface QuickViewModalProps {
 export const QuickViewModal: React.FC<QuickViewModalProps> = ({ open, product, onClose, onViewDetails }) => {
   // Version timestamp for cache busting
   const imageVersion = useMemo(() => Date.now(), []);
+  
+  // Track when the modal is opened to record product view interaction
+  React.useEffect(() => {
+    if (open && product) {
+      // Track user interaction when product is viewed
+      recommendationService.trackInteraction({
+        productId: product._id,
+        type: 'view',
+        timestamp: new Date(),
+        category: product.category,
+        metal: product.metal,
+        purity: product.purity
+      });
+    }
+  }, [open, product]);
   
   const getImageUrl = (imagePath?: string) => {
     if (!imagePath) return '';

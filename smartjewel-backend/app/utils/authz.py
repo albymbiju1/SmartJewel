@@ -23,7 +23,9 @@ def require_roles(*roles: str) -> Callable:
         def wrapper(*args, **kwargs):
             verify_jwt_in_request()
             claims = get_jwt()
+            log.debug(f"require_roles: Required roles: {roles}, User roles: {claims.get('roles', [])}")
             if not all(r in claims.get("roles", []) for r in roles):
+                log.warning(f"require_roles: Access denied. Required: {roles}, Has: {claims.get('roles', [])}")
                 return jsonify({"error": "forbidden", "reason": "missing_roles", "required": roles}), 403
             return fn(*args, **kwargs)
         return wrapper
@@ -37,7 +39,9 @@ def require_any_role(*roles: str) -> Callable:
         def wrapper(*args, **kwargs):
             verify_jwt_in_request()
             claims = get_jwt()
+            log.debug(f"require_any_role: Required roles: {roles}, User roles: {claims.get('roles', [])}")
             if not _has_any(claims.get("roles", []), roles):
+                log.warning(f"require_any_role: Access denied. Required: {roles}, Has: {claims.get('roles', [])}")
                 return jsonify({"error": "forbidden", "reason": "missing_any_role", "options": roles}), 403
             return fn(*args, **kwargs)
         return wrapper
@@ -56,6 +60,10 @@ def require_permissions(*perms: str) -> Callable:
                 
                 verify_jwt_in_request()
                 claims = get_jwt()
+                
+                # Log the claims for debugging
+                log.debug(f"require_permissions: claims={claims}")
+                
                 user_perms = claims.get("perms", [])
                 
                 log.debug(f"require_permissions: user_perms={user_perms}, required={list(perms)}")
@@ -68,8 +76,8 @@ def require_permissions(*perms: str) -> Callable:
                     return jsonify({"error": "forbidden", "reason": "missing_permissions", "required": perms}), 403
                 return fn(*args, **kwargs)
             except Exception as e:
-                log.error(f"require_permissions: JWT verification failed: {str(e)}")
-                return jsonify({"error": "unauthorized", "reason": str(e)}), 401
+                log.error(f"require_permissions: JWT verification failed: {str(e)}", exc_info=True)
+                return jsonify({"error": "unauthorized", "reason": "JWT verification failed"}), 401
         return wrapper
     return decorator
 

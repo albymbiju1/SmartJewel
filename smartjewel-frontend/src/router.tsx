@@ -1,4 +1,3 @@
-import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { App } from './pages/App';
 import { LandingPage } from './pages/LandingPage';
@@ -18,6 +17,7 @@ import { StaffSchedulePage } from './pages/admin/StaffSchedulePage';
 import { CustomerManagementDashboard } from './pages/admin/CustomerManagementDashboard';
 import { StoreManagementPage } from './pages/admin/StoreManagementPage';
 import { SalesReportPage } from './pages/admin/SalesReportPage';
+import { ReportsPage } from './pages/admin/ReportsPage';
 import { SalesDashboard } from './pages/sales/SalesDashboard';
 import { ProductsPage } from './pages/products/ProductsPage';
 import { AllJewelleryPage } from './pages/products/AllJewelleryPage';
@@ -38,6 +38,10 @@ import { OrderDetailsPage } from './pages/products/OrderDetailsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import EventBridge from './components/EventBridge';
 import { VerifyOtp } from './pages/VerifyOtp';
+import { StoreProductsPage } from './pages/store/StoreProductsPage';
+import { StoreManagerDashboard } from './pages/store/StoreManagerDashboard';
+import { StoreOrdersPage } from './pages/store/StoreOrdersPage';
+import { StoreAppointmentsPage } from './pages/store/StoreAppointmentsPage';
 import { AdvancedSearchPage } from './pages/products/AdvancedSearchPage';
 import FindStorePage from './pages/FindStorePage';
 
@@ -56,24 +60,22 @@ export const AppRouter: React.FC = () => (
       {/* Admin Routes (protected) */}
       <Route path="/admin/dashboard" element={<RequireAuth><AdminDashboard /></RequireAuth>} />
       <Route path="/admin/inventory" element={<RequireAuth><InventoryDashboard /></RequireAuth>} />
-      <Route path="/admin/reports" element={<RequireAuth><div>Admin Reports</div></RequireAuth>} />
+      <Route path="/admin/reports" element={<RequireAuth><ReportsPage /></RequireAuth>} />
       <Route path="/admin/orders" element={<RequireAuth><AdminOrdersPage /></RequireAuth>} />
       <Route path="/admin/staff" element={<RequireAuth><StaffDirectory /></RequireAuth>} />
       <Route path="/admin/staff/:id/schedule" element={<RequireAuth><StaffSchedulePage /></RequireAuth>} />
       <Route path="/admin/sales" element={<RequireAuth><SalesReportPage /></RequireAuth>} />
       <Route path="/admin/customers" element={<RequireAuth><CustomerManagementDashboard /></RequireAuth>} />
-      <Route path="/admin/engagement" element={<RequireAuth><div>Customer Engagement</div></RequireAuth>} />
-      <Route path="/admin/logs" element={<RequireAuth><div>System Logs</div></RequireAuth>} />
+      {/* Removed Engagement and Logs routes as per user request */}
       <Route path="/admin/stores" element={<RequireAuth><StoreManagementPage /></RequireAuth>} />
 
       {/* Store Manager Routes (protected) */}
-      <Route path="/store/products" element={<RequireAuth><div>Store Products</div></RequireAuth>} />
+      <Route path="/store/dashboard" element={<RequireAuth><StoreManagerDashboard /></RequireAuth>} />
+      <Route path="/store/products" element={<RequireAuth><StoreProductsPage /></RequireAuth>} />
       <Route path="/store/inventory" element={<RequireAuth><InventoryDashboard /></RequireAuth>} />
+      <Route path="/store/orders" element={<RequireAuth><StoreOrdersPage /></RequireAuth>} />
+      <Route path="/store/appointments" element={<RequireAuth><StoreAppointmentsPage /></RequireAuth>} />
       <Route path="/store/reports" element={<RequireAuth><div>Store Reports</div></RequireAuth>} />
-      <Route path="/store/staff" element={<RequireAuth><div>Store Staff</div></RequireAuth>} />
-      <Route path="/store/add" element={<RequireAuth><div>Add Products</div></RequireAuth>} />
-      <Route path="/store/edit" element={<RequireAuth><div>Edit Products</div></RequireAuth>} />
-      <Route path="/store/approve-discounts" element={<RequireAuth><div>Approve Discounts</div></RequireAuth>} />
 
       {/* Sales Executive Routes (protected) */}
       <Route path="/sales/pos" element={<RequireAuth><SalesDashboard /></RequireAuth>} />

@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api';
 import { RoleBasedNavigation } from '../../components/RoleBasedNavigation';
-import { useToast } from '../../components/Toast';
 
 type OrderRow = {
   orderId: string;
@@ -57,9 +56,8 @@ const badgeClass = (s?: string | null) => {
   }
 };
 
-export const AdminOrdersPage: React.FC = () => {
+export const StoreOrdersPage: React.FC = () => {
   const navigate = useNavigate();
-  const toast = useToast();
 
   // table state
   const [rows, setRows] = useState<OrderRow[]>([]);
@@ -81,7 +79,7 @@ export const AdminOrdersPage: React.FC = () => {
 
   // selection
   const [selected, setSelected] = useState<Record<string, boolean>>({});
-  const selectedIds = useMemo(() => Object.keys(selected).filter((k) => selected[k]), [selected]);
+  const selectedIds = Object.keys(selected).filter((k) => selected[k]);
 
   // modal
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -96,14 +94,6 @@ export const AdminOrdersPage: React.FC = () => {
     loading: false,
   });
 
-  // Summary stats
-  const [summaryStats, setSummaryStats] = useState({
-    totalOrders: 0,
-    delivered: 0,
-    paid: 0,
-    pending: 0
-  });
-
   const fetchOrders = async () => {
     try {
       setLoading(true);
@@ -113,7 +103,7 @@ export const AdminOrdersPage: React.FC = () => {
       if (q) params.q = q;
       if (from) params.from = from;
       if (to) params.to = to;
-      const res = await api.get<OrdersResponse>('/api/admin/orders', { params });
+      const res = await api.get<OrdersResponse>('/api/store-manager/orders', { params });
       const data = res.data;
       const normalized = (data.orders || []).map((o) => ({
         orderId: o.orderId || '',
@@ -125,19 +115,6 @@ export const AdminOrdersPage: React.FC = () => {
       } as OrderRow));
       setRows(normalized);
       setTotal(data.pagination?.total || 0);
-      
-      // Calculate summary stats
-      const totalOrders = data.pagination?.total || 0;
-      const delivered = data.orders?.filter(o => o.status === 'delivered').length || 0;
-      const paid = data.orders?.filter(o => o.status === 'paid').length || 0;
-      const pending = data.orders?.filter(o => o.status === 'created').length || 0;
-      
-      setSummaryStats({
-        totalOrders,
-        delivered,
-        paid,
-        pending
-      });
       
       // clear selection if out of page
       setSelected({});
@@ -152,22 +129,6 @@ export const AdminOrdersPage: React.FC = () => {
     setCancelModal({ open: true, orderId, action, notes: '', loading: false });
   };
   const closeCancelModal = () => setCancelModal({ open: false, orderId: '', action: 'approve', notes: '', loading: false });
-  const handleCancelAction = async () => {
-    if (!cancelModal.notes.trim()) {
-      toast.info('Please add admin notes');
-      return;
-    }
-    try {
-      setCancelModal((m) => ({ ...m, loading: true }));
-      await api.patch(`/api/admin/orders/${cancelModal.orderId}/cancel`, { action: cancelModal.action, notes: cancelModal.notes.trim() });
-      toast.success(cancelModal.action === 'approve' ? 'Cancellation approved' : 'Cancellation rejected');
-      await fetchOrders();
-      closeCancelModal();
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.response?.data?.error || 'Failed to process cancellation');
-      setCancelModal((m) => ({ ...m, loading: false }));
-    }
-  };
 
   useEffect(() => { fetchOrders(); }, [page, limit, status, q, from, to, sortBy, sortDir]);
 
@@ -185,14 +146,14 @@ export const AdminOrdersPage: React.FC = () => {
     let hasError = false;
     for (const id of ids) {
       try {
-        await api.patch(`/api/admin/orders/${id}/status`, { status: newStatus });
+        await api.patch(`/api/store-manager/orders/${id}/status`, { status: newStatus });
       } catch (e) {
         hasError = true;
         console.error(`Failed to update status for order ${id}:`, e);
       }
     }
     if (hasError) {
-      toast.error('Some orders failed to update');
+      // Show error message
     }
     await fetchOrders();
   };
@@ -230,28 +191,8 @@ export const AdminOrdersPage: React.FC = () => {
       <div className="space-y-6 px-4">
         <div className="bg-white rounded-lg shadow p-4">
           <div className="mb-4">
-            <h1 className="text-2xl font-bold text-gray-900">View Orders</h1>
-            <p className="text-gray-600 text-sm">Browse and manage all customer orders</p>
-          </div>
-          
-          {/* Summary Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 p-3 bg-gray-50 rounded-lg">
-            <div className="border-r border-gray-200 pr-4">
-              <p className="text-xs text-gray-500">All Orders</p>
-              <p className="text-lg font-semibold">{summaryStats.totalOrders}</p>
-            </div>
-            <div className="border-r border-gray-200 pr-4">
-              <p className="text-xs text-gray-500">Delivered</p>
-              <p className="text-lg font-semibold text-green-600">{summaryStats.delivered}</p>
-            </div>
-            <div className="border-r border-gray-200 pr-4">
-              <p className="text-xs text-gray-500">Paid</p>
-              <p className="text-lg font-semibold text-blue-600">{summaryStats.paid}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Pending</p>
-              <p className="text-lg font-semibold text-yellow-600">{summaryStats.pending}</p>
-            </div>
+            <h1 className="text-2xl font-bold text-gray-900">Store Orders</h1>
+            <p className="text-gray-600 text-sm">Manage orders for your store</p>
           </div>
           
           {/* Filters */}
@@ -498,30 +439,8 @@ export const AdminOrdersPage: React.FC = () => {
           </div>
         )}
       </div>
-      {/* Cancellation Modal */}
-      {cancelModal.open && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={closeCancelModal}>
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">{cancelModal.action === 'approve' ? 'Approve Cancellation' : 'Reject Cancellation'}</h3>
-            <p className="text-sm text-gray-600 mb-4">Add admin notes for this action.</p>
-            <textarea
-              value={cancelModal.notes}
-              onChange={(e) => setCancelModal((m) => ({ ...m, notes: e.target.value }))}
-              placeholder="Admin notes..."
-              className="w-full p-3 border border-gray-300 rounded-lg resize-none mb-4"
-              rows={3}
-            />
-            <div className="flex justify-end gap-2">
-              <button onClick={closeCancelModal} className="px-4 py-2 border rounded">Close</button>
-              <button onClick={handleCancelAction} disabled={cancelModal.loading || !cancelModal.notes.trim()} className="px-4 py-2 bg-amber-600 text-white rounded disabled:opacity-50">
-                {cancelModal.loading ? 'Submitting…' : 'Confirm'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </RoleBasedNavigation>
   );
 };
 
-export default AdminOrdersPage;
+export default StoreOrdersPage;

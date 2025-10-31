@@ -5,6 +5,7 @@ from bson import ObjectId
 from datetime import datetime
 
 import requests
+from urllib.parse import urlparse
 bp = Blueprint("admin_orders", __name__, url_prefix="/api/admin/orders")
 
 
@@ -569,9 +570,30 @@ def forecast_total_sales():
     history = [{"date": d.get("date"), "qty": float(d.get("qty") or 0)} for d in cursor if d.get("date")]
 
     try:
-        ml_url = current_app.config.get("ML_FORECAST_URL") or "http://localhost:8085/ml/inventory/forecast"
+        # Build ML service URL robustly: accept full endpoint or a base URL
+        default_path = "/ml/inventory/forecast"
+        ml_url_env = current_app.config.get("ML_FORECAST_URL")
+        ml_base_env = current_app.config.get("ML_BASE_URL")
+
+        if ml_url_env:
+            parsed = urlparse(ml_url_env)
+            # If no specific path provided, or path is root, append full path
+            if not parsed.path or parsed.path == "/":
+                ml_url = ml_url_env.rstrip("/") + default_path
+            # If pointing to parent paths, append the missing tail
+            elif parsed.path.endswith("/ml") or parsed.path.endswith("/ml/"):
+                ml_url = ml_url_env.rstrip("/") + "/inventory/forecast"
+            elif parsed.path.endswith("/ml/inventory") or parsed.path.endswith("/ml/inventory/"):
+                ml_url = ml_url_env.rstrip("/") + "/forecast"
+            else:
+                ml_url = ml_url_env
+        elif ml_base_env:
+            ml_url = (ml_base_env or "").rstrip("/") + default_path
+        else:
+            ml_url = "http://localhost:8085" + default_path
+
         payload = {"sku": "TOTAL_SALES_AMOUNT", "horizon_days": horizon, "recent_history": history}
-        resp = requests.post(ml_url, json=payload, timeout=10)
+        resp = requests.post(ml_url, json=payload, timeout=20)
         if resp.status_code != 200:
             return jsonify({"error": "ml_service_error", "status": resp.status_code, "body": resp.text}), 502
         data = resp.json()

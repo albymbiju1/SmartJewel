@@ -595,12 +595,27 @@ def forecast_total_sales():
         payload = {"sku": "TOTAL_SALES_AMOUNT", "horizon_days": horizon, "recent_history": history}
         resp = requests.post(ml_url, json=payload, timeout=20)
         if resp.status_code != 200:
-            return jsonify({"error": "ml_service_error", "status": resp.status_code, "body": resp.text}), 502
+            return jsonify({
+                "error": "ml_service_error",
+                "status": resp.status_code,
+                "body": resp.text,
+                "ml_url": ml_url
+            }), 502
         data = resp.json()
         return jsonify({
             "horizon_days": horizon,
             "daily": data.get("daily", []),
             "totals": data.get("totals", {})
         })
+    except requests.exceptions.RequestException as e:
+        return jsonify({
+            "error": "ml_proxy_failed",
+            "message": str(e),
+            "ml_url": locals().get("ml_url")
+        }), 500
     except Exception as e:
-        return jsonify({"error": "ml_proxy_failed", "message": str(e)}), 500
+        return jsonify({
+            "error": "ml_proxy_failed",
+            "message": str(e),
+            "ml_url": locals().get("ml_url")
+        }), 500

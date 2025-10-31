@@ -6,6 +6,7 @@ from datetime import datetime
 
 import requests
 from urllib.parse import urlparse
+from statistics import mean
 bp = Blueprint("admin_orders", __name__, url_prefix="/api/admin/orders")
 
 
@@ -569,6 +570,28 @@ def forecast_total_sales():
     cursor = db.orders.aggregate(pipeline)
     history = [{"date": d.get("date"), "qty": float(d.get("qty") or 0)} for d in cursor if d.get("date")]
 
+    def _fallback_forecast(history_points, horizon_days):
+        # Compute naive forecast using average of last up to 7 days
+        recent_values = [p["qty"] for p in history_points[-7:]] if history_points else []
+        baseline = mean(recent_values) if recent_values else 0.0
+        # Determine last date in history to start forecasting from next day
+        last_date_str = history_points[-1]["date"] if history_points else datetime.utcnow().strftime("%Y-%m-%d")
+        last_date = datetime.strptime(last_date_str, "%Y-%m-%d")
+        daily = []
+        for i in range(1, horizon_days + 1):
+            day = last_date + timedelta(days=i)
+            daily.append({
+                "date": day.strftime("%Y-%m-%d"),
+                "forecast": round(float(baseline), 3)
+            })
+        sum_7 = round(sum([d["forecast"] for d in daily[:7]]), 3)
+        sum_30 = round(sum([d["forecast"] for d in daily[:30]]), 3)
+        return {
+            "horizon_days": horizon_days,
+            "daily": daily,
+            "totals": {"sum_7": sum_7, "sum_30": sum_30}
+        }
+
     try:
         # Build ML service URL robustly: accept full endpoint or a base URL
         default_path = "/ml/inventory/forecast"
@@ -595,12 +618,10 @@ def forecast_total_sales():
         payload = {"sku": "TOTAL_SALES_AMOUNT", "horizon_days": horizon, "recent_history": history}
         resp = requests.post(ml_url, json=payload, timeout=20)
         if resp.status_code != 200:
-            return jsonify({
-                "error": "ml_service_error",
-                "status": resp.status_code,
-                "body": resp.text,
-                "ml_url": ml_url
-            }), 502
+            # Fall back to naive forecast if remote ML not found or errors
+            fallback = _fallback_forecast(history, horizon)
+            fallback["mlProxy"] = {"error": "ml_service_error", "status": resp.status_code, "ml_url": ml_url}
+            return jsonify(fallback)
         data = resp.json()
         return jsonify({
             "horizon_days": horizon,
@@ -608,14 +629,11 @@ def forecast_total_sales():
             "totals": data.get("totals", {})
         })
     except requests.exceptions.RequestException as e:
-        return jsonify({
-            "error": "ml_proxy_failed",
-            "message": str(e),
-            "ml_url": locals().get("ml_url")
-        }), 500
+        # Network/timeout etc: provide fallback
+        fallback = _fallback_forecast(history, horizon)
+        fallback["mlProxy"] = {"error": "ml_proxy_failed", "message": str(e), "ml_url": locals().get("ml_url")}
+        return jsonify(fallback)
     except Exception as e:
-        return jsonify({
-            "error": "ml_proxy_failed",
-            "message": str(e),
-            "ml_url": locals().get("ml_url")
-        }), 500
+        fallback = _fallback_forecast(history, horizon)
+        fallback["mlProxy"] = {"error": "ml_proxy_failed", "message": str(e), "ml_url": locals().get("ml_url")}
+        return jsonify(fallback)

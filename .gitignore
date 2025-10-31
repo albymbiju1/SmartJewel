@@ -8,12 +8,12 @@ __pycache__/
 venv/
 
 # Node
-node_modules/
+**/node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-dist/
+**/dist/
 
 generate_jwt_secret.py
 start-backend.bat
@@ -50,3 +50,42 @@ test_*.py
 !DEPLOYMENT_CHECKLIST.md
 !EXISTING_IMAGES_GUIDE.md
 mongodb-installer.msi
+
+# Additional ignores (monorepo-wide)
+
+# Node/JS build outputs and caches
+**/build/
+**/coverage/
+**/.vite/
+**/.next/
+**/.turbo/
+**/.cache/
+**/.parcel-cache/
+**/.eslintcache
+*.log
+logs/
+**/*.log
+
+# Python caches and test artifacts
+**/.pytest_cache/
+**/.mypy_cache/
+.pytest_cache/
+.mypy_cache/
+
+# Tests (general patterns)
+**/tests/
+**/__tests__/
+**/*.test.*
+**/*.spec.*
+**/*_test.py
+**/test_*/
+
+# Deployment/platform
+.vercel/
+**/.vercel/
+.vercelignore
+
+# Local/IDE project folders
+.qodo/
+.zencoder/
+desktop.ini

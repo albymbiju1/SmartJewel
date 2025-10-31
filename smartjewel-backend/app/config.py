@@ -29,4 +29,6 @@ class Config:
     OTP_TTL_MINUTES = int(os.getenv("OTP_TTL_MINUTES", "10"))
     OTP_MAX_ATTEMPTS = int(os.getenv("OTP_MAX_ATTEMPTS", "5"))
     
+    # ML service configuration
+    ML_FORECAST_URL = os.getenv("ML_FORECAST_URL", None)
 

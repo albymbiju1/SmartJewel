@@ -82,7 +82,7 @@ def require_permissions(*perms: str) -> Callable:
     return decorator
 
 
-STAFF_LEVELS = ["staff_l1", "staff_l2", "staff_l3"]
+STAFF_LEVELS = ["staff_l1", "staff_l2", "staff_l3", "Staff_L1", "Staff_L2", "Staff_L3"]
 
 def is_staff(roles: Iterable[str]) -> bool:
     return any(r in STAFF_LEVELS for r in roles or [])

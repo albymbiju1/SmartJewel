@@ -126,8 +126,17 @@ def register():
 # Role -> default permissions (extend as system grows)
 ROLE_PERMISSIONS = {
     "admin": ["*"],
-    # Read-only inventory for basic staff
-    "staff_l1": ["inventory.read"],
+    # Store Manager (Staff_L1) - full order management, product view, inventory read
+    "staff_l1": [
+        "discount.approve",
+        "product.manage",
+        "analytics.view.store",
+        "shift.view",
+        "orders.manage",
+        "appointments.manage",
+        "inventory.read",
+        "inventory.location.read"
+    ],
     # Can read and update limited fields
     "staff_l2": ["inventory.read", "inventory.update"],
     # Inventory Staff Type 3: can add/update stock, assign tags, and track flow

@@ -12,7 +12,8 @@ NEW_STAFF_L1_PERMISSIONS = [
     "shift.view",
     "orders.manage",
     "appointments.manage",
-    "inventory.read",  # Added this permission
+    "inventory.read",  # For viewing products and inventory dashboard
+    "inventory.location.read",  # For viewing store locations
 ]
 
 def main():

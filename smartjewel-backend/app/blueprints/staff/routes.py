@@ -192,9 +192,15 @@ def get_staff(id):
 @require_permissions("staff.manage")
 def update_staff(id):
     db = current_app.extensions['mongo_db']
+
+    # Log what we received
+    import json
+    print(f"🔍 UPDATE STAFF PAYLOAD: {json.dumps(request.get_json())}")
+
     try:
         payload = StaffUpdateSchema().load(request.get_json() or {})
     except ValidationError as err:
+        print(f"❌ VALIDATION ERROR: {err.messages}")
         return jsonify({"error": "validation_failed", "details": err.messages}), 400
     update = {}
     if "full_name" in payload:

@@ -1,7 +1,7 @@
 services:
   # Frontend - Static Site
   - type: web
-    name: smartjewel-frontend
+    name: smartjewel
     env: static
     buildCommand: |
       cd smartjewel-frontend

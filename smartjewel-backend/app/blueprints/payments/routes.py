@@ -8,6 +8,7 @@ from app.blueprints.payments import bp
 from app.extensions import db
 from flask import current_app
 from datetime import datetime
+from app.services.whatsapp_service import get_whatsapp_service
 try:
     from bson import ObjectId  # Mongo ObjectId for safe serialization
 except Exception:
@@ -362,6 +363,45 @@ def verify_razorpay_signature():
                 )
                 print(f"Test mode: order upserted for user {uid} with id {demo_order_id}")
 
+                # Send WhatsApp order confirmation
+                try:
+                    whatsapp = get_whatsapp_service()
+                    customer = order_record.get('customer', {})
+                    name = customer.get('name', 'Customer')
+                    phone = customer.get('phone', '')
+
+                    if phone:
+                        # Format items for WhatsApp
+                        formatted_items = []
+                        for item in order_record.get('items', []):
+                            formatted_items.append({
+                                'name': item.get('name', 'Item'),
+                                'price': float(item.get('price', 0)),
+                                'quantity': int(item.get('quantity', 1))
+                            })
+
+                        total = float(order_record.get('amount', 0))
+
+                        if formatted_items:
+                            wa_result = whatsapp.send_order_confirmation(
+                                name=name,
+                                phone=phone,
+                                order_id=demo_order_id,
+                                items=formatted_items,
+                                total=total
+                            )
+
+                            if wa_result.get('success'):
+                                print(f"✅ WhatsApp order confirmation sent to {phone} for order {demo_order_id}")
+                            else:
+                                print(f"⚠️ WhatsApp failed: {wa_result.get('message')}")
+                        else:
+                            print(f"⚠️ No items to send in WhatsApp for order {demo_order_id}")
+                    else:
+                        print(f"⚠️ No phone number for WhatsApp notification (order {demo_order_id})")
+                except Exception as wa_error:
+                    print(f"❌ WhatsApp error: {str(wa_error)}")
+
                 # Decrement stock in test/skip-signature path as well
                 ok_stock, reason = _validate_and_update_stock(db, order_record.get("items", []), demo_order_id, uid)
                 if not ok_stock:
@@ -492,6 +532,45 @@ def verify_razorpay_signature():
             )
             print(f"Updated existing order: {update_result.modified_count} documents modified")
             
+            # Send WhatsApp order confirmation
+            try:
+                whatsapp = get_whatsapp_service()
+                customer = order_record.get('customer', {})
+                name = customer.get('name', 'Customer')
+                phone = customer.get('phone', '')
+
+                if phone:
+                    # Format items for WhatsApp
+                    formatted_items = []
+                    for item in order_record.get('items', []):
+                        formatted_items.append({
+                            'name': item.get('name', 'Item'),
+                            'price': float(item.get('price', 0)),
+                            'quantity': int(item.get('quantity', 1))
+                        })
+
+                    total = float(order_record.get('amount', 0))
+
+                    if formatted_items:
+                        wa_result = whatsapp.send_order_confirmation(
+                            name=name,
+                            phone=phone,
+                            order_id=demo_order_id,
+                            items=formatted_items,
+                            total=total
+                        )
+
+                        if wa_result.get('success'):
+                            print(f"✅ WhatsApp order confirmation sent to {phone} for order {demo_order_id}")
+                        else:
+                            print(f"⚠️ WhatsApp failed: {wa_result.get('message')}")
+                    else:
+                        print(f"⚠️ No items to send in WhatsApp for order {demo_order_id}")
+                else:
+                    print(f"⚠️ No phone number for WhatsApp notification (order {demo_order_id})")
+            except Exception as wa_error:
+                print(f"❌ WhatsApp error: {str(wa_error)}")
+
             # NOW update stock after order is confirmed
             print(f"[DEBUG] About to update stock")
             print(f"[DEBUG] Items for stock update: {items}")

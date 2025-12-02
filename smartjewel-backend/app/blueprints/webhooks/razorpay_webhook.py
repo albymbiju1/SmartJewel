@@ -8,6 +8,7 @@ import hashlib
 import os
 from datetime import datetime
 from bson import ObjectId
+from app.services.whatsapp_service import get_whatsapp_service
 
 bp = Blueprint('razorpay_webhook', __name__, url_prefix='/webhooks')
 
@@ -223,9 +224,54 @@ def handle_payment_event(db, event, event_type):
             {"_id": order["_id"]},
             update_data
         )
-        
+
         if result.modified_count > 0:
             print(f"Order {order.get('orderId')} updated with payment status: {payment_status}")
+
+            # Send WhatsApp notification for captured payments
+            if event_type == "payment.captured" and payment_status == "captured":
+                try:
+                    whatsapp = get_whatsapp_service()
+
+                    # Extract customer details
+                    customer = order.get('customer', {})
+                    name = customer.get('name', 'Customer')
+                    phone = customer.get('phone', '')
+
+                    # Extract order items
+                    items = order.get('items', [])
+                    formatted_items = []
+                    for item in items:
+                        formatted_items.append({
+                            'name': item.get('name', 'Item'),
+                            'price': float(item.get('price', 0)),
+                            'quantity': int(item.get('quantity', 1))
+                        })
+
+                    # Get order total
+                    total = float(order.get('totalAmount', order.get('amount', 0)))
+                    order_id = order.get('orderId', str(order.get('_id', '')))
+
+                    if phone and formatted_items:
+                        wa_result = whatsapp.send_order_confirmation(
+                            name=name,
+                            phone=phone,
+                            order_id=order_id,
+                            items=formatted_items,
+                            total=total
+                        )
+
+                        if wa_result.get('success'):
+                            print(f"✅ WhatsApp order confirmation sent for {order_id} to {phone}")
+                        else:
+                            print(f"⚠️ WhatsApp failed for {order_id}: {wa_result.get('message')}")
+                    else:
+                        print(f"⚠️ Cannot send WhatsApp for {order_id}: phone={phone}, items={len(formatted_items)}")
+
+                except Exception as wa_error:
+                    # Log error but don't fail order processing
+                    print(f"❌ WhatsApp error for {order.get('orderId')}: {str(wa_error)}")
+
             return jsonify({
                 "status": "success",
                 "order_id": order.get("orderId"),

@@ -44,6 +44,7 @@ import { StoreOrdersPage } from './pages/store/StoreOrdersPage';
 import { StoreAppointmentsPage } from './pages/store/StoreAppointmentsPage';
 import { AdvancedSearchPage } from './pages/products/AdvancedSearchPage';
 import FindStorePage from './pages/FindStorePage';
+import WhatsAppTestPage from './pages/WhatsAppTestPage';
 
 export const AppRouter: React.FC = () => (
   <Router>
@@ -56,6 +57,7 @@ export const AppRouter: React.FC = () => (
       <Route path="/verify-otp" element={<VerifyOtp />} />
       <Route path="/logout" element={<Logout />} />
       <Route path="/find-store" element={<FindStorePage />} />
+      <Route path="/whatsapp-test" element={<WhatsAppTestPage />} />
 
       {/* Admin Routes (protected) */}
       <Route path="/admin/dashboard" element={<RequireAuth><AdminDashboard /></RequireAuth>} />

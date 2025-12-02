@@ -1,7 +1,7 @@
 services:
   # Frontend - Static Site
   - type: web
-    name: smartjewel
+    name: smartjewel-frontend
     env: static
     buildCommand: |
       cd smartjewel-frontend
@@ -32,3 +32,23 @@ services:
       - type: rewrite
         source: /*
         destination: /index.html
+
+  # WhatsApp Service - Node.js (FREE TIER)
+  - type: web
+    name: smartjewel-whatsapp
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: |
+      cd whatsapp-service
+      npm install
+    startCommand: |
+      cd whatsapp-service
+      npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3300
+    autoDeploy: true
+    healthCheckPath: /health

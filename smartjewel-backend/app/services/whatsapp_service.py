@@ -4,6 +4,7 @@ Handles communication with the WhatsApp microservice
 """
 
 import requests
+import os
 from typing import Dict, List, Optional, Any
 from flask import current_app
 
@@ -190,10 +191,11 @@ def get_whatsapp_service() -> WhatsAppService:
     """
     global _whatsapp_service
     if _whatsapp_service is None:
-        # Get URL from config if available
-        whatsapp_url = current_app.config.get(
+        # Get URL from environment variable first, then config, then default
+        whatsapp_url = os.environ.get(
             'WHATSAPP_SERVICE_URL',
-            'http://localhost:3300'
+            current_app.config.get('WHATSAPP_SERVICE_URL', 'http://localhost:3300')
         )
         _whatsapp_service = WhatsAppService(base_url=whatsapp_url)
+        current_app.logger.info(f"WhatsApp service initialized with URL: {whatsapp_url}")
     return _whatsapp_service

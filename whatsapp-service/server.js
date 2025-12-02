@@ -43,13 +43,36 @@ client.on('authenticated', () => {
 // Authentication Failure
 client.on('auth_failure', (msg) => {
     console.error('❌ Authentication failed:', msg);
+    currentQR = null;
     isReady = false;
+
+    // Try to reinitialize after auth failure
+    console.log('⚠️ Attempting to reinitialize client...');
+    setTimeout(() => {
+        try {
+            client.initialize();
+        } catch (err) {
+            console.error('Failed to reinitialize:', err);
+        }
+    }, 5000);
 });
 
 // Disconnected
 client.on('disconnected', (reason) => {
     console.log('❌ WhatsApp disconnected:', reason);
+    console.log('Reason:', reason);
+    currentQR = null;
     isReady = false;
+
+    // Try to reconnect after disconnection
+    console.log('⚠️ Attempting to reconnect...');
+    setTimeout(() => {
+        try {
+            client.initialize();
+        } catch (err) {
+            console.error('Failed to reconnect:', err);
+        }
+    }, 10000);
 });
 
 // Initialize client
@@ -85,7 +108,19 @@ app.get('/health', (req, res) => {
     res.json({
         success: true,
         ready: isReady,
-        message: isReady ? 'WhatsApp service is ready' : 'WhatsApp service is initializing'
+        needsAuth: currentQR !== null,
+        message: isReady ? 'WhatsApp service is ready' : currentQR ? 'Waiting for QR scan' : 'WhatsApp service is initializing'
+    });
+});
+
+// Session status endpoint
+app.get('/session-status', (req, res) => {
+    res.json({
+        success: true,
+        authenticated: isReady,
+        needsQR: currentQR !== null,
+        message: isReady ? 'Session active' : currentQR ? 'Needs QR scan at /qr' : 'Initializing...',
+        qrUrl: currentQR ? '/qr' : null
     });
 });
 

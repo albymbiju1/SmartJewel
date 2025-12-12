@@ -10,6 +10,7 @@ import { getRoleBasedRedirectPath } from '../utils/roleRedirect';
 import { MegaMenuFilter } from '../components/MegaMenuFilter';
 import { SearchBar } from '../components/SearchBar';
 import FloatingChatbot from '../components/chatbot/FloatingChatbot';
+import { NotificationBell } from '../components/NotificationBell';
 
 
 export const LandingPage: React.FC = () => {
@@ -68,10 +69,10 @@ export const LandingPage: React.FC = () => {
   };
 
   // Reset temp selections when switching tabs
-  useEffect(() => { 
-    setMmCategories([]); 
-    setMmMetals([]); 
-    setMmPrices([]); 
+  useEffect(() => {
+    setMmCategories([]);
+    setMmMetals([]);
+    setMmPrices([]);
     setMmPurities([]);
     setMmColors([]);
     setMmEarringTypes([]);
@@ -80,7 +81,7 @@ export const LandingPage: React.FC = () => {
     setMmBudgets([]);
     setMmFor([]);
   }, [activeMenu]);
-  
+
   // Redirect authenticated users to their role-based dashboard
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -93,7 +94,7 @@ export const LandingPage: React.FC = () => {
 
   // Debug: Log to verify component is rendering
   console.log('LandingPage component rendering');
-  
+
   const { count: wishlistCount } = useWishlist();
   const { cartCount } = useCart();
 
@@ -119,8 +120,8 @@ export const LandingPage: React.FC = () => {
         {/* Main header row */}
         <div className="container-xl relative flex items-center justify-between gap-4 py-2">
           <div className="hidden md:flex items-center gap-4">
-            <button 
-              className="inline-flex items-center gap-2 text-gray-600 hover:text-brand-burgundy px-2 py-1 rounded-md" 
+            <button
+              className="inline-flex items-center gap-2 text-gray-600 hover:text-brand-burgundy px-2 py-1 rounded-md"
               title="Find a Store"
               onClick={() => navigate('/find-store')}
             >
@@ -134,25 +135,28 @@ export const LandingPage: React.FC = () => {
           </div>
 
           <div className="relative flex items-center gap-2">
-            {/* Quick inventory nav (visible only for admins and inventory staff) */}
             {isAuthenticated && (user?.role?.role_name === 'Admin' || user?.role?.role_name === 'Staff_L3') && (
               <div className="hidden md:flex items-center gap-2 mr-2">
-                <button className="text-sm text-gray-700 hover:text-brand-burgundy" onClick={()=>navigate('/inventory/items')}>Items</button>
-                <button className="text-sm text-gray-700 hover:text-brand-burgundy" onClick={()=>navigate('/inventory/stock')}>Stock</button>
-                <button className="text-sm text-gray-700 hover:text-brand-burgundy" onClick={()=>navigate('/inventory/tags')}>Tags</button>
-                <button className="text-sm text-gray-700 hover:text-brand-burgundy" onClick={()=>navigate('/inventory/locations')}>Locations</button>
-                <button className="text-sm text-gray-700 hover:text-brand-burgundy" onClick={()=>navigate('/inventory/prices')}>Prices</button>
-                <button className="text-sm text-gray-700 hover:text-brand-burgundy" onClick={()=>navigate('/inventory/valuation')}>Valuation</button>
-                <button className="text-sm text-gray-700 hover:text-brand-burgundy" onClick={()=>navigate('/inventory/bom')}>BOM</button>
+                <button className="text-sm text-gray-700 hover:text-brand-burgundy" onClick={() => navigate('/inventory/items')}>Items</button>
+                <button className="text-sm text-gray-700 hover:text-brand-burgundy" onClick={() => navigate('/inventory/stock')}>Stock</button>
+                <button className="text-sm text-gray-700 hover:text-brand-burgundy" onClick={() => navigate('/inventory/tags')}>Tags</button>
+                <button className="text-sm text-gray-700 hover:text-brand-burgundy" onClick={() => navigate('/inventory/locations')}>Locations</button>
+                <button className="text-sm text-gray-700 hover:text-brand-burgundy" onClick={() => navigate('/inventory/prices')}>Prices</button>
+                <button className="text-sm text-gray-700 hover:text-brand-burgundy" onClick={() => navigate('/inventory/valuation')}>Valuation</button>
+                <button className="text-sm text-gray-700 hover:text-brand-burgundy" onClick={() => navigate('/inventory/bom')}>BOM</button>
               </div>
             )}
-            <button className="relative inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-200 text-gray-700 hover:text-brand-burgundy" title="Search" aria-label="Search" onClick={() => setShowSearch((s)=>!s)}>
+
+            {/* Notification Bell */}
+            <NotificationBell />
+
+            <button className="relative inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-200 text-gray-700 hover:text-brand-burgundy" title="Search" aria-label="Search" onClick={() => setShowSearch((s) => !s)}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
             </button>
-            <button className="relative inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-200 text-gray-700 hover:text-brand-burgundy" title={isAuthenticated ? (user?.full_name || user?.email || 'Account'): 'Account'} onClick={()=>{ isAuthenticated ? setShowUserMenu(!showUserMenu) : navigate('/login')}} aria-label="Account" ref={userMenuRef as React.RefObject<HTMLButtonElement>}>
+            <button className="relative inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-200 text-gray-700 hover:text-brand-burgundy" title={isAuthenticated ? (user?.full_name || user?.email || 'Account') : 'Account'} onClick={() => { isAuthenticated ? setShowUserMenu(!showUserMenu) : navigate('/login') }} aria-label="Account" ref={userMenuRef as React.RefObject<HTMLButtonElement>}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
             </button>
-            <button className="relative inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-200 text-gray-700 hover:text-brand-burgundy" title="Wishlist" aria-label="Wishlist" onClick={()=>navigate('/wishlist')}>
+            <button className="relative inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-200 text-gray-700 hover:text-brand-burgundy" title="Wishlist" aria-label="Wishlist" onClick={() => navigate('/wishlist')}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
               {/* Wishlist count badge */}
               {wishlistCount > 0 && (
@@ -161,7 +165,7 @@ export const LandingPage: React.FC = () => {
                 </span>
               )}
             </button>
-            <button id="app-cart-button" className={`relative inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-200 text-gray-700 hover:text-brand-burgundy ${cartBump ? 'animate-bounce-once' : ''}`} title="Cart" aria-label="Cart" onClick={()=>navigate('/cart')}>
+            <button id="app-cart-button" className={`relative inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-200 text-gray-700 hover:text-brand-burgundy ${cartBump ? 'animate-bounce-once' : ''}`} title="Cart" aria-label="Cart" onClick={() => navigate('/cart')}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
               {cartCount > 0 && (
                 <span className={`absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-blue-600 text-white text-[10px] leading-[18px] text-center shadow ${cartBump ? 'animate-bounce-once' : ''}`}>
@@ -178,9 +182,9 @@ export const LandingPage: React.FC = () => {
                 <div className="font-semibold text-sm text-gray-900">{user?.full_name || user?.email}</div>
                 <div className="text-xs text-gray-500">{user?.role?.role_name}</div>
               </div>
-              <button className="w-full text-left bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={()=>{ setShowUserMenu(false); navigate('/profile'); }}>My Profile</button>
-              <button className="w-full text-left bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={()=>{ setShowUserMenu(false); navigate('/my-orders'); }}>My Orders</button>
-              <button className="w-full text-left bg-white px-4 py-2 text-sm text-red-700 hover:bg-red-50" onClick={()=>{ setShowUserMenu(false); logout(); navigate('/login', { replace: true }); }}>Sign Out</button>
+              <button className="w-full text-left bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setShowUserMenu(false); navigate('/profile'); }}>My Profile</button>
+              <button className="w-full text-left bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setShowUserMenu(false); navigate('/my-orders'); }}>My Orders</button>
+              <button className="w-full text-left bg-white px-4 py-2 text-sm text-red-700 hover:bg-red-50" onClick={() => { setShowUserMenu(false); logout(); navigate('/login', { replace: true }); }}>Sign Out</button>
             </div>
           )}
         </div>
@@ -195,36 +199,36 @@ export const LandingPage: React.FC = () => {
         {/* Category navigation with mega menu */}
         <div className="border-b border-gray-100 bg-white sticky top-0 z-header">
           <div className="container-xl relative h-12 flex items-center" onMouseLeave={() => setActiveMenu(null)}>
-            <ul className="list-none flex gap-6 items-center relative" role="menubar" aria-label="Category Navigation" onKeyDown={(e)=>{
+            <ul className="list-none flex gap-6 items-center relative" role="menubar" aria-label="Category Navigation" onKeyDown={(e) => {
               const items = NAV_TABS.map(t => t.key);
               const idx = activeMenu ? items.indexOf(activeMenu) : -1;
-              if(e.key==='Escape'){ setActiveMenu(null); }
-              if(e.key==='ArrowRight'){
-                const next = items[(Math.max(idx, -1)+1)%items.length];
+              if (e.key === 'Escape') { setActiveMenu(null); }
+              if (e.key === 'ArrowRight') {
+                const next = items[(Math.max(idx, -1) + 1) % items.length];
                 setActiveMenu(next);
               }
-              if(e.key==='ArrowLeft'){
-                const prev = items[(items.length + (idx===-1?items.length-1:idx-1))%items.length];
+              if (e.key === 'ArrowLeft') {
+                const prev = items[(items.length + (idx === -1 ? items.length - 1 : idx - 1)) % items.length];
                 setActiveMenu(prev);
               }
-              if(e.key==='ArrowDown'){
-                if(!activeMenu) setActiveMenu(items[0]);
+              if (e.key === 'ArrowDown') {
+                if (!activeMenu) setActiveMenu(items[0]);
               }
             }}>
-            {NAV_TABS.map((item)=> (
-              <li key={item.key} className="relative" role="none">
-                <button
-                  className={`border-0 bg-transparent text-[15px] font-medium cursor-pointer py-2 transition-colors border-b-2 border-transparent ${activeMenu===item.key ? 'text-gray-900 border-brand-burgundy' : 'text-gray-700 hover:text-gray-900 hover:border-gray-300'}`}
-                  role="menuitem"
-                  aria-haspopup="true"
-                  aria-expanded={activeMenu===item.key}
-                  onMouseEnter={() => setActiveMenu(item.key)}
-                  onFocus={() => setActiveMenu(item.key)}
-                >
-                  {item.label}
-                </button>
-              </li>
-            ))}
+              {NAV_TABS.map((item) => (
+                <li key={item.key} className="relative" role="none">
+                  <button
+                    className={`border-0 bg-transparent text-[15px] font-medium cursor-pointer py-2 transition-colors border-b-2 border-transparent ${activeMenu === item.key ? 'text-gray-900 border-brand-burgundy' : 'text-gray-700 hover:text-gray-900 hover:border-gray-300'}`}
+                    role="menuitem"
+                    aria-haspopup="true"
+                    aria-expanded={activeMenu === item.key}
+                    onMouseEnter={() => setActiveMenu(item.key)}
+                    onFocus={() => setActiveMenu(item.key)}
+                  >
+                    {item.label}
+                  </button>
+                </li>
+              ))}
             </ul>
             {/* Mega menu appears for the hovered item, classic columns with multi-select */}
             {activeMenu && (
@@ -238,12 +242,12 @@ export const LandingPage: React.FC = () => {
                         <div className="text-[11px] uppercase tracking-[0.08em] text-gray-700 font-semibold">{col.title}</div>
                       </div>
                       {col.items.map((it) => {
-                        const isCategory = col.title.toLowerCase().includes('category') || 
-                                          col.title.toLowerCase()==='for her' || 
-                                          col.title.toLowerCase()==='for him' || 
-                                          col.title.toLowerCase()==='trending' || 
-                                          col.title.toLowerCase()==='themes';
-                        const isMetal = col.title.toLowerCase().includes('metal') && (it.label.toLowerCase()==='gold' || it.label.toLowerCase()==='diamond' || it.label.toLowerCase()==='platinum' || it.label.toLowerCase()==='silver');
+                        const isCategory = col.title.toLowerCase().includes('category') ||
+                          col.title.toLowerCase() === 'for her' ||
+                          col.title.toLowerCase() === 'for him' ||
+                          col.title.toLowerCase() === 'trending' ||
+                          col.title.toLowerCase() === 'themes';
+                        const isMetal = col.title.toLowerCase().includes('metal') && (it.label.toLowerCase() === 'gold' || it.label.toLowerCase() === 'diamond' || it.label.toLowerCase() === 'platinum' || it.label.toLowerCase() === 'silver');
                         const isPrice = col.title.toLowerCase().includes('price');
                         const isByBudget = col.title.toLowerCase().includes('budget');
                         const isByOccasion = col.title.toLowerCase().includes('by occasion');
@@ -254,46 +258,46 @@ export const LandingPage: React.FC = () => {
                         const isOccasion = col.title.toLowerCase().includes('occasion') && !col.title.toLowerCase().includes('by occasion');
                         const isStyle = col.title.toLowerCase().includes('style');
                         const isFor = col.title.toLowerCase().includes('for') && !col.title.toLowerCase().includes('price') && !col.title.toLowerCase().includes('budget') && !col.title.toLowerCase().includes('by occasion');
-                        
+
                         const catSlug = normalizeCategory(it.label);
                         const priceSlug = priceLabelToSlug(it.label);
                         const metalSlug = it.label.toLowerCase();
-                        
+
                         // Check if item is selected based on filter type
-                        const selected = (isCategory && mmCategories.includes(catSlug)) || 
-                                        (isMetal && mmMetals.includes(metalSlug)) || 
-                                        (isPrice && priceSlug && mmPrices.includes(priceSlug)) ||
-                                        (isByBudget && mmBudgets.includes(it.label)) ||
-                                        (isByOccasion && mmOccasions.includes(it.label)) ||
-                                        (isPurity && mmPurities.includes(it.label)) ||
-                                        (isColor && mmColors.includes(it.label)) ||
-                                        (isEarringType && mmEarringTypes.includes(it.label)) ||
-                                        (isOccasion && mmOccasions.includes(it.label)) ||
-                                        (isStyle && mmStyles.includes(it.label)) ||
-                                        (isFor && mmFor.includes(it.label));
-                        
+                        const selected = (isCategory && mmCategories.includes(catSlug)) ||
+                          (isMetal && mmMetals.includes(metalSlug)) ||
+                          (isPrice && priceSlug && mmPrices.includes(priceSlug)) ||
+                          (isByBudget && mmBudgets.includes(it.label)) ||
+                          (isByOccasion && mmOccasions.includes(it.label)) ||
+                          (isPurity && mmPurities.includes(it.label)) ||
+                          (isColor && mmColors.includes(it.label)) ||
+                          (isEarringType && mmEarringTypes.includes(it.label)) ||
+                          (isOccasion && mmOccasions.includes(it.label)) ||
+                          (isStyle && mmStyles.includes(it.label)) ||
+                          (isFor && mmFor.includes(it.label));
+
                         const onClick = (e: React.MouseEvent) => {
                           e.preventDefault();
                           if (isCategory) {
-                            setMmCategories(prev => prev.includes(catSlug) ? prev.filter(x=>x!==catSlug) : [...prev, catSlug]);
+                            setMmCategories(prev => prev.includes(catSlug) ? prev.filter(x => x !== catSlug) : [...prev, catSlug]);
                           } else if (isMetal) {
-                            setMmMetals(prev => prev.includes(metalSlug) ? prev.filter(x=>x!==metalSlug) : [...prev, metalSlug]);
+                            setMmMetals(prev => prev.includes(metalSlug) ? prev.filter(x => x !== metalSlug) : [...prev, metalSlug]);
                           } else if (isByBudget) {
-                            setMmBudgets(prev => prev.includes(it.label) ? prev.filter(x=>x!==it.label) : [...prev, it.label]);
+                            setMmBudgets(prev => prev.includes(it.label) ? prev.filter(x => x !== it.label) : [...prev, it.label]);
                           } else if (isPrice) {
-                            setMmPrices(prev => prev.includes(priceSlug) ? prev.filter(x=>x!==priceSlug) : [...prev, priceSlug]);
+                            setMmPrices(prev => prev.includes(priceSlug) ? prev.filter(x => x !== priceSlug) : [...prev, priceSlug]);
                           } else if (isPurity) {
-                            setMmPurities(prev => prev.includes(it.label) ? prev.filter(x=>x!==it.label) : [...prev, it.label]);
+                            setMmPurities(prev => prev.includes(it.label) ? prev.filter(x => x !== it.label) : [...prev, it.label]);
                           } else if (isColor) {
-                            setMmColors(prev => prev.includes(it.label) ? prev.filter(x=>x!==it.label) : [...prev, it.label]);
+                            setMmColors(prev => prev.includes(it.label) ? prev.filter(x => x !== it.label) : [...prev, it.label]);
                           } else if (isEarringType) {
-                            setMmEarringTypes(prev => prev.includes(it.label) ? prev.filter(x=>x!==it.label) : [...prev, it.label]);
+                            setMmEarringTypes(prev => prev.includes(it.label) ? prev.filter(x => x !== it.label) : [...prev, it.label]);
                           } else if (isOccasion || isByOccasion) {
-                            setMmOccasions(prev => prev.includes(it.label) ? prev.filter(x=>x!==it.label) : [...prev, it.label]);
+                            setMmOccasions(prev => prev.includes(it.label) ? prev.filter(x => x !== it.label) : [...prev, it.label]);
                           } else if (isStyle) {
-                            setMmStyles(prev => prev.includes(it.label) ? prev.filter(x=>x!==it.label) : [...prev, it.label]);
+                            setMmStyles(prev => prev.includes(it.label) ? prev.filter(x => x !== it.label) : [...prev, it.label]);
                           } else if (isFor) {
-                            setMmFor(prev => prev.includes(it.label) ? prev.filter(x=>x!==it.label) : [...prev, it.label]);
+                            setMmFor(prev => prev.includes(it.label) ? prev.filter(x => x !== it.label) : [...prev, it.label]);
                           } else if (it.href) {
                             navigate(it.href);
                             setActiveMenu(null);
@@ -315,7 +319,7 @@ export const LandingPage: React.FC = () => {
                                       <stop offset="100%" stopColor="#f43f5e" />
                                     </linearGradient>
                                   </defs>
-                                  <path fill="url(#sjStar)" d="M12 2l1.8 4.9L19 8.2l-4 3.1 1.4 5.2L12 13.8 7.6 16.5 9 11.3 5 8.2l5.2-1.3L12 2z"/>
+                                  <path fill="url(#sjStar)" d="M12 2l1.8 4.9L19 8.2l-4 3.1 1.4 5.2L12 13.8 7.6 16.5 9 11.3 5 8.2l5.2-1.3L12 2z" />
                                 </svg>
                               )}
                               {it.label}
@@ -339,10 +343,10 @@ export const LandingPage: React.FC = () => {
                   )}
                   {/* Actions row */}
                   <div className="col-span-full flex items-center justify-end gap-3 pt-2">
-                    <button className="px-3 py-1.5 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm" onClick={()=>{ 
-                      setMmCategories([]); 
-                      setMmMetals([]); 
-                      setMmPrices([]); 
+                    <button className="px-3 py-1.5 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm" onClick={() => {
+                      setMmCategories([]);
+                      setMmMetals([]);
+                      setMmPrices([]);
                       setMmPurities([]);
                       setMmColors([]);
                       setMmEarringTypes([]);
@@ -351,14 +355,14 @@ export const LandingPage: React.FC = () => {
                       setMmBudgets([]);
                       setMmFor([]);
                     }}>Clear</button>
-                    <button className="px-3 py-1.5 rounded-md bg-brand-burgundy text-white hover:opacity-90 text-sm" onClick={()=>{
+                    <button className="px-3 py-1.5 rounded-md bg-brand-burgundy text-white hover:opacity-90 text-sm" onClick={() => {
                       const search = new URLSearchParams();
                       if (mmCategories.length) search.set('categories', mmCategories.join(','));
                       if (mmMetals.length) search.set('metal', mmMetals.join(','));
                       // Handle price filters - either from price ranges or budget filters
                       let minPrice = null;
                       let maxPrice = null;
-                      
+
                       // Check if we have direct price filters
                       if (mmPrices.length) {
                         // Use the first price filter (should only be one selected)
@@ -375,7 +379,7 @@ export const LandingPage: React.FC = () => {
                           minPrice = 100000;
                         }
                       }
-                      
+
                       // Check if we have budget filters (which should override direct price filters)
                       if (mmBudgets.length) {
                         // Use the first budget filter (should only be one selected)
@@ -392,11 +396,11 @@ export const LandingPage: React.FC = () => {
                           minPrice = 50000;
                         }
                       }
-                      
+
                       // Add price filters to search params if set
                       if (minPrice !== null) search.set('min_price', minPrice.toString());
                       if (maxPrice !== null) search.set('max_price', maxPrice.toString());
-                      
+
                       // Add additional filters to search params (maintain original case)
                       if (mmPurities.length) search.set('purity', mmPurities.join(','));
                       if (mmColors.length) search.set('color', mmColors.join(','));
@@ -414,32 +418,32 @@ export const LandingPage: React.FC = () => {
           </div>
         </div>
       </nav>
-      
+
       {/* Hero Section with Image Slider */}
       <section>
         <ImageSlider />
       </section>
-      
+
       {/* Categories Section */}
       <section className="py-16 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-         {/* Section Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.2 }}
-          transition={{ duration: 0.6, ease: 'easeOut' }}
-          className="text-center mb-12"
-        >
-          <h1 className="font-fraunces font-normal text-[40px] leading-[48px] text-black">
-            Our Exclusive Collections
-          </h1>
-          <p className="font-fraunces font-light text-[20px] leading-[28px] text-[#56544E] mt-2">
-             Discover our carefully curated selection of fine jewelry
-          </p>
-        </motion.div>
+          {/* Section Header */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.2 }}
+            transition={{ duration: 0.6, ease: 'easeOut' }}
+            className="text-center mb-12"
+          >
+            <h1 className="font-fraunces font-normal text-[40px] leading-[48px] text-black">
+              Our Exclusive Collections
+            </h1>
+            <p className="font-fraunces font-light text-[20px] leading-[28px] text-[#56544E] mt-2">
+              Discover our carefully curated selection of fine jewelry
+            </p>
+          </motion.div>
 
-          
+
           <motion.div
             initial="hidden"
             whileInView="show"
@@ -601,7 +605,7 @@ export const LandingPage: React.FC = () => {
               Discover our most sought-after pieces that are capturing hearts and setting trends.
             </p>
           </div>
-          
+
           <div className="grid grid-cols-1 gap-y-10 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
             {/* Product 1 */}
             <div className="group cursor-pointer" onClick={() => navigate('/products?category=pendants')}>
@@ -619,7 +623,7 @@ export const LandingPage: React.FC = () => {
           </div>
 
           <div className="text-center mt-10">
-            <button 
+            <button
               onClick={() => navigate('/products')}
               className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 transition-all duration-200"
             >
@@ -631,14 +635,14 @@ export const LandingPage: React.FC = () => {
           </div>
         </div>
       </section>
-      
+
       {/* Footer */}
       <footer className="bg-gray-900 mt-16">
         <div className="container-xl py-12 grid gap-10 md:grid-cols-3">
           <div>
             <div className="flex items-center gap-3 mb-4">
               <div className="rounded-xl w-8 h-8 flex items-center justify-center text-white"
-                   style={{ background: 'linear-gradient(135deg, #fbbf24, #d97706)' }}></div>
+                style={{ background: 'linear-gradient(135deg, #fbbf24, #d97706)' }}></div>
               <h3 className="text-xl font-bold font-serif text-white">SmartJewel</h3>
             </div>
             <p className="text-gray-400 leading-7 max-w-xs">

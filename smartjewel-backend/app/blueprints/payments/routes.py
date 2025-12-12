@@ -162,6 +162,13 @@ def create_razorpay_order():
     except Exception:
         pass
     customer = data.get("customer") or {}
+    # Ensure customer.userId is set if user is logged in
+    try:
+        uid = get_jwt_identity()
+        if uid and not customer.get("userId"):
+            customer["userId"] = uid
+    except Exception:
+        pass
     # Each item should include { id, name, qty, price, image }
     items = data.get("items") or []
     # Backfill image from product catalog when missing (ensures correct image is persisted with order)
@@ -338,6 +345,10 @@ def verify_razorpay_signature():
                     return out
 
                 now_time = _now(db)
+                # Ensure customer has userId
+                customer_data = order_doc.get("customer", {}) or {}
+                if uid and not customer_data.get("userId"):
+                    customer_data["userId"] = uid
                 order_record = {
                     "order_id": demo_order_id,
                     "user_id": _oid(uid) if uid else None,
@@ -349,7 +360,7 @@ def verify_razorpay_signature():
                     "razorpay_order_id": order_id,
                     "amount": order_doc.get("amount", 0),
                     "currency": order_doc.get("currency", "INR"),
-                    "customer": order_doc.get("customer", {}),
+                    "customer": customer_data,
                     "items": _ensure_item_images(order_doc.get("items", [])),
                     "statusHistory": [{"status": "created", "timestamp": now_time}, {"status": "paid", "timestamp": now_time, "by": "system:razorpay", "notes": "Payment verified"}],
                     "created_at": now_time,
@@ -488,6 +499,10 @@ def verify_razorpay_signature():
                 raise db_test_error
             
             # Create comprehensive order record
+            # Ensure customer has userId
+            customer_data = order_doc.get("customer", {}) or {}
+            if user_id and not customer_data.get("userId"):
+                customer_data["userId"] = user_id
             order_record = {
                 "order_id": demo_order_id,
                 "user_id": _oid(user_id) if user_id else None,
@@ -499,7 +514,7 @@ def verify_razorpay_signature():
                 "razorpay_order_id": order_id,
                 "amount": order_doc.get("amount", 0),
                 "currency": order_doc.get("currency", "INR"),
-                "customer": order_doc.get("customer", {}),
+                "customer": customer_data,
                 "items": order_doc.get("items", []),
                 "statusHistory": [{"status": "created", "timestamp": _now(db)}, {"status": "paid", "timestamp": _now(db), "by": "system:razorpay", "notes": "Payment verified"}],
                 "created_at": _now(db),

@@ -4,6 +4,7 @@ import { SearchBar } from './SearchBar';
 import { Search, Heart, ShoppingCart } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { useWishlist } from '../contexts/WishlistContext';
+import { NotificationBell } from './NotificationBell';
 
 const Navbar: React.FC = () => {
   const navigate = useNavigate();
@@ -32,7 +33,7 @@ const Navbar: React.FC = () => {
     <header className="sticky top-0 z-50 bg-white shadow-sm">
       <div className="max-w-7xl mx-auto px-4 md:px-8 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <button onClick={()=>navigate('/')} className="flex items-center gap-2">
+          <button onClick={() => navigate('/')} className="flex items-center gap-2">
             <img src="/logo192.png" alt="SmartJewel" className="h-8 w-auto" />
           </button>
           <nav className="hidden md:flex items-center gap-6 text-gray-700 font-medium">
@@ -44,7 +45,11 @@ const Navbar: React.FC = () => {
           </nav>
         </div>
         <div className="flex items-center gap-2">
-          <button className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50" onClick={()=>setShowSearch(s=>!s)} title="Search">
+
+          {/* Notifications */}
+          <NotificationBell />
+
+          <button className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50" onClick={() => setShowSearch(s => !s)} title="Search">
             <Search className="w-5 h-5" strokeWidth={1.5} />
           </button>
           <Link to="/wishlist" className="relative inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50" title="Wishlist">

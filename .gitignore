@@ -88,4 +88,10 @@ logs/
 # Local/IDE project folders
 .qodo/
 .zencoder/
+.claude/
 desktop.ini
+
+# Local batch/shell scripts
+start-*.bat
+*.bat
+!setup.bat

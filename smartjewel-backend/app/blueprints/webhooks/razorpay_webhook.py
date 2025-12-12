@@ -228,6 +228,12 @@ def handle_payment_event(db, event, event_type):
         if result.modified_count > 0:
             print(f"Order {order.get('orderId')} updated with payment status: {payment_status}")
 
+            # Send in-app notification for payment captured
+            if event_type == "payment.captured":
+                from app.services.notification_service import send_order_status_notification
+                updated_order = db.orders.find_one({"_id": order["_id"]})
+                send_order_status_notification(updated_order, "paid")
+
             # Send WhatsApp notification for captured payments
             if event_type == "payment.captured" and payment_status == "captured":
                 try:

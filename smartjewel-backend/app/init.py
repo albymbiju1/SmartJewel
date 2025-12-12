@@ -128,6 +128,10 @@ def create_app():
     from app.blueprints.store_manager.routes import bp as store_manager_bp
     app.register_blueprint(store_manager_bp)
 
+    # Notifications blueprint
+    from app.blueprints.notifications.routes import bp as notifications_bp
+    app.register_blueprint(notifications_bp)
+
     # Explicit static file serving route with CORS and cache control headers
     @app.route('/static/<path:filename>')
     def serve_static(filename):

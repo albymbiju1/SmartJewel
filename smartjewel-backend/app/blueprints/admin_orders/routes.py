@@ -294,8 +294,13 @@ def update_status(order_id: str):
 
     # Send notification if status changed to a notify-worthy status
     from app.services.notification_service import send_order_status_notification
+    print(f"[Admin Orders] Status change: {old_status} -> {new_status.lower()}")
     if old_status != new_status.lower():
-        send_order_status_notification(current_order, new_status.lower())
+        print(f"[Admin Orders] Calling send_order_status_notification for order {oid}")
+        result = send_order_status_notification(current_order, new_status.lower())
+        print(f"[Admin Orders] Notification result: {result}")
+    else:
+        print(f"[Admin Orders] Status unchanged, skipping notification")
 
     doc = db.orders.find_one({"_id": oid})
     return jsonify({"order": _normalize_order(doc)})

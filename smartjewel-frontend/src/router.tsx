@@ -28,6 +28,7 @@ import { CollectionsPage } from './pages/products/CollectionsPage';
 import { GiftingPage } from './pages/products/GiftingPage';
 import { ProductDetailPage } from './pages/products/ProductDetailPage';
 import { RequireAuth } from './components/AuthGuard';
+import { NotificationsPage } from './pages/NotificationsPage';
 import { CustomerGuard } from './components/CustomerGuard';
 import { WishlistPage } from './pages/products/WishlistPage';
 import { CartPage } from './pages/products/CartPage';
@@ -101,6 +102,7 @@ export const AppRouter: React.FC = () => (
       <Route path="/order-confirmation" element={<OrderConfirmationPage />} />
       <Route path="/my-orders" element={<RequireAuth><CustomerGuard><OrdersMyOrdersPage /></CustomerGuard></RequireAuth>} />
       <Route path="/order-details/:orderId" element={<RequireAuth><CustomerGuard><OrderDetailsPage /></CustomerGuard></RequireAuth>} />
+      <Route path="/notifications" element={<RequireAuth><NotificationsPage /></RequireAuth>} />
 
       {/* Profile (protected) */}
       <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />

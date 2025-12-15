@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Plus, Edit2, Trash2, Filter } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Filter, X } from 'lucide-react';
 
 interface RentalItem {
     _id: string;
@@ -31,6 +31,7 @@ export const RentalManagementPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [productSearchQuery, setProductSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('');
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
@@ -124,6 +125,7 @@ export const RentalManagementPage: React.FC = () => {
                 security_deposit: '',
                 status: 'available',
             });
+            setProductSearchQuery('');
             fetchRentals();
             alert('Rental item created successfully!');
         } catch (err) {
@@ -212,6 +214,13 @@ export const RentalManagementPage: React.FC = () => {
             </span>
         );
     };
+
+    const filteredProducts = products.filter(p =>
+        p.name.toLowerCase().includes(productSearchQuery.toLowerCase()) ||
+        p.category.toLowerCase().includes(productSearchQuery.toLowerCase())
+    );
+
+    const selectedProduct = products.find(p => p._id === formData.product_id);
 
     return (
         <div className="min-h-screen bg-gray-50 p-6">
@@ -372,91 +381,199 @@ export const RentalManagementPage: React.FC = () => {
                 </div>
             </div>
 
-            {/* Create Modal */}
+            {/* Enhanced Create Modal with Product Cards */}
             {showCreateModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-                        <div className="px-6 py-4 border-b border-gray-200">
-                            <h2 className="text-xl font-bold text-gray-900">Create Rental Item</h2>
+                    <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+                        {/* Modal Header */}
+                        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-amber-50 to-orange-50">
+                            <div>
+                                <h2 className="text-2xl font-bold text-gray-900">Create Rental Item</h2>
+                                <p className="text-sm text-gray-600 mt-1">Select a product and set rental pricing</p>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    setShowCreateModal(false);
+                                    setFormData({ product_id: '', rental_price_per_day: '', security_deposit: '', status: 'available' });
+                                    setProductSearchQuery('');
+                                }}
+                                className="text-gray-400 hover:text-gray-600"
+                            >
+                                <X className="w-6 h-6" />
+                            </button>
                         </div>
-                        <form onSubmit={handleCreateRental} className="px-6 py-4">
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Product
-                                    </label>
-                                    <select
-                                        value={formData.product_id}
-                                        onChange={(e) => setFormData({ ...formData, product_id: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
-                                        required
+
+                        {/* Selected Product Preview */}
+                        {selectedProduct && (
+                            <div className="px-6 py-4 bg-amber-50 border-b border-amber-200">
+                                <div className="flex items-center gap-4">
+                                    {selectedProduct.image && (
+                                        <img
+                                            src={selectedProduct.image}
+                                            alt={selectedProduct.name}
+                                            className="w-20 h-20 object-cover rounded-lg shadow-md"
+                                        />
+                                    )}
+                                    <div className="flex-1">
+                                        <div className="font-semibold text-gray-900 text-lg">{selectedProduct.name}</div>
+                                        <div className="text-sm text-gray-600 capitalize">{selectedProduct.category}</div>
+                                        {selectedProduct.price && (
+                                            <div className="text-sm text-amber-700 font-medium mt-1">
+                                                Product Value: ₹{selectedProduct.price.toLocaleString()}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <button
+                                        onClick={() => setFormData({ ...formData, product_id: '' })}
+                                        className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                     >
-                                        <option value="">Select a product</option>
-                                        {products.map((product) => (
-                                            <option key={product._id} value={product._id}>
-                                                {product.name} ({product.category})
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Rental Price (per day)
-                                    </label>
-                                    <input
-                                        type="number"
-                                        value={formData.rental_price_per_day}
-                                        onChange={(e) => setFormData({ ...formData, rental_price_per_day: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
-                                        placeholder="2500"
-                                        required
-                                        min="0"
-                                        step="0.01"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Security Deposit
-                                    </label>
-                                    <input
-                                        type="number"
-                                        value={formData.security_deposit}
-                                        onChange={(e) => setFormData({ ...formData, security_deposit: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
-                                        placeholder="50000"
-                                        required
-                                        min="0"
-                                        step="0.01"
-                                    />
+                                        Change Product
+                                    </button>
                                 </div>
                             </div>
+                        )}
 
-                            <div className="flex justify-end gap-3 mt-6">
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setShowCreateModal(false);
-                                        setFormData({
-                                            product_id: '',
-                                            rental_price_per_day: '',
-                                            security_deposit: '',
-                                            status: 'available',
-                                        });
-                                    }}
-                                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
-                                >
-                                    Create
-                                </button>
+                        {/* Product Selection Grid */}
+                        {!selectedProduct && (
+                            <div className="flex-1 overflow-hidden flex flex-col">
+                                {/* Search Bar */}
+                                <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                                        <input
+                                            type="text"
+                                            placeholder="Search products by name or category..."
+                                            className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                                            value={productSearchQuery}
+                                            onChange={(e) => setProductSearchQuery(e.target.value)}
+                                            autoFocus
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Product Grid */}
+                                <div className="flex-1 overflow-y-auto p-6">
+                                    {filteredProducts.length === 0 ? (
+                                        <div className="text-center py-12">
+                                            <div className="text-gray-400 mb-2">
+                                                <Search className="w-16 h-16 mx-auto" />
+                                            </div>
+                                            <p className="text-gray-600">No products found</p>
+                                            <p className="text-sm text-gray-500 mt-1">Try adjusting your search</p>
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                            {filteredProducts.map((product) => (
+                                                <button
+                                                    key={product._id}
+                                                    onClick={() => setFormData({ ...formData, product_id: product._id })}
+                                                    className="group text-left p-3 border-2 border-gray-200 rounded-xl hover:border-amber-500 hover:shadow-lg transition-all duration-200"
+                                                >
+                                                    {product.image ? (
+                                                        <img
+                                                            src={product.image}
+                                                            alt={product.name}
+                                                            className="w-full h-36 object-cover rounded-lg mb-3"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-full h-36 bg-gray-100 rounded-lg mb-3 flex items-center justify-center">
+                                                            <span className="text-gray-400 text-sm">No image</span>
+                                                        </div>
+                                                    )}
+                                                    <div className="font-medium text-sm text-gray-900 line-clamp-2 group-hover:text-amber-600 min-h-[2.5rem]">
+                                                        {product.name}
+                                                    </div>
+                                                    <div className="text-xs text-gray-500 mt-1.5 capitalize">
+                                                        {product.category}
+                                                    </div>
+                                                    {product.price && (
+                                                        <div className="text-sm text-amber-600 font-semibold mt-2">
+                                                            ₹{product.price.toLocaleString()}
+                                                        </div>
+                                                    )}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
-                        </form>
+                        )}
+
+                        {/* Pricing Form - Only show when product is selected */}
+                        {selectedProduct && (
+                            <form onSubmit={handleCreateRental} className="px-6 py-5 border-t border-gray-200 bg-gray-50">
+                                <div className="grid grid-cols-2 gap-4 mb-5">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                            Rental Price (per day) *
+                                        </label>
+                                        <div className="relative">
+                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">₹</span>
+                                            <input
+                                                type="number"
+                                                value={formData.rental_price_per_day}
+                                                onChange={(e) => setFormData({ ...formData, rental_price_per_day: e.target.value })}
+                                                className="w-full pl-8 pr-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                                                placeholder="2500"
+                                                required
+                                                min="0"
+                                                step="0.01"
+                                            />
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-1.5">💡 Typically 3-5% of product value/day</p>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                            Security Deposit *
+                                        </label>
+                                        <div className="relative">
+                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">₹</span>
+                                            <input
+                                                type="number"
+                                                value={formData.security_deposit}
+                                                onChange={(e) => setFormData({ ...formData, security_deposit: e.target.value })}
+                                                className="w-full pl-8 pr-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                                                placeholder="50000"
+                                                required
+                                                min="0"
+                                                step="0.01"
+                                            />
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-1.5">💡 Usually 100-150% of product value</p>
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-end gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowCreateModal(false);
+                                            setFormData({ product_id: '', rental_price_per_day: '', security_deposit: '', status: 'available' });
+                                            setProductSearchQuery('');
+                                        }}
+                                        className="px-5 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        className="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-lg hover:from-amber-700 hover:to-orange-700 transition-all shadow-md hover:shadow-lg font-medium"
+                                    >
+                                        Create Rental Item
+                                    </button>
+                                </div>
+                            </form>
+                        )}
+
+                        {/* Instruction Footer */}
+                        {!selectedProduct && (
+                            <div className="px-6 py-4 bg-blue-50 border-t border-blue-200">
+                                <p className="text-sm text-blue-800 text-center">
+                                    <strong>👆 Select a product above</strong> to set rental pricing and create the rental item
+                                </p>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

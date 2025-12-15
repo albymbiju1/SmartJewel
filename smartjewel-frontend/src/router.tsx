@@ -45,6 +45,9 @@ import { StoreAppointmentsPage } from './pages/store/StoreAppointmentsPage';
 import { AdvancedSearchPage } from './pages/products/AdvancedSearchPage';
 import FindStorePage from './pages/FindStorePage';
 import WhatsAppTestPage from './pages/WhatsAppTestPage';
+import { RentalsPage } from './pages/rentals/RentalsPage';
+import { RentalDetailPage } from './pages/rentals/RentalDetailPage';
+import { default as RentalManagementPage } from './pages/admin/RentalManagementPage';
 
 export const AppRouter: React.FC = () => (
   <Router>
@@ -70,6 +73,7 @@ export const AppRouter: React.FC = () => (
       <Route path="/admin/customers" element={<RequireAuth><CustomerManagementDashboard /></RequireAuth>} />
       {/* Removed Engagement and Logs routes as per user request */}
       <Route path="/admin/stores" element={<RequireAuth><StoreManagementPage /></RequireAuth>} />
+      <Route path="/admin/rentals" element={<RequireAuth><RentalManagementPage /></RequireAuth>} />
 
       {/* Store Manager Routes (protected) */}
       <Route path="/store/dashboard" element={<RequireAuth><StoreManagerDashboard /></RequireAuth>} />
@@ -99,6 +103,12 @@ export const AppRouter: React.FC = () => (
       <Route path="/cart" element={<CartPage />} />
       <Route path="/checkout" element={<RequireAuth><CheckoutPage /></RequireAuth>} />
       <Route path="/order-confirmation" element={<OrderConfirmationPage />} />
+
+      {/* Rental Routes (public for browsing) */}
+      <Route path="/rentals" element={<RentalsPage />} />
+      <Route path="/rentals/:rentalItemId" element={<RentalDetailPage />} />
+
+      {/* Order Routes */}
       <Route path="/my-orders" element={<RequireAuth><CustomerGuard><OrdersMyOrdersPage /></CustomerGuard></RequireAuth>} />
       <Route path="/order-details/:orderId" element={<RequireAuth><CustomerGuard><OrderDetailsPage /></CustomerGuard></RequireAuth>} />
 

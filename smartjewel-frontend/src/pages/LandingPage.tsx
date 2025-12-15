@@ -278,7 +278,11 @@ export const LandingPage: React.FC = () => {
 
                         const onClick = (e: React.MouseEvent) => {
                           e.preventDefault();
-                          if (isCategory) {
+                          // Check if item has a direct href first (highest priority)
+                          if (it.href) {
+                            navigate(it.href);
+                            setActiveMenu(null);
+                          } else if (isCategory) {
                             setMmCategories(prev => prev.includes(catSlug) ? prev.filter(x => x !== catSlug) : [...prev, catSlug]);
                           } else if (isMetal) {
                             setMmMetals(prev => prev.includes(metalSlug) ? prev.filter(x => x !== metalSlug) : [...prev, metalSlug]);
@@ -298,9 +302,6 @@ export const LandingPage: React.FC = () => {
                             setMmStyles(prev => prev.includes(it.label) ? prev.filter(x => x !== it.label) : [...prev, it.label]);
                           } else if (isFor) {
                             setMmFor(prev => prev.includes(it.label) ? prev.filter(x => x !== it.label) : [...prev, it.label]);
-                          } else if (it.href) {
-                            navigate(it.href);
-                            setActiveMenu(null);
                           }
                         };
                         return (

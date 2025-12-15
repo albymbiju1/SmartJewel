@@ -40,6 +40,7 @@ const Navbar: React.FC = () => {
             <Link to="/products" className="hover:text-amber-600">All Jewellery</Link>
             <Link to="/products?category=gold" className="hover:text-amber-600">Gold</Link>
             <Link to="/products?category=diamond" className="hover:text-amber-600">Diamond</Link>
+            <Link to="/rentals" className="hover:text-amber-600">Rent Jewellery</Link>
             <Link to="/products?category=wedding" className="hover:text-amber-600">Wedding</Link>
             <Link to="/products?category=gifting" className="hover:text-amber-600">Gifting</Link>
           </nav>

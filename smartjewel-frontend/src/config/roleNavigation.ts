@@ -33,6 +33,7 @@ export const ROLE_NAVIGATION: Record<string, RoleNavigation> = {
       { label: 'Sales', key: 'sales', href: '/admin/sales' },
       { label: 'Inventory', key: 'inventory_details', href: '/admin/inventory' },
       { label: 'Customers', key: 'customers', href: '/admin/customers' },
+      { label: 'Rentals', key: 'rentals', href: '/admin/rentals' },
       // Removed Engagement and Logs as per user request
     ],
     leftSidebarItems: [

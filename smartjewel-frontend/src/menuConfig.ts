@@ -6,6 +6,7 @@ export const NAV_TABS: { label: string; key: string }[] = [
   { label: 'All Jewellery', key: 'all' },
   { label: 'Gold', key: 'gold' },
   { label: 'Diamond', key: 'diamond' },
+  { label: 'Rent Jewellery', key: 'rentals' },
   { label: 'Wedding', key: 'wedding' },
   { label: 'Collections', key: 'collections' },
   { label: 'Gifting', key: 'gifting' },
@@ -90,12 +91,48 @@ export const MENU: Record<string, MenuData> = {
           { label: 'Solitaire' },
         ],
       },
-      { title: 'Earrings Types', items: [
-        { label: 'All Earrings' }, { label: 'Drop & Danglers' }, { label: 'Hoop & Huggies' }, { label: 'Studs & Tops' }
-      ] },
+      {
+        title: 'Earrings Types', items: [
+          { label: 'All Earrings' }, { label: 'Drop & Danglers' }, { label: 'Hoop & Huggies' }, { label: 'Studs & Tops' }
+        ]
+      },
       { title: 'Occasion', items: [{ label: 'Everyday' }, { label: 'Office' }, { label: 'Festive' }, { label: 'Wedding' }] },
     ],
     promo: { image: '/Slide3.jpg', title: 'Dazzling Diamonds', cta: 'Discover', href: '#' },
+  },
+  rentals: {
+    columns: [
+      {
+        title: 'Shop by Category',
+        items: [
+          { label: 'All Rentals', href: '/rentals' },
+          { label: 'Necklaces', href: '/rentals?category=necklace' },
+          { label: 'Earrings', href: '/rentals?category=earrings' },
+          { label: 'Bangles', href: '/rentals?category=bangles' },
+          { label: 'Rings', href: '/rentals?category=rings' },
+          { label: 'Maang Tikka', href: '/rentals?category=maang-tikka' },
+        ],
+      },
+      {
+        title: 'Rental Duration',
+        items: [
+          { label: '1-3 Days' },
+          { label: '4-7 Days' },
+          { label: '1-2 Weeks' },
+          { label: 'Monthly' },
+        ],
+      },
+      {
+        title: 'Shop by Price',
+        items: [
+          { label: 'Under ₹1,000/day' },
+          { label: '₹1,000 - ₹3,000/day' },
+          { label: '₹3,000 - ₹5,000/day' },
+          { label: '₹5,000+/day' },
+        ],
+      },
+    ],
+    promo: { image: '/Slide2.jpg', title: 'Premium Rental Collection', cta: 'Browse Rentals', href: '/rentals' },
   },
   wedding: {
     columns: [

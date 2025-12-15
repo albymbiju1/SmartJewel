@@ -19,6 +19,7 @@ from app.blueprints.admin_orders.routes import bp as admin_orders_bp
 from app.blueprints.webhooks.razorpay_webhook import bp as webhooks_bp
 from app.blueprints.store import bp as store_bp
 from app.blueprints.store_manager.routes import bp as store_manager_bp
+from app.blueprints.rentals.routes import bp as rentals_bp
 
 # ---- GLOBAL ObjectId JSON PATCH ----
 def default_json(obj):
@@ -131,6 +132,10 @@ def create_app():
     # Notifications blueprint
     from app.blueprints.notifications.routes import bp as notifications_bp
     app.register_blueprint(notifications_bp)
+
+    # Rentals blueprint
+    from app.blueprints.rentals.routes import bp as rentals_bp
+    app.register_blueprint(rentals_bp)
 
     # Explicit static file serving route with CORS and cache control headers
     @app.route('/static/<path:filename>')

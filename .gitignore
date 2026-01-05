@@ -95,3 +95,14 @@ desktop.ini
 start-*.bat
 *.bat
 !setup.bat
+
+# Images and media files
+smartjewel-backend/app/static/uploads/
+smartjewel-backend/app/static/transparent_cache/
+smartjewel-frontend/public/*.jpg
+smartjewel-frontend/public/*.jpeg
+smartjewel-frontend/public/*.png
+smartjewel-frontend/public/*.webp
+smartjewel-frontend/public/*.gif
+smartjewel-frontend/public/*.svg
+!smartjewel-frontend/public/vite.svg

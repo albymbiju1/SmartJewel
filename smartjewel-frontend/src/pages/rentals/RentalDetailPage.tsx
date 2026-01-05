@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Navbar from '../../components/Navbar';
+import { api } from '../../api';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface RentalDetail {
     _id: string;
@@ -8,6 +10,8 @@ interface RentalDetail {
     rental_price_per_day: number;
     security_deposit: number;
     status: string;
+    min_rental_days?: number;
+    max_rental_days?: number;
     product: {
         _id: string;
         name: string;
@@ -24,20 +28,42 @@ interface RentalDetail {
 export const RentalDetailPage: React.FC = () => {
     const { rentalItemId } = useParams<{ rentalItemId: string }>();
     const navigate = useNavigate();
+    const { user } = useAuth();
     const [rental, setRental] = useState<RentalDetail | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [showBookingModal, setShowBookingModal] = useState(false);
+
+    // Booking state
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const [duration, setDuration] = useState(0);
+    const [totalPrice, setTotalPrice] = useState(0);
+    const [bookingError, setBookingError] = useState<string | null>(null);
+    const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
-        // Check authentication status
-        const token = localStorage.getItem('access_token');
-        setIsAuthenticated(!!token);
-
         if (rentalItemId) {
             fetchRentalDetail();
         }
     }, [rentalItemId]);
+
+    // Calculate duration and price when dates change
+    useEffect(() => {
+        if (startDate && endDate && rental) {
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+            if (days > 0) {
+                setDuration(days);
+                setTotalPrice(days * rental.rental_price_per_day + rental.security_deposit);
+            } else {
+                setDuration(0);
+                setTotalPrice(0);
+            }
+        }
+    }, [startDate, endDate, rental]);
 
     const fetchRentalDetail = async () => {
         try {
@@ -56,6 +82,15 @@ export const RentalDetailPage: React.FC = () => {
             const data = await response.json();
             setRental(data);
             setError(null);
+
+            // Set default dates (tomorrow to day after)
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const dayAfter = new Date();
+            dayAfter.setDate(dayAfter.getDate() + 2);
+
+            setStartDate(tomorrow.toISOString().split('T')[0]);
+            setEndDate(dayAfter.toISOString().split('T')[0]);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An error occurred');
         } finally {
@@ -64,14 +99,60 @@ export const RentalDetailPage: React.FC = () => {
     };
 
     const handleProceedToRent = () => {
-        if (!isAuthenticated) {
-            // Store the current path to redirect back after login
+        if (!user) {
             localStorage.setItem('redirectAfterLogin', window.location.pathname);
             navigate('/login');
         } else {
-            // TODO: Implement rental booking flow
-            alert('Rental booking functionality will be implemented soon!');
+            setShowBookingModal(true);
         }
+    };
+
+    const handleCreateBooking = async () => {
+        if (!rental || !startDate || !endDate) return;
+
+        try {
+            setSubmitting(true);
+            setBookingError(null);
+
+            // Create booking
+            const response = await api.post('/api/rentals/bookings', {
+                rental_item_id: rental._id,
+                start_date: startDate,
+                end_date: endDate
+            });
+
+            const booking = response.data.booking;
+
+            // Redirect to payment
+            navigate('/rental-checkout', {
+                state: {
+                    bookingId: booking._id,
+                    rentalItem: rental,
+                    startDate,
+                    endDate,
+                    duration,
+                    totalPrice
+                }
+            });
+        } catch (err: any) {
+            const errorMsg = err.response?.data?.error || err.message || 'Failed to create booking';
+            setBookingError(errorMsg);
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const getTodayDate = () => {
+        const today = new Date();
+        return today.toISOString().split('T')[0];
+    };
+
+    const getMaxDate = () => {
+        const today = new Date();
+        const maxDays = rental?.max_rental_days || 30;
+        const maxDate = new Date();
+        maxDate.setDate(today.getDate() + 90); // 90 days advance booking
+        return maxDate.toISOString().split('T')[0];
     };
 
     if (loading) {
@@ -171,8 +252,8 @@ export const RentalDetailPage: React.FC = () => {
                             <div className="flex justify-between items-center py-3">
                                 <span className="text-gray-700">Status</span>
                                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${rental.status === 'available'
-                                        ? 'bg-green-100 text-green-800'
-                                        : 'bg-gray-100 text-gray-800'
+                                    ? 'bg-green-100 text-green-800'
+                                    : 'bg-gray-100 text-gray-800'
                                     }`}>
                                     {rental.status.charAt(0).toUpperCase() + rental.status.slice(1)}
                                 </span>
@@ -216,34 +297,21 @@ export const RentalDetailPage: React.FC = () => {
                             </div>
                         )}
 
-                        {/* Availability Calendar Placeholder */}
-                        <div className="bg-white rounded-lg shadow-sm p-6">
-                            <h2 className="text-xl font-semibold text-gray-900 mb-3">Availability Calendar</h2>
-                            <div className="bg-gray-50 rounded-lg p-8 text-center">
-                                <div className="text-gray-400 mb-2">
-                                    <svg className="mx-auto h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                    </svg>
-                                </div>
-                                <p className="text-gray-600">Availability calendar coming soon</p>
-                            </div>
-                        </div>
-
                         {/* Action Button */}
                         <div className="sticky bottom-0 bg-white rounded-lg shadow-sm p-6">
                             <button
                                 onClick={handleProceedToRent}
                                 disabled={rental.status !== 'available'}
                                 className={`w-full py-4 px-6 rounded-lg font-semibold text-lg transition-colors duration-200 ${rental.status === 'available'
-                                        ? 'bg-amber-600 hover:bg-amber-700 text-white'
-                                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                    ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                                     }`}
                             >
                                 {rental.status === 'available'
-                                    ? (isAuthenticated ? 'Proceed to Rent' : 'Login to Rent')
+                                    ? (user ? 'Proceed to Rent' : 'Login to Rent')
                                     : 'Currently Unavailable'}
                             </button>
-                            {!isAuthenticated && rental.status === 'available' && (
+                            {!user && rental.status === 'available' && (
                                 <p className="text-sm text-gray-600 text-center mt-2">
                                     You need to login to proceed with rental
                                 </p>
@@ -252,6 +320,115 @@ export const RentalDetailPage: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Booking Modal */}
+            {showBookingModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                        {/* Header */}
+                        <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-amber-50 to-orange-50">
+                            <h2 className="text-2xl font-bold text-gray-900">Book Rental</h2>
+                            <p className="text-sm text-gray-600 mt-1">{rental.product.name}</p>
+                        </div>
+
+                        {/* Content */}
+                        <div className="p-6 space-y-6">
+                            {/* Date Selection */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                        Start Date
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={startDate}
+                                        onChange={(e) => setStartDate(e.target.value)}
+                                        min={getTodayDate()}
+                                        max={getMaxDate()}
+                                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                        End Date
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={endDate}
+                                        onChange={(e) => setEndDate(e.target.value)}
+                                        min={startDate || getTodayDate()}
+                                        max={getMaxDate()}
+                                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Price Breakdown */}
+                            {duration > 0 && (
+                                <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                                    <h3 className="font-semibold text-gray-900 mb-3">Price Breakdown</h3>
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-gray-600">Duration</span>
+                                        <span className="font-medium">{duration} day{duration > 1 ? 's' : ''}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-gray-600">Rental Cost</span>
+                                        <span className="font-medium">₹{(duration * rental.rental_price_per_day).toLocaleString()}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-gray-600">Security Deposit</span>
+                                        <span className="font-medium">₹{rental.security_deposit.toLocaleString()}</span>
+                                    </div>
+                                    <div className="border-t pt-2 mt-2">
+                                        <div className="flex justify-between">
+                                            <span className="font-semibold text-gray-900">Total Amount</span>
+                                            <span className="text-xl font-bold text-amber-600">₹{totalPrice.toLocaleString()}</span>
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-2">
+                                        * Security deposit will be refunded after return
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Error Message */}
+                            {bookingError && (
+                                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                                    {bookingError}
+                                </div>
+                            )}
+
+                            {/* Info Box */}
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                <p className="text-sm text-blue-800">
+                                    <strong>Note:</strong> You'll be redirected to payment after confirming your booking dates.
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-3">
+                            <button
+                                onClick={() => setShowBookingModal(false)}
+                                className="px-5 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                disabled={submitting}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleCreateBooking}
+                                disabled={!duration || duration < (rental.min_rental_days || 1) || submitting}
+                                className={`px-5 py-2.5 rounded-lg font-medium transition-all ${duration && duration >= (rental.min_rental_days || 1) && !submitting
+                                    ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white hover:from-amber-700 hover:to-orange-700 shadow-md hover:shadow-lg'
+                                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                    }`}
+                            >
+                                {submitting ? 'Creating...' : 'Confirm & Pay'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -298,6 +298,55 @@ def verify_razorpay_signature():
 
         order_doc = db.orders.find_one({"provider": "razorpay", "provider_order.id": order_id}) if db is not None else {}
         demo_order_id = order_doc.get("receipt") if order_doc else f"SJ-{(order_id or '')[-8:].upper()}"
+        
+        # Check if this is a rental booking payment
+        booking_id = data.get("booking_id")
+        booking_type = data.get("booking_type")
+        
+        if booking_id and booking_type == "rental" and db is not None:
+            try:
+                # Record payment for rental booking
+                booking_oid = _oid(booking_id)
+                booking = db.rental_bookings.find_one({"_id": booking_oid})
+                
+                if booking:
+                    amount_paid = booking.get("total_amount", 0)
+                    
+                    # Record the payment
+                    payment_record = {
+                        "booking_id": booking_oid,
+                        "customer_id": booking.get("customer_id"),
+                        "payment_type": "rental_advance",  # Full payment upfront
+                        "amount": amount_paid,
+                        "payment_method": "razorpay",
+                        "payment_date": _now(db),
+                        "transaction_ref": payment_id,
+                        "received_by": None,  # System payment
+                        "notes": f"Razorpay payment {payment_id}",
+                        "created_at": _now(db)
+                    }
+                    db.rental_payments.insert_one(payment_record)
+                    
+                    # Update booking payment status
+                    db.rental_bookings.update_one(
+                        {"_id": booking_oid},
+                        {
+                            "$set": {
+                                "amount_paid": amount_paid,
+                                "payment_status": "paid",
+                                "payment_id": payment_id,
+                                "razorpay_order_id": order_id,
+                                "updated_at": _now(db)
+                            }
+                        }
+                    )
+                    print(f"✅ Rental booking {booking_id} payment recorded: ₹{amount_paid}")
+                else:
+                    print(f"⚠️ Rental booking {booking_id} not found")
+            except Exception as rental_err:
+                print(f"❌ Rental payment recording error: {str(rental_err)}")
+                import traceback
+                traceback.print_exc()
 
         if db is not None:
             try:

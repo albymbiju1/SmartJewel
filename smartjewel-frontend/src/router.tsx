@@ -48,6 +48,12 @@ import WhatsAppTestPage from './pages/WhatsAppTestPage';
 import { RentalsPage } from './pages/rentals/RentalsPage';
 import { RentalDetailPage } from './pages/rentals/RentalDetailPage';
 import { default as RentalManagementPage } from './pages/admin/RentalManagementPage';
+import RentalCheckoutPage from './pages/rentals/RentalCheckoutPage';
+import RentalBookingSuccessPage from './pages/rentals/RentalBookingSuccessPage';
+import MyRentalsPage from './pages/customer/MyRentalsPage';
+import MyRentalDetailPage from './pages/customer/MyRentalDetailPage';
+import { TryOnPage } from './pages/customer/TryOnPage';
+import { EarringTryOnPage } from './pages/customer/EarringTryOnPage';
 
 export const AppRouter: React.FC = () => (
   <Router>
@@ -103,10 +109,17 @@ export const AppRouter: React.FC = () => (
       <Route path="/cart" element={<CartPage />} />
       <Route path="/checkout" element={<RequireAuth><CheckoutPage /></RequireAuth>} />
       <Route path="/order-confirmation" element={<OrderConfirmationPage />} />
+      <Route path="/try-on/:productId" element={<TryOnPage />} />
+      <Route path="/try-on-earring/:productId" element={<EarringTryOnPage />} />
 
       {/* Rental Routes (public for browsing) */}
+      {/* Rentals */}
       <Route path="/rentals" element={<RentalsPage />} />
       <Route path="/rentals/:rentalItemId" element={<RentalDetailPage />} />
+      <Route path="/rental-checkout" element={<RequireAuth><RentalCheckoutPage /></RequireAuth>} />
+      <Route path="/rental-booking-success" element={<RequireAuth><RentalBookingSuccessPage /></RequireAuth>} />
+      <Route path="/my-rentals" element={<RequireAuth><MyRentalsPage /></RequireAuth>} />
+      <Route path="/my-rentals/:bookingId" element={<RequireAuth><MyRentalDetailPage /></RequireAuth>} />
 
       {/* Order Routes */}
       <Route path="/my-orders" element={<RequireAuth><CustomerGuard><OrdersMyOrdersPage /></CustomerGuard></RequireAuth>} />

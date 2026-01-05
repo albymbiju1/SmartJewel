@@ -1,0 +1,17 @@
+Great! I can see the issue. Let me check your Flask terminal output:
+
+**The Flask server started successfully**, but it may not have picked up the new `booking_routes.py` file because it was created after the server started.
+
+**Solution: Restart the Flask server**
+
+1. Stop the Flask server (Ctrl+C in the terminal)
+2. Start it again: `flask run`
+
+This will load the new booking routes blueprint.
+
+**To verify it worked, you should see:**
+- No import errors
+- MongoDB connected successfully
+- The server running on port 5000
+
+Once restarted, try the booking flow again!

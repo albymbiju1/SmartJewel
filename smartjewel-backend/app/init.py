@@ -108,6 +108,10 @@ def create_app():
     # Catalog (advanced search & suggestions) blueprint
     from app.blueprints.catalog.routes import bp as catalog_bp
     app.register_blueprint(catalog_bp)
+    
+    # Virtual Try-On blueprint
+    from app.blueprints.catalog.virtual_tryon import virtual_tryon_bp
+    app.register_blueprint(virtual_tryon_bp)
 
     # Orders API (customer-facing)
     from app.blueprints.orders.routes import bp as orders_bp
@@ -136,6 +140,10 @@ def create_app():
     # Rentals blueprint
     from app.blueprints.rentals.routes import bp as rentals_bp
     app.register_blueprint(rentals_bp)
+    
+    # Rental Bookings blueprint
+    from app.blueprints.rentals.booking_routes import bp_bookings as rental_bookings_bp
+    app.register_blueprint(rental_bookings_bp)
 
     # Explicit static file serving route with CORS and cache control headers
     @app.route('/static/<path:filename>')

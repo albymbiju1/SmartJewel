@@ -466,7 +466,16 @@ export const RentalManagementPage: React.FC = () => {
                                             {filteredProducts.map((product) => (
                                                 <button
                                                     key={product._id}
-                                                    onClick={() => setFormData({ ...formData, product_id: product._id })}
+                                                    onClick={() => {
+                                                        // Auto-calculate security deposit as 50% of product price
+                                                        const productPrice = product.price || 0;
+                                                        const autoSecurityDeposit = Math.round(productPrice * 0.5);
+                                                        setFormData({
+                                                            ...formData,
+                                                            product_id: product._id,
+                                                            security_deposit: autoSecurityDeposit.toString()
+                                                        });
+                                                    }}
                                                     className="group text-left p-3 border-2 border-gray-200 rounded-xl hover:border-amber-500 hover:shadow-lg transition-all duration-200"
                                                 >
                                                     {product.image ? (

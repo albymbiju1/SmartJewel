@@ -527,6 +527,7 @@ def options_forecast_total():
 @require_any_role("Admin", "Staff_L3")
 @jwt_required()
 def forecast_total_sales():
+    """Forecast total sales with improved algorithm"""  # Improved forecasting
     db = current_app.extensions.get('mongo_db')
     if db is None:
         return jsonify({"error": "db_unavailable"}), 503
@@ -576,21 +577,127 @@ def forecast_total_sales():
     history = [{"date": d.get("date"), "qty": float(d.get("qty") or 0)} for d in cursor if d.get("date")]
 
     def _fallback_forecast(history_points, horizon_days):
-        # Compute naive forecast using average of last up to 7 days
-        recent_values = [p["qty"] for p in history_points[-7:]] if history_points else []
-        baseline = mean(recent_values) if recent_values else 0.0
-        # Determine last date in history to start forecasting from next day
-        last_date_str = history_points[-1]["date"] if history_points else datetime.utcnow().strftime("%Y-%m-%d")
+        """
+        Improved forecast using:
+        - Linear trend analysis
+        - Day-of-week seasonality
+        - Exponential smoothing
+        - Growth rate consideration
+        """
+        if not history_points or len(history_points) < 2:
+            # Not enough data, use simple default
+            baseline = history_points[0]["qty"] if history_points else 0.0
+            last_date_str = history_points[-1]["date"] if history_points else datetime.utcnow().strftime("%Y-%m-%d")
+            last_date = datetime.strptime(last_date_str, "%Y-%m-%d")
+            daily = []
+            for i in range(1, horizon_days + 1):
+                day = last_date + timedelta(days=i)
+                daily.append({
+                    "date": day.strftime("%Y-%m-%d"),
+                    "forecast": round(float(baseline), 3)
+                })
+            sum_7 = round(sum([d["forecast"] for d in daily[:7]]), 3)
+            sum_30 = round(sum([d["forecast"] for d in daily[:30]]), 3)
+            return {
+                "horizon_days": horizon_days,
+                "daily": daily,
+                "totals": {"sum_7": sum_7, "sum_30": sum_30}
+            }
+        
+        print(f"[FORECAST] Using IMPROVED fallback algorithm with {len(history_points)} history points")
+        
+        # Calculate linear trend using least squares regression
+        n = len(history_points)
+        x_values = list(range(n))
+        y_values = [p["qty"] for p in history_points]
+        
+        x_mean = mean(x_values)
+        y_mean = mean(y_values)
+        
+        # Calculate slope and intercept
+        numerator = sum((x_values[i] - x_mean) * (y_values[i] - y_mean) for i in range(n))
+        denominator = sum((x_values[i] - x_mean) ** 2 for i in range(n))
+        
+        if denominator != 0:
+            slope = numerator / denominator
+            intercept = y_mean - slope * x_mean
+        else:
+            slope = 0
+            intercept = y_mean
+        
+        # Calculate day-of-week patterns (0=Monday, 6=Sunday)
+        day_of_week_sales = {i: [] for i in range(7)}
+        for point in history_points:
+            date_obj = datetime.strptime(point["date"], "%Y-%m-%d")
+            day_of_week = date_obj.weekday()
+            day_of_week_sales[day_of_week].append(point["qty"])
+        
+        # Calculate average for each day of week, fallback to overall mean
+        day_of_week_avg = {}
+        overall_avg = mean(y_values)
+        for day in range(7):
+            if day_of_week_sales[day]:
+                day_of_week_avg[day] = mean(day_of_week_sales[day])
+            else:
+                day_of_week_avg[day] = overall_avg
+        
+        # Calculate exponential weighted moving average for recent trend
+        # Give more weight to recent data
+        if len(y_values) >= 7:
+            weights = [0.05, 0.07, 0.10, 0.13, 0.17, 0.22, 0.26]  # Last 7 days, recent has more weight
+            recent_7 = y_values[-7:]
+            ewma = sum(recent_7[i] * weights[i] for i in range(len(recent_7)))
+        else:
+            ewma = mean(y_values[-3:]) if len(y_values) >= 3 else y_values[-1]
+        
+        # Calculate growth rate from comparing recent vs earlier periods
+        if len(y_values) >= 14:
+            first_half = mean(y_values[:7])
+            second_half = mean(y_values[-7:])
+            if first_half > 0:
+                growth_rate = (second_half - first_half) / first_half
+            else:
+                growth_rate = 0
+        else:
+            growth_rate = 0
+        
+        # Determine last date in history
+        last_date_str = history_points[-1]["date"]
         last_date = datetime.strptime(last_date_str, "%Y-%m-%d")
+        
+        # Generate forecasts
         daily = []
         for i in range(1, horizon_days + 1):
             day = last_date + timedelta(days=i)
+            day_of_week = day.weekday()
+            
+            # Base forecast from trend line
+            trend_value = slope * (n + i - 1) + intercept
+            
+            # Apply day-of-week seasonality factor
+            seasonality_factor = day_of_week_avg[day_of_week] / overall_avg if overall_avg > 0 else 1.0
+            
+            # Blend EWMA with trend (60% EWMA for stability, 40% trend for direction)
+            blended_base = 0.6 * ewma + 0.4 * trend_value
+            
+            # Apply seasonality
+            forecast_value = blended_base * seasonality_factor
+            
+            # Apply gradual growth (dampen growth rate over time to be conservative)
+            growth_impact = growth_rate * (1 - (i / horizon_days) * 0.5)  # Dampen growth over time
+            forecast_value = forecast_value * (1 + growth_impact)
+            
+            # Ensure non-negative
+            forecast_value = max(0, forecast_value)
+            
             daily.append({
                 "date": day.strftime("%Y-%m-%d"),
-                "forecast": round(float(baseline), 3)
+                "forecast": round(float(forecast_value), 3)
             })
+        
         sum_7 = round(sum([d["forecast"] for d in daily[:7]]), 3)
         sum_30 = round(sum([d["forecast"] for d in daily[:30]]), 3)
+        
         return {
             "horizon_days": horizon_days,
             "daily": daily,
@@ -598,6 +705,7 @@ def forecast_total_sales():
         }
 
     try:
+        print("[FORECAST] Attempting to contact ML service...")
         # Build ML service URL robustly: accept full endpoint or a base URL
         default_path = "/ml/inventory/forecast"
         ml_url_env = current_app.config.get("ML_FORECAST_URL")

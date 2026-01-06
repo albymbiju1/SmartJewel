@@ -142,9 +142,9 @@ export function EarringTryOn({ productId }: EarringTryOnProps) {
         );
 
         // Earring size - increased for better visibility
-        const earringSize = earHeight * 1.2; // Increased from 0.6 to 1.2
+        const earringSize = earHeight * 1.2;
 
-        // Draw the earring (centered at earlobe)
+        // Draw the earring hanging from earlobe
         ctx.save();
         ctx.translate(x, y);
 

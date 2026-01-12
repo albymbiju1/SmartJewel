@@ -54,6 +54,8 @@ import MyRentalsPage from './pages/customer/MyRentalsPage';
 import MyRentalDetailPage from './pages/customer/MyRentalDetailPage';
 import { TryOnPage } from './pages/customer/TryOnPage';
 import { EarringTryOnPage } from './pages/customer/EarringTryOnPage';
+import { BraceletTryOnPage } from './pages/customer/BraceletTryOnPage';
+import { BangleTryOnPage } from './pages/customer/BangleTryOnPage';
 
 export const AppRouter: React.FC = () => (
   <Router>
@@ -111,6 +113,8 @@ export const AppRouter: React.FC = () => (
       <Route path="/order-confirmation" element={<OrderConfirmationPage />} />
       <Route path="/try-on/:productId" element={<TryOnPage />} />
       <Route path="/try-on-earring/:productId" element={<EarringTryOnPage />} />
+      <Route path="/try-on-bracelet/:productId" element={<BraceletTryOnPage />} />
+      <Route path="/try-on-bangle/:productId" element={<BangleTryOnPage />} />
 
       {/* Rental Routes (public for browsing) */}
       {/* Rentals */}

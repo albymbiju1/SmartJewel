@@ -132,7 +132,18 @@ export function EarringTryOn({ productId }: EarringTryOnProps) {
         const earBottom = landmarks[earLandmarks.bottom];
         const earTop = landmarks[earLandmarks.top];
 
+        // Check if ear is within reasonable bounds (not at extreme edge when turned away)
+        const isWithinBounds = side === 'left'
+            ? earBottom.x < 0.9  // Left ear shouldn't be too far right
+            : earBottom.x > 0.1; // Right ear shouldn't be too far left
+
+        // Don't draw if ear is out of bounds (turned away from camera)
+        if (!isWithinBounds) {
+            return;
+        }
+
         // Calculate position on mirrored canvas
+        // Video is mirrored (ctx.scale(-1, 1)), so we need (1-x) to get correct position
         const x = (1 - earBottom.x) * canvasRef.current!.width;
         const y = earBottom.y * canvasRef.current!.height;
 
@@ -148,13 +159,26 @@ export function EarringTryOn({ productId }: EarringTryOnProps) {
         ctx.save();
         ctx.translate(x, y);
 
+        // Crop the paired earring image to show only one earring
+        // If image shows both earrings side-by-side, split it in half
+        const imgWidth = earringImage.width;
+        const imgHeight = earringImage.height;
+
+        // Determine which half of the image to use
+        const sourceX = side === 'left' ? 0 : imgWidth / 2;
+        const sourceY = 0;
+        const sourceWidth = imgWidth / 2; // Use half the image width
+        const sourceHeight = imgHeight;
+
         // Draw earring image - offset to hang properly from lobe
+        // Using 9-parameter drawImage: (image, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight)
         ctx.drawImage(
             earringImage,
+            sourceX, sourceY, sourceWidth, sourceHeight, // Source rectangle (crop)
             -earringSize / 2,
-            earringSize * 0.35, // Fine-tuned offset for optimal hanging position
+            earringSize * 0.5, // Increased offset to hang lower from earlobe
             earringSize,
-            earringSize
+            earringSize // Destination rectangle (display)
         );
         ctx.restore();
     }

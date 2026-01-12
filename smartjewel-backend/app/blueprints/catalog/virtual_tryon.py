@@ -19,6 +19,50 @@ CACHE_DIR = Path(__file__).parent.parent.parent / "static" / "transparent_cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def remove_interior_background(image: Image.Image, white_threshold: int = 240) -> Image.Image:
+    """
+    Remove white/light backgrounds from the interior of hollow objects (like bangles).
+    
+    This function makes light-colored pixels transparent, which is useful for
+    removing white backgrounds inside ring-shaped jewelry that rembg doesn't handle.
+    
+    Args:
+        image: PIL Image with RGBA mode
+        white_threshold: Pixels with RGB values above this become transparent (0-255)
+        
+    Returns:
+        PIL Image with interior whites removed
+    """
+    import numpy as np
+    
+    if image.mode != 'RGBA':
+        image = image.convert('RGBA')
+    
+    # Convert to numpy array for faster processing
+    data = np.array(image)
+    
+    # Get RGB channels
+    r, g, b, a = data[:, :, 0], data[:, :, 1], data[:, :, 2], data[:, :, 3]
+    
+    # Detect white/light pixels: all RGB values above threshold
+    white_areas = (r > white_threshold) & (g > white_threshold) & (b > white_threshold)
+    
+    # Make white areas transparent
+    a[white_areas] = 0
+    
+    # Update alpha channel
+    data[:, :, 3] = a
+    
+    # Convert back to PIL Image
+    result = Image.fromarray(data, 'RGBA')
+    
+    logger.info("interior_background_removed", 
+               white_threshold=white_threshold,
+               transparent_pixels_added=np.sum(white_areas))
+    
+    return result
+
+
 def get_cached_path(product_id: str) -> Path:
     """Get the cache file path for a processed image."""
     return CACHE_DIR / f"{product_id}.webp"
@@ -38,13 +82,18 @@ def remove_background(image: Image.Image) -> Image.Image:
         # Lazy import to avoid blocking Flask startup
         from rembg import remove
         
+        logger.info("starting_background_removal", image_mode=image.mode, image_size=image.size)
+        
         # Convert to bytes for rembg processing
         img_byte_arr = io.BytesIO()
         image.save(img_byte_arr, format='PNG')
+        img_size_before = img_byte_arr.tell()
         img_byte_arr.seek(0)
         
         # Remove background
+        logger.info("calling_rembg", input_size_bytes=img_size_before)
         output = remove(img_byte_arr.read())
+        logger.info("rembg_completed", output_size_bytes=len(output))
         
         # Convert back to PIL Image
         result = Image.open(io.BytesIO(output))
@@ -52,11 +101,30 @@ def remove_background(image: Image.Image) -> Image.Image:
         # Ensure RGBA mode for transparency
         if result.mode != 'RGBA':
             result = result.convert('RGBA')
-            
+        
+        logger.info("background_removal_success", 
+                   has_alpha=result.mode == 'RGBA',
+                   output_mode=result.mode,
+                   output_size=result.size)
+        
+        # Additional post-processing: Remove interior white backgrounds
+        # This is crucial for hollow jewelry like bangles/rings
+        logger.info("applying_interior_background_removal")
+        result = remove_interior_background(result, white_threshold=240)
+        
         return result
+    except ImportError as e:
+        logger.error("rembg_not_installed", error=str(e))
+        # Fallback: return original image converted to RGBA with white background removed manually
+        if image.mode != 'RGBA':
+            image = image.convert('RGBA')
+        return image
     except Exception as e:
-        logger.error("background_removal_failed", error=str(e))
-        raise
+        logger.error("background_removal_failed", error=str(e), error_type=type(e).__name__)
+        # Fallback: return original image
+        if image.mode != 'RGBA':
+            image = image.convert('RGBA')
+        return image
 
 
 @virtual_tryon_bp.route('/api/product/<product_id>/transparent', methods=['GET'])

@@ -91,9 +91,27 @@ export const MyRentalsPage: React.FC = () => {
 
             <div className="container mx-auto px-6 py-8">
                 {/* Header */}
-                <div className="mb-8">
+                <div className="mb-6">
                     <h1 className="text-3xl font-bold text-gray-900">My Rental Bookings</h1>
                     <p className="text-gray-600 mt-1">View and manage your jewelry rentals</p>
+                </div>
+
+                {/* Tab Navigation */}
+                <div className="mb-6 border-b border-gray-200">
+                    <nav className="flex gap-8">
+                        <button
+                            onClick={() => navigate('/rentals')}
+                            className="pb-4 px-1 border-b-2 border-transparent text-gray-600 hover:text-amber-600 hover:border-amber-300 font-medium transition-colors"
+                        >
+                            Browse Rentals
+                        </button>
+                        <button
+                            onClick={() => navigate('/my-rentals')}
+                            className="pb-4 px-1 border-b-2 border-amber-600 text-amber-600 font-medium transition-colors"
+                        >
+                            My Bookings
+                        </button>
+                    </nav>
                 </div>
 
                 {/* Filters */}
@@ -102,8 +120,8 @@ export const MyRentalsPage: React.FC = () => {
                         <button
                             onClick={() => setStatusFilter('')}
                             className={`px-4 py-2 rounded-lg font-medium transition-colors ${statusFilter === ''
-                                    ? 'bg-amber-600 text-white'
-                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                ? 'bg-amber-600 text-white'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                 }`}
                         >
                             All
@@ -111,8 +129,8 @@ export const MyRentalsPage: React.FC = () => {
                         <button
                             onClick={() => setStatusFilter('confirmed')}
                             className={`px-4 py-2 rounded-lg font-medium transition-colors ${statusFilter === 'confirmed'
-                                    ? 'bg-amber-600 text-white'
-                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                ? 'bg-amber-600 text-white'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                 }`}
                         >
                             Confirmed
@@ -120,8 +138,8 @@ export const MyRentalsPage: React.FC = () => {
                         <button
                             onClick={() => setStatusFilter('active')}
                             className={`px-4 py-2 rounded-lg font-medium transition-colors ${statusFilter === 'active'
-                                    ? 'bg-amber-600 text-white'
-                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                ? 'bg-amber-600 text-white'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                 }`}
                         >
                             Active
@@ -129,8 +147,8 @@ export const MyRentalsPage: React.FC = () => {
                         <button
                             onClick={() => setStatusFilter('completed')}
                             className={`px-4 py-2 rounded-lg font-medium transition-colors ${statusFilter === 'completed'
-                                    ? 'bg-amber-600 text-white'
-                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                ? 'bg-amber-600 text-white'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                 }`}
                         >
                             Completed

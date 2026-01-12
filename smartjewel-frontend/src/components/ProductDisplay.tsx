@@ -557,9 +557,16 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
                               e.stopPropagation();
                               // Route to appropriate try-on page based on category
                               const category = product.category?.toLowerCase() || '';
-                              const route = category.includes('earring')
-                                ? `/try-on-earring/${product._id}`
-                                : `/try-on/${product._id}`;
+                              let route = `/try-on/${product._id}`; // Default: rings
+
+                              if (category.includes('earring')) {
+                                route = `/try-on-earring/${product._id}`;
+                              } else if (category.includes('bangle')) {
+                                route = `/try-on-bangle/${product._id}`;
+                              } else if (category.includes('bracelet')) {
+                                route = `/try-on-bracelet/${product._id}`;
+                              }
+
                               navigate(route);
                             }}
                           >

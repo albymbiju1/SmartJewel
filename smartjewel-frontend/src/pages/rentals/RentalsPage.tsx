@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 import Navbar from '../../components/Navbar';
 
 interface RentalItem {
@@ -26,6 +27,7 @@ interface Pagination {
 
 export const RentalsPage: React.FC = () => {
     const navigate = useNavigate();
+    const { user } = useAuth();
     const [rentals, setRentals] = useState<RentalItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -77,10 +79,30 @@ export const RentalsPage: React.FC = () => {
 
             <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
                 {/* Header */}
-                <div className="mb-8">
+                <div className="mb-6">
                     <h1 className="text-4xl font-bold text-gray-900 mb-2">Rent Jewellery</h1>
                     <p className="text-gray-600">Discover our exquisite collection available for rental</p>
                 </div>
+
+                {/* Tab Navigation (only for authenticated users) */}
+                {user && (
+                    <div className="mb-6 border-b border-gray-200">
+                        <nav className="flex gap-8">
+                            <button
+                                onClick={() => navigate('/rentals')}
+                                className="pb-4 px-1 border-b-2 border-amber-600 text-amber-600 font-medium transition-colors"
+                            >
+                                Browse Rentals
+                            </button>
+                            <button
+                                onClick={() => navigate('/my-rentals')}
+                                className="pb-4 px-1 border-b-2 border-transparent text-gray-600 hover:text-amber-600 hover:border-amber-300 font-medium transition-colors"
+                            >
+                                My Bookings
+                            </button>
+                        </nav>
+                    </div>
+                )}
 
                 {/* Loading State */}
                 {loading && (
@@ -186,8 +208,8 @@ export const RentalsPage: React.FC = () => {
                                             key={page}
                                             onClick={() => handlePageChange(page)}
                                             className={`px-4 py-2 rounded-lg ${page === pagination.page
-                                                    ? 'bg-amber-600 text-white'
-                                                    : 'border border-gray-300 hover:bg-gray-50'
+                                                ? 'bg-amber-600 text-white'
+                                                : 'border border-gray-300 hover:bg-gray-50'
                                                 }`}
                                         >
                                             {page}

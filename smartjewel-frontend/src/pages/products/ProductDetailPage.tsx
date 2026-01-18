@@ -3,6 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api, API_BASE_URL } from '../../api';
 import { stockService, ProductWithStock } from '../../services/stockService';
 import { recommendationService, Recommendation } from '../../services/recommendationService';
+import { BraceletTryOn } from '../../components/BraceletTryOn';
+import { EarringTryOn } from '../../components/EarringTryOn';
+import { VirtualTryOn } from '../../components/VirtualTryOn';
 
 interface Product {
   _id: string;
@@ -37,10 +40,11 @@ export const ProductDetailPage: React.FC = () => {
   const [reviews, setReviews] = useState<{ user: string; rating: number; comment: string; date: string }[]>([]);
   const [recommendedProducts, setRecommendedProducts] = useState<Recommendation[]>([]);
   const [loadingRecommendations, setLoadingRecommendations] = useState(false);
+  const [showTryOn, setShowTryOn] = useState(false);
 
   // Version timestamp for cache busting
   const imageVersion = useMemo(() => Date.now(), []);
-  
+
   const getImageUrl = (imagePath?: string) => {
     if (!imagePath) return '';
     console.log('Processing image path:', imagePath);
@@ -62,9 +66,9 @@ export const ProductDetailPage: React.FC = () => {
         console.log('No product ID provided');
         return;
       }
-      
+
       console.log('Loading product with ID:', id);
-      
+
       try {
         setIsLoading(true);
         // Use the public products endpoint to get all products and find by ID
@@ -76,12 +80,12 @@ export const ProductDetailPage: React.FC = () => {
         const foundProduct = products.find((item: Product) => item._id === id);
         console.log('Found product:', foundProduct);
         setProduct(foundProduct || null);
-        
+
         if (foundProduct) {
           console.log('Updating product features in recommendation service');
           // Update product features in recommendation service
           recommendationService.updateProductFeatures(products);
-          
+
           // Track user interaction when viewing product
           recommendationService.trackInteraction({
             productId: foundProduct._id,
@@ -91,10 +95,10 @@ export const ProductDetailPage: React.FC = () => {
             metal: foundProduct.metal,
             purity: foundProduct.purity
           });
-          
+
           // Load stock data for this product
           await loadStockData(foundProduct);
-          
+
           // Load recommendations for this product
           console.log('Loading recommendations for product:', foundProduct._id);
           await loadRecommendations(foundProduct._id);
@@ -111,7 +115,7 @@ export const ProductDetailPage: React.FC = () => {
     const loadStockData = async (product: Product) => {
       try {
         setStockLoading(true);
-        
+
         // Use the quantity directly from the product since it's now included in the API response
         const quantity = product.quantity || 0;
         const productWithStockData: ProductWithStock = {
@@ -120,7 +124,7 @@ export const ProductDetailPage: React.FC = () => {
           stockStatus: stockService.getStockStatus(quantity),
           stockDisplayText: stockService.getStockDisplayText(quantity)
         };
-        
+
         setProductWithStock(productWithStockData);
       } catch (error) {
         console.error('Failed to load stock data:', error);
@@ -143,24 +147,24 @@ export const ProductDetailPage: React.FC = () => {
         console.log('Loading recommendations for product:', productId);
         const recommendations = await recommendationService.getSimilarProducts(productId, 4);
         console.log('Received recommendations:', recommendations);
-        
+
         // Fetch detailed product information for recommendations
         if (recommendations.length > 0) {
           console.log('Raw recommendations:', recommendations);
           const productIds = recommendations.map(rec => rec.productId);
           const productDetails = await recommendationService.getProductDetails(productIds);
           console.log('Product details for recommendations:', productDetails);
-          
+
           // Merge recommendation data with product details
           const enrichedRecommendations = recommendations.map(rec => {
             const details = productDetails.find((p: any) => p._id === rec.productId);
             console.log('Processing recommendation:', rec);
             console.log('Found product details:', details);
-            
+
             // Use the image from product details if available, otherwise keep the original
             const imageUrl = details?.image || rec.image;
             console.log('Final image URL:', imageUrl);
-            
+
             return {
               ...rec,
               name: details?.name || rec.name || `Product ${rec.productId.substring(0, 8)}`,
@@ -168,7 +172,7 @@ export const ProductDetailPage: React.FC = () => {
               price: details?.price || rec.price || Math.floor(Math.random() * 100000) + 10000
             };
           });
-          
+
           console.log('Enriched recommendations:', enrichedRecommendations);
           setRecommendedProducts(enrichedRecommendations);
         } else {
@@ -255,19 +259,19 @@ export const ProductDetailPage: React.FC = () => {
                 <button
                   className="absolute top-3 right-3 bg-white/90 rounded-full p-2 shadow"
                   title="Add to Wishlist"
-                  onClick={()=>{
+                  onClick={() => {
                     const ev = new CustomEvent('sj:toggleWishlist', { detail: { productId: product._id, name: product.name, price: product.price, image: product.image, metal: product.metal, purity: product.purity } });
                     window.dispatchEvent(ev);
                   }}
                 >
-                  <svg className="w-5 h-5 text-rose-600" viewBox="0 0 24 24" fill="currentColor"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 3 13.352 3 10.75 3 8.264 4.988 6.5 7.2 6.5c1.278 0 2.516.492 3.445 1.378A4.87 4.87 0 0114.1 6.5c2.212 0 4.1 1.764 4.1 4.25 0 2.602-1.688 4.61-3.99 6.757a25.178 25.178 0 01-4.244 3.17 15.247 15.247 0 01-.383.218l-.022.012-.007.003-.003.002a.75.75 0 01-.66 0l-.003-.002z"/></svg>
+                  <svg className="w-5 h-5 text-rose-600" viewBox="0 0 24 24" fill="currentColor"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 3 13.352 3 10.75 3 8.264 4.988 6.5 7.2 6.5c1.278 0 2.516.492 3.445 1.378A4.87 4.87 0 0114.1 6.5c2.212 0 4.1 1.764 4.1 4.25 0 2.602-1.688 4.61-3.99 6.757a25.178 25.178 0 01-4.244 3.17 15.247 15.247 0 01-.383.218l-.022.012-.007.003-.003.002a.75.75 0 01-.66 0l-.003-.002z" /></svg>
                 </button>
               </div>
               {/* Thumbnails (if backend adds more images later, wire here) */}
               {product.image && (
                 <div className="mt-3 grid grid-cols-5 gap-2">
                   {[product.image].map((img, i) => (
-                    <button key={i} onClick={()=>{ setActiveImage(img); setZoomed(false); }} className={`aspect-square rounded overflow-hidden border ${activeImage===img ? 'ring-2 ring-amber-400' : ''}`}>
+                    <button key={i} onClick={() => { setActiveImage(img); setZoomed(false); }} className={`aspect-square rounded overflow-hidden border ${activeImage === img ? 'ring-2 ring-amber-400' : ''}`}>
                       <img src={getImageUrl(img)} alt={`thumb-${i}`} className="w-full h-full object-cover" />
                     </button>
                   ))}
@@ -296,16 +300,15 @@ export const ProductDetailPage: React.FC = () => {
                       ₹{product.price.toLocaleString()}
                     </span>
                     <span className="text-gray-600 ml-2">(inclusive of all taxes)</span>
-                    
+
                     {/* Stock Status Display */}
                     <div className="mt-3">
-                      <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                        productWithStock.stockStatus === 'available' 
-                          ? 'bg-green-100 text-green-800' 
-                          : productWithStock.stockStatus === 'limited' 
-                            ? 'bg-yellow-100 text-yellow-800' 
-                            : 'bg-red-100 text-red-800'
-                      }`}>
+                      <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${productWithStock.stockStatus === 'available'
+                        ? 'bg-green-100 text-green-800'
+                        : productWithStock.stockStatus === 'limited'
+                          ? 'bg-yellow-100 text-yellow-800'
+                          : 'bg-red-100 text-red-800'
+                        }`}>
                         {productWithStock.stockDisplayText}
                       </div>
                     </div>
@@ -345,13 +348,12 @@ export const ProductDetailPage: React.FC = () => {
                     <div className="bg-gray-50 p-4 rounded-lg">
                       <span className="text-sm font-medium text-gray-500">Status</span>
                       <p
-                        className={`font-semibold ${
-                          productWithStock.stockStatus === 'out_of_stock'
-                            ? 'text-red-600'
-                            : productWithStock.stockStatus === 'limited'
-                              ? 'text-yellow-600'
-                              : 'text-green-600'
-                        }`}
+                        className={`font-semibold ${productWithStock.stockStatus === 'out_of_stock'
+                          ? 'text-red-600'
+                          : productWithStock.stockStatus === 'limited'
+                            ? 'text-yellow-600'
+                            : 'text-green-600'
+                          }`}
                       >
                         {productWithStock.stockStatus === 'out_of_stock'
                           ? 'Out of Stock'
@@ -367,16 +369,16 @@ export const ProductDetailPage: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Size</label>
-                    <select value={selectedSize} onChange={(e)=>setSelectedSize(e.target.value)} className="w-full border rounded-md px-3 py-2">
+                    <select value={selectedSize} onChange={(e) => setSelectedSize(e.target.value)} className="w-full border rounded-md px-3 py-2">
                       <option value="">Select size</option>
-                      {['S','M','L','XL'].map(s => <option key={s} value={s}>{s}</option>)}
+                      {['S', 'M', 'L', 'XL'].map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Style</label>
-                    <select value={selectedStyle} onChange={(e)=>setSelectedStyle(e.target.value)} className="w-full border rounded-md px-3 py-2">
+                    <select value={selectedStyle} onChange={(e) => setSelectedStyle(e.target.value)} className="w-full border rounded-md px-3 py-2">
                       <option value="">Select style</option>
-                      {['Classic','Modern','Antique'].map(s => <option key={s} value={s}>{s}</option>)}
+                      {['Classic', 'Modern', 'Antique'].map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </div>
                 </div>
@@ -387,16 +389,16 @@ export const ProductDetailPage: React.FC = () => {
                     <div className="flex items-center space-x-4 mb-6">
                       <label className="text-sm font-medium text-gray-700">Quantity:</label>
                       <div className="flex items-center border rounded-md">
-                        <button 
-                          onClick={() => setQuantity(Math.max(1, quantity - 1))} 
+                        <button
+                          onClick={() => setQuantity(Math.max(1, quantity - 1))}
                           disabled={productWithStock.stockStatus === 'out_of_stock'}
                           className="p-2 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
                         </button>
                         <span className="px-4 py-2 border-x">{quantity}</span>
-                        <button 
-                          onClick={() => setQuantity(Math.min(quantity + 1, productWithStock.quantity || 0))} 
+                        <button
+                          onClick={() => setQuantity(Math.min(quantity + 1, productWithStock.quantity || 0))}
                           disabled={productWithStock.stockStatus === 'out_of_stock' || quantity >= (productWithStock.quantity || 0)}
                           className="p-2 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
@@ -405,61 +407,84 @@ export const ProductDetailPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row gap-4">
-                      <button
-                        className={`flex-1 py-3 px-6 rounded-lg transition-colors flex items-center justify-center space-x-2 ${
-                          productWithStock.stockStatus === 'out_of_stock'
+                    <div className="flex flex-col gap-4">
+                      {/* Try On Button */}
+                      {(product.category.toLowerCase() === 'bracelet' ||
+                        product.category.toLowerCase() === 'bangle' ||
+                        product.category.toLowerCase() === 'earring' ||
+                        product.category.toLowerCase() === 'earrings' ||
+                        product.category.toLowerCase() === 'ring' ||
+                        product.category.toLowerCase() === 'rings') && (
+                          <button
+                            className="w-full py-3 px-6 rounded-lg transition-colors flex items-center justify-center space-x-2 bg-purple-600 text-white hover:bg-purple-700"
+                            onClick={() => setShowTryOn(true)}
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                            <span>Virtual Try-On</span>
+                          </button>
+                        )}
+
+                      <div className="flex flex-col sm:flex-row gap-4">
+                        <button
+                          className={`flex-1 py-3 px-6 rounded-lg transition-colors flex items-center justify-center space-x-2 ${productWithStock.stockStatus === 'out_of_stock'
                             ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                             : 'bg-blue-600 text-white hover:bg-blue-700'
-                        }`}
-                        disabled={productWithStock.stockStatus === 'out_of_stock'}
-                        onClick={()=>{
-                          if (productWithStock.stockStatus === 'out_of_stock') return;
-                          const ev = new CustomEvent('sj:addToCart', { detail: {
-                            productId: product._id,
-                            sku: product.sku,
-                            name: product.name,
-                            price: product.price,
-                            image: product.image,
-                            metal: product.metal,
-                            purity: product.purity,
-                            size: selectedSize,
-                            style: selectedStyle,
-                            quantity
-                          }});
-                          window.dispatchEvent(ev);
-                        }}
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 3H3m4 10v6a1 1 0 001 1h1m-4-3h12a2 2 0 002-2V9a2 2 0 00-2-2H9a2 2 0 00-2 2v10z" /></svg>
-                        <span>{productWithStock.stockStatus === 'out_of_stock' ? 'Out of Stock' : 'Add to Cart'}</span>
-                      </button>
-                      <button 
-                        className={`flex-1 py-3 px-6 rounded-lg transition-colors flex items-center justify-center space-x-2 ${
-                          productWithStock.stockStatus === 'out_of_stock'
+                            }`}
+                          disabled={productWithStock.stockStatus === 'out_of_stock'}
+                          onClick={() => {
+                            if (productWithStock.stockStatus === 'out_of_stock') return;
+                            const ev = new CustomEvent('sj:addToCart', {
+                              detail: {
+                                productId: product._id,
+                                sku: product.sku,
+                                name: product.name,
+                                price: product.price,
+                                image: product.image,
+                                metal: product.metal,
+                                purity: product.purity,
+                                size: selectedSize,
+                                style: selectedStyle,
+                                quantity
+                              }
+                            });
+                            window.dispatchEvent(ev);
+                          }}
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 3H3m4 10v6a1 1 0 001 1h1m-4-3h12a2 2 0 002-2V9a2 2 0 00-2-2H9a2 2 0 00-2 2v10z" /></svg>
+                          <span>{productWithStock.stockStatus === 'out_of_stock' ? 'Out of Stock' : 'Add to Cart'}</span>
+                        </button>
+                        <button
+                          className={`flex-1 py-3 px-6 rounded-lg transition-colors flex items-center justify-center space-x-2 ${productWithStock.stockStatus === 'out_of_stock'
                             ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                             : 'bg-orange-600 text-white hover:bg-orange-700'
-                        }`}
-                        disabled={productWithStock.stockStatus === 'out_of_stock'}
-                        onClick={()=>{
-                          if (productWithStock.stockStatus === 'out_of_stock') return;
-                          const ev = new CustomEvent('sj:buyNow', { detail: {
-                            productId: product._id,
-                            sku: product.sku,
-                            name: product.name,
-                            price: product.price,
-                            image: product.image,
-                            metal: product.metal,
-                            purity: product.purity,
-                            size: selectedSize,
-                            style: selectedStyle,
-                            quantity
-                          }});
-                          window.dispatchEvent(ev);
-                        }}
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                        <span>{productWithStock.stockStatus === 'out_of_stock' ? 'Out of Stock' : 'Buy Now'}</span>
-                      </button>
+                            }`}
+                          disabled={productWithStock.stockStatus === 'out_of_stock'}
+                          onClick={() => {
+                            if (productWithStock.stockStatus === 'out_of_stock') return;
+                            const ev = new CustomEvent('sj:buyNow', {
+                              detail: {
+                                productId: product._id,
+                                sku: product.sku,
+                                name: product.name,
+                                price: product.price,
+                                image: product.image,
+                                metal: product.metal,
+                                purity: product.purity,
+                                size: selectedSize,
+                                style: selectedStyle,
+                                quantity
+                              }
+                            });
+                            window.dispatchEvent(ev);
+                          }}
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                          <span>{productWithStock.stockStatus === 'out_of_stock' ? 'Out of Stock' : 'Buy Now'}</span>
+                        </button>
+                      </div>
                     </div>
 
                     <div className="mt-4 flex items-center space-x-4 text-sm text-gray-600">
@@ -488,7 +513,7 @@ export const ProductDetailPage: React.FC = () => {
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-2xl font-bold text-gray-900">You Might Also Like</h2>
           </div>
-          
+
           {loadingRecommendations ? (
             <div className="text-center py-8">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -497,8 +522,8 @@ export const ProductDetailPage: React.FC = () => {
           ) : recommendedProducts.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
               {recommendedProducts.map((product) => (
-                <div 
-                  key={product.productId} 
+                <div
+                  key={product.productId}
                   className="card overflow-hidden transition-all group cursor-pointer hover:shadow-xl hover:scale-[1.02]"
                   onClick={() => navigate(`/product/${product.productId}`)}
                 >
@@ -583,6 +608,46 @@ export const ProductDetailPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Virtual Try-On Modal */}
+      {showTryOn && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
+          <div className="relative bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-auto">
+            {/* Close Button */}
+            <button
+              onClick={() => setShowTryOn(false)}
+              className="absolute top-4 right-4 z-10 bg-white rounded-full p-2 shadow-lg hover:bg-gray-100 transition-colors"
+            >
+              <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Try-On Header */}
+            <div className="p-6 border-b">
+              <h2 className="text-2xl font-bold text-gray-900">Virtual Try-On</h2>
+              <p className="text-gray-600 mt-1">Try on {product.name} virtually</p>
+            </div>
+
+            {/* Try-On Component */}
+            <div className="p-6">
+              {(product.category.toLowerCase() === 'bracelet' || product.category.toLowerCase() === 'bangle') && (
+                <BraceletTryOn
+                  productId={product._id}
+                  bangleCount={product.category.toLowerCase() === 'bangle' ? 3 : 1}
+                  category={product.category}
+                />
+              )}
+              {(product.category.toLowerCase() === 'earring' || product.category.toLowerCase() === 'earrings') && (
+                <EarringTryOn productId={product._id} />
+              )}
+              {(product.category.toLowerCase() === 'ring' || product.category.toLowerCase() === 'rings') && (
+                <VirtualTryOn productId={product._id} />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

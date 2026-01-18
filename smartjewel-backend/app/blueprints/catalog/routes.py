@@ -646,3 +646,190 @@ def chat():
             "reply": "I'm sorry, I'm having trouble processing your request right now. Please try again later or contact our customer support team.",
             "error": "internal_error"
         }), 500
+
+
+# --- Image-Based Visual Search ---
+@bp.post('/search/by-image')
+@jwt_required(optional=True)
+def search_by_image():
+    """
+    Search for similar jewelry products by uploading an image.
+    
+    Accepts:
+    - image: File upload (multipart/form-data)
+    - category: Optional category filter
+    - min_price: Optional minimum price filter
+    - max_price: Optional maximum price filter
+    - limit: Number of results to return (default 20, max 50)
+    - min_similarity: Minimum similarity threshold (default 0.3)
+    
+    Returns:
+    - results: List of similar products with similarity scores
+    - total_compared: Number of products compared
+    """
+    try:
+        from werkzeug.utils import secure_filename
+        from app.utils.image_similarity import get_similarity_engine
+        import os
+        import tempfile
+        
+        # Validate image upload
+        if 'image' not in request.files:
+            return jsonify({"error": "no_image", "message": "No image file provided"}), 400
+        
+        file = request.files['image']
+        if not file or file.filename == '':
+            return jsonify({"error": "empty_file", "message": "Empty file provided"}), 400
+        
+        # Validate file type
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'webp'}
+        filename = secure_filename(file.filename)
+        file_ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+        
+        if file_ext not in allowed_extensions:
+            return jsonify({
+                "error": "invalid_format",
+                "message": f"Invalid file format. Allowed: {', '.join(allowed_extensions)}"
+            }), 400
+        
+        # Read image bytes
+        image_bytes = file.read()
+        
+        # Validate file size (5MB limit)
+        max_size = 5 * 1024 * 1024  # 5MB
+        if len(image_bytes) > max_size:
+            return jsonify({
+                "error": "file_too_large",
+                "message": "Image size exceeds 5MB limit"
+            }), 400
+        
+        # Get optional filters
+        category = request.form.get('category')
+        min_price = _parse_float(request.form.get('min_price'))
+        max_price = _parse_float(request.form.get('max_price'))
+        limit = min(50, max(1, _parse_int(request.form.get('limit'), 20)))
+        min_similarity = max(0.0, min(1.0, _parse_float(request.form.get('min_similarity'), 0.3)))
+        
+        # Build query for active products
+        db = _db()
+        query = {"status": "active"}
+        
+        if category:
+            query["category"] = category
+        
+        if min_price is not None or max_price is not None:
+            price_filter = {}
+            if min_price is not None:
+                price_filter["$gte"] = min_price
+            if max_price is not None:
+                price_filter["$lte"] = max_price
+            query["price"] = price_filter
+        
+        # Get all matching products with images
+        products = list(db.items.find({
+            **query,
+            "image": {"$exists": True, "$ne": None, "$ne": ""}
+        }, {
+            "_id": 1,
+            "sku": 1,
+            "name": 1,
+            "category": 1,
+            "metal": 1,
+            "purity": 1,
+            "weight": 1,
+            "weight_unit": 1,
+            "price": 1,
+            "image": 1
+        }).limit(500))  # Limit catalog scan to 500 products for performance
+        
+        if not products:
+            return jsonify({
+                "results": [],
+                "total_compared": 0,
+                "message": "No products available for comparison"
+            })
+        
+        current_app.logger.info(f"Found {len(products)} products with images for comparison")
+        
+        # Initialize similarity engine
+        try:
+            engine = get_similarity_engine()
+            current_app.logger.info("Similarity engine initialized successfully")
+        except Exception as e:
+            current_app.logger.error(f"Failed to initialize similarity engine: {str(e)}")
+            return jsonify({
+                "error": "engine_init_failed",
+                "message": "Failed to initialize image processing. Please try again."
+            }), 500
+        
+        # Prepare candidate images
+        candidates = []
+        for product in products:
+            image_url = product.get('image')
+            if image_url:
+                # Handle relative URLs (local storage)
+                if image_url.startswith('/static/'):
+                    # Convert to absolute file path
+                    static_path = current_app.static_folder or 'static'
+                    image_path = os.path.join(
+                        os.path.dirname(current_app.root_path),
+                        static_path.lstrip('./'),
+                        image_url.replace('/static/', '')
+                    )
+                    candidates.append((str(product['_id']), image_path))
+                else:
+                    # Cloudinary or external URL
+                    candidates.append((str(product['_id']), image_url))
+        
+        # Find similar images
+        current_app.logger.info(f"Comparing uploaded image with {len(candidates)} products")
+        
+        similar_items = engine.find_similar_images(
+            query_image=image_bytes,
+            candidate_images=candidates,
+            top_k=limit,
+            min_similarity=min_similarity
+        )
+        
+        # Build response with product details
+        results = []
+        product_map = {str(p['_id']): p for p in products}
+        
+        for item_id, similarity in similar_items:
+            product = product_map.get(item_id)
+            if product:
+                results.append({
+                    "_id": item_id,
+                    "sku": product.get('sku'),
+                    "name": product.get('name'),
+                    "category": product.get('category'),
+                    "metal": product.get('metal'),
+                    "purity": product.get('purity'),
+                    "weight": product.get('weight'),
+                    "weight_unit": product.get('weight_unit'),
+                    "price": product.get('price'),
+                    "image": product.get('image'),
+                    "similarity": round(similarity, 3),  # 0-1 scale
+                    "similarity_percent": round(similarity * 100, 1)  # 0-100% for display
+                })
+        
+        return jsonify({
+            "results": results,
+            "total_compared": len(candidates),
+            "filters_applied": {
+                "category": category,
+                "min_price": min_price,
+                "max_price": max_price
+            }
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"Image search error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
+        return jsonify({
+            "error": "search_failed",
+            "message": "Failed to process image search. Please try again."
+        }), 500
+

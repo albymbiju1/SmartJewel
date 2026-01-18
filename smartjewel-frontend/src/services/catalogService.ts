@@ -92,5 +92,36 @@ export const catalogService = {
   },
   async saveRecent(term: string, filters?: Record<string, any>) {
     await api.post('/catalog/recent-searches', { term, filters });
+  },
+
+  async searchByImage(
+    imageFile: File,
+    filters?: {
+      category?: string;
+      minPrice?: number;
+      maxPrice?: number;
+      limit?: number;
+    }
+  ): Promise<{
+    results: Array<CatalogItem & { similarity: number; similarity_percent: number }>;
+    total_compared: number;
+    filters_applied: Record<string, any>;
+  }> {
+    const formData = new FormData();
+    formData.append('image', imageFile);
+
+    if (filters?.category) formData.append('category', filters.category);
+    if (filters?.minPrice !== undefined) formData.append('min_price', String(filters.minPrice));
+    if (filters?.maxPrice !== undefined) formData.append('max_price', String(filters.maxPrice));
+    if (filters?.limit !== undefined) formData.append('limit', String(filters.limit));
+
+    const { data } = await api.post('/catalog/search/by-image', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      },
+      timeout: 60000 // 60 seconds timeout for image processing (first request downloads model weights)
+    });
+
+    return data;
   }
 };

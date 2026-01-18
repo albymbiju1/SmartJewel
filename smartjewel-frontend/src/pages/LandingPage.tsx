@@ -11,6 +11,7 @@ import { MegaMenuFilter } from '../components/MegaMenuFilter';
 import { SearchBar } from '../components/SearchBar';
 import FloatingChatbot from '../components/chatbot/FloatingChatbot';
 import { NotificationBell } from '../components/NotificationBell';
+import { ImageSearchModal } from '../components/ImageSearchModal';
 
 
 export const LandingPage: React.FC = () => {
@@ -18,6 +19,7 @@ export const LandingPage: React.FC = () => {
   const { user, isAuthenticated, logout } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [showImageSearch, setShowImageSearch] = useState(false);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   // Temporary multi-select state while a mega menu is open
   const [mmCategories, setMmCategories] = useState<string[]>([]);
@@ -150,6 +152,18 @@ export const LandingPage: React.FC = () => {
             {/* Notification Bell */}
             <NotificationBell />
 
+            <button
+              className="relative inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-200 text-gray-700 hover:text-brand-burgundy"
+              title="Search by Image"
+              aria-label="Search by Image"
+              onClick={() => setShowImageSearch(true)}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <polyline points="21 15 16 10 5 21" />
+              </svg>
+            </button>
             <button className="relative inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-200 text-gray-700 hover:text-brand-burgundy" title="Search" aria-label="Search" onClick={() => setShowSearch((s) => !s)}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
             </button>
@@ -685,6 +699,12 @@ export const LandingPage: React.FC = () => {
       </footer>
       {/* Floating AI Chatbot */}
       <FloatingChatbot />
+
+      {/* Image Search Modal */}
+      <ImageSearchModal
+        isOpen={showImageSearch}
+        onClose={() => setShowImageSearch(false)}
+      />
     </div>
   );
 };

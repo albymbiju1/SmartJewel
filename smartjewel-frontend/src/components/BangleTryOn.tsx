@@ -125,45 +125,41 @@ export function BangleTryOn({ productId, bangleCount = 1, category = '' }: Bangl
         // Key wrist landmarks (MediaPipe Hands)
         const wristCenter = landmarks[0];      // Wrist center
         const thumbBase = landmarks[1];        // Thumb CMC (left edge)
-        const indexBase = landmarks[5];        // Index MCP
         const pinkyBase = landmarks[17];       // Pinky MCP (right edge)
 
-        // 1. WRIST CENTER CALCULATION (use actual wrist landmark)
-        // Landmark 0 is wrist center - use it directly
+        // 1. WRIST CENTER CALCULATION
         const wristCenterX = wristCenter.x;
         const wristCenterY = wristCenter.y;
 
-        // 2. WRIST WIDTH CALCULATION (for sizing only)
+        // 2. WRIST WIDTH CALCULATION
         const wristWidthPixels = Math.sqrt(
             Math.pow((thumbBase.x - pinkyBase.x) * canvasRef.current.width, 2) +
             Math.pow((thumbBase.y - pinkyBase.y) * canvasRef.current.height, 2)
         );
 
-        // 3. BANGLE ROTATION - No rotation (circular, symmetric)
-        // Bangles are circular and don't need orientation adjustment
-        const braceletRotation = 0; // No rotation for bangles
+        // 3. NO ROTATION - Bangles are circular
+        const braceletRotation = 0;
 
-        // 4. BRACELET PLACEMENT - Move DOWN to wrist base (toward arm)
-        // Simple downward offset in normalized coordinates
-        const downwardOffset = 0.08; // Move 8% down from wrist center toward arm
+        // 4. BRACELET PLACEMENT - Move DOWN to wrist base
+        const downwardOffset = 0.08;
         const braceletCenterX = wristCenterX;
-        const braceletCenterY = wristCenterY + downwardOffset; // DOWN toward arm
+        const braceletCenterY = wristCenterY + downwardOffset;
 
         // Convert to canvas coordinates (mirrored)
         const targetX = (1 - braceletCenterX) * canvasRef.current.width;
         const targetY = braceletCenterY * canvasRef.current.height;
 
-        // 5. BRACELET SCALING - Sized to fit wrist snugly
-        const braceletDiameter = wristWidthPixels * 1.8; // 180% of wrist width for snug fit
+        // 5. BRACELET SCALING - Reduced for more natural fit
+        const braceletDiameter = wristWidthPixels * 1.5;
 
-        // 6. SMOOTHING (prevent jitter)
+        // 6. SMOOTHING
         let smoothed = smoothBuffers.current.get(handIndex);
         if (!smoothed) {
             smoothed = {
                 wristX: targetX,
                 wristY: targetY,
                 wristWidth: braceletDiameter,
-                rotationAngle: braceletRotation  // Use base + wrist angle
+                rotationAngle: braceletRotation
             };
             smoothBuffers.current.set(handIndex, smoothed);
         }
@@ -171,9 +167,9 @@ export function BangleTryOn({ productId, bangleCount = 1, category = '' }: Bangl
         smoothed.wristX = smoothValue(smoothed.wristX, targetX, 0.35);
         smoothed.wristY = smoothValue(smoothed.wristY, targetY, 0.35);
         smoothed.wristWidth = smoothValue(smoothed.wristWidth, braceletDiameter, 0.25);
-        smoothed.rotationAngle = smoothAngle(smoothed.rotationAngle, braceletRotation, 0.35);  // Full rotation with base
+        smoothed.rotationAngle = smoothAngle(smoothed.rotationAngle, braceletRotation, 0.35);
 
-        // 7. DRAW BRACELETS (stacked if multiple)
+        // 7. DRAW BRACELETS (simple and clean)
         const spacing = smoothed.wristWidth * 0.12;
 
         for (let i = 0; i < bangleCount; i++) {
@@ -181,12 +177,12 @@ export function BangleTryOn({ productId, bangleCount = 1, category = '' }: Bangl
 
             ctx.save();
             ctx.translate(smoothed.wristX, smoothed.wristY + offset);
-            ctx.rotate(-smoothed.rotationAngle); // Rotate to match wrist
+            ctx.rotate(-smoothed.rotationAngle);
 
-            // Optional: Slight transparency for depth feel
+            // Slight transparency for depth
             ctx.globalAlpha = 0.95 - (i * 0.05);
 
-            // Draw bracelet (circular 2D)
+            // Draw bracelet - simple and straightforward
             ctx.drawImage(
                 braceletImage,
                 -smoothed.wristWidth / 2,

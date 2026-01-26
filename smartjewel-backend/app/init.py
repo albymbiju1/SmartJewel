@@ -137,6 +137,10 @@ def create_app():
     from app.blueprints.notifications.routes import bp as notifications_bp
     app.register_blueprint(notifications_bp)
 
+    # Alerts blueprint
+    from app.blueprints.alerts.routes import bp as alerts_bp
+    app.register_blueprint(alerts_bp)
+
     # Rentals blueprint
     from app.blueprints.rentals.routes import bp as rentals_bp
     app.register_blueprint(rentals_bp)

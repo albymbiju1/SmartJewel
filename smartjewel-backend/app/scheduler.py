@@ -3,6 +3,7 @@ from typing import Any
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 import pytz
 
 from app.services.gold_rate_service import GoldRateService
@@ -13,40 +14,85 @@ IST = pytz.timezone("Asia/Kolkata")
 
 def _job(app) -> None:
     """Scheduled job to refresh gold rates and reprice products."""
+    with app.app_context():  # CRITICAL: App context needed for database access
+        try:
+            # Log job start with explicit IST timestamp for verification
+            current_time = datetime.now(IST)
+            app.logger.info(
+                "gold_rate_refresh_job_started",
+                extra={
+                    "now_ist": current_time.isoformat(),
+                    "timestamp": current_time.strftime("%Y-%m-%d %H:%M:%S IST"),
+                },
+            )
+            db = app.extensions.get('mongo_db')
+            if db is None:
+                app.logger.error("Scheduler: DB not available, skipping gold rate refresh")
+                return
+
+            app.logger.info("gold_rate_refresh_job_fetching_rates")
+            result = GoldRateService.refresh_and_reprice(db)
+            status = "success" if result.get("success") else f"failed: {result.get('error')}"
+
+            app.logger.info(
+                "gold_rate_refresh_job_completed",
+                extra={
+                    "status": status,
+                    "gold_rate_success": result.get("success", False),
+                    "price_update_success": result.get("price_update", {}).get("success", False),
+                    "updated_at": str(result.get("updated_at")),
+                    "updated_count": result.get("price_update", {}).get("updated_count"),
+                    "error_count": result.get("price_update", {}).get("error_count"),
+                    "skipped_count": result.get("price_update", {}).get("skipped_count"),
+                    "rates_24k": result.get("rates", {}).get("24k"),
+                },
+            )
+        except Exception as e:
+            app.logger.exception(f"Scheduler job failed: {e}")
+
+
+def _check_price_drops_job(app) -> None:
+    """Scheduled job to check for price drops and trigger alerts."""
     try:
-        # Log job start with explicit IST timestamp for verification
+        from app.services.alert_service import AlertService
+        
         current_time = datetime.now(IST)
         app.logger.info(
-            "gold_rate_refresh_job_started",
-            extra={
-                "now_ist": current_time.isoformat(),
-                "timestamp": current_time.strftime("%Y-%m-%d %H:%M:%S IST"),
-            },
+            "price_drop_check_job_started",
+            extra={"timestamp": current_time.strftime("%Y-%m-%d %H:%M:%S IST")}
         )
-        db = app.extensions.get('mongo_db')
-        if db is None:
-            app.logger.error("Scheduler: DB not available, skipping gold rate refresh")
-            return
-
-        app.logger.info("gold_rate_refresh_job_fetching_rates")
-        result = GoldRateService.refresh_and_reprice(db)
-        status = "success" if result.get("success") else f"failed: {result.get('error')}"
-
+        
+        with app.app_context():
+            triggered_count = AlertService.check_price_drops()
+            
         app.logger.info(
-            "gold_rate_refresh_job_completed",
-            extra={
-                "status": status,
-                "gold_rate_success": result.get("success", False),
-                "price_update_success": result.get("price_update", {}).get("success", False),
-                "updated_at": str(result.get("updated_at")),
-                "updated_count": result.get("price_update", {}).get("updated_count"),
-                "error_count": result.get("price_update", {}).get("error_count"),
-                "skipped_count": result.get("price_update", {}).get("skipped_count"),
-                "rates_24k": result.get("rates", {}).get("24k"),
-            },
+            "price_drop_check_job_completed",
+            extra={"triggered_alerts": triggered_count}
         )
     except Exception as e:
-        app.logger.exception(f"Scheduler job failed: {e}")
+        app.logger.exception(f"Price drop check job failed: {e}")
+
+
+def _check_stock_changes_job(app) -> None:
+    """Scheduled job to check for stock changes and trigger alerts."""
+    try:
+        from app.services.alert_service import AlertService
+        
+        current_time = datetime.now(IST)
+        app.logger.info(
+            "stock_check_job_started",
+            extra={"timestamp": current_time.strftime("%Y-%m-%d %H:%M:%S IST")}
+        )
+        
+        with app.app_context():
+            triggered_count = AlertService.check_stock_changes()
+            
+        app.logger.info(
+            "stock_check_job_completed",
+            extra={"triggered_alerts": triggered_count}
+        )
+    except Exception as e:
+        app.logger.exception(f"Stock check job failed: {e}")
 
 
 def trigger_gold_rate_refresh(app: Any) -> dict:
@@ -98,8 +144,34 @@ def setup_scheduler(app: Any) -> BackgroundScheduler:
         max_instances=1,
     )
 
+    # Price drop check job - every 6 hours at 00:00, 06:00, 12:00, 18:00 IST
+    price_check_trigger = CronTrigger(hour='0,6,12,18', minute=0, timezone=IST)
+    scheduler.add_job(
+        _check_price_drops_job,
+        price_check_trigger,
+        args=[app],
+        id="price_drop_check",
+        replace_existing=True,
+        misfire_grace_time=1800,  # 30 minutes grace
+        coalesce=True,
+        max_instances=1,
+    )
+
+    # Stock check job - every 30 minutes
+    stock_check_trigger = IntervalTrigger(minutes=30, timezone=IST)
+    scheduler.add_job(
+        _check_stock_changes_job,
+        stock_check_trigger,
+        args=[app],
+        id="stock_change_check",
+        replace_existing=True,
+        misfire_grace_time=600,  # 10 minutes grace
+        coalesce=True,
+        max_instances=1,
+    )
+
     scheduler.start()
-    app.logger.info("APScheduler started with IST cron jobs at 09:00 and 18:00")
+    app.logger.info("APScheduler started with gold rate (9am/6pm), price checks (every 6h), and stock checks (every 30min)")
     # Log scheduled jobs and next run times for verification
     try:
         jobs = scheduler.get_jobs()

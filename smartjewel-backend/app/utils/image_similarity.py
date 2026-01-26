@@ -125,6 +125,65 @@ class ImageSimilarityEngine:
         
         return features
     
+    def extract_features_batch(self, images: list) -> list:
+        """
+        Extract features from multiple images in a batch for better performance.
+        
+        Args:
+            images: List of images (can be file paths, bytes, or PIL Images)
+            
+        Returns:
+            List of feature vectors
+        """
+        batch_tensors = []
+        
+        # Load and preprocess all images
+        for image in images:
+            try:
+                # Load image if needed
+                if isinstance(image, str):
+                    if image.startswith('http://') or image.startswith('https://'):
+                        img = self.load_image_from_url(image)
+                    else:
+                        img = self.load_image_from_file(image)
+                elif isinstance(image, bytes):
+                    img = self.load_image_from_bytes(image)
+                else:
+                    img = image  # Already a PIL Image
+                
+                # Preprocess and add to batch
+                img_tensor = self.transform(img)
+                batch_tensors.append(img_tensor)
+            except Exception as e:
+                print(f"Error loading image: {str(e)}")
+                # Add a zero tensor as placeholder for failed images
+                batch_tensors.append(torch.zeros(3, 224, 224))
+        
+        if not batch_tensors:
+            return []
+        
+        # Stack into batch and move to device
+        batch = torch.stack(batch_tensors).to(self.device)
+        
+        # Extract features for entire batch
+        with torch.no_grad():
+            features = self.model(batch)
+        
+        # Process each feature vector
+        features = features.squeeze().cpu().numpy()
+        
+        # Handle single image case
+        if len(images) == 1:
+            features = features.reshape(1, -1)
+        
+        # Normalize each feature vector
+        feature_list = []
+        for feat in features:
+            feat = feat / np.linalg.norm(feat)
+            feature_list.append(feat)
+        
+        return feature_list
+    
     def compute_similarity(
         self, 
         features1: np.ndarray, 
@@ -155,16 +214,18 @@ class ImageSimilarityEngine:
         query_image: Union[str, bytes, Image.Image],
         candidate_images: list,
         top_k: int = 20,
-        min_similarity: float = 0.3
+        min_similarity: float = 0.3,
+        batch_size: int = 32
     ) -> list:
         """
-        Find most similar images from a list of candidates.
+        Find most similar images from a list of candidates using batch processing.
         
         Args:
             query_image: Image to search for
             candidate_images: List of tuples (id, image_path_or_url)
             top_k: Number of top results to return
             min_similarity: Minimum similarity threshold
+            batch_size: Number of images to process in each batch
             
         Returns:
             List of tuples (id, similarity_score) sorted by similarity
@@ -174,23 +235,41 @@ class ImageSimilarityEngine:
         
         results = []
         
-        # Compare with each candidate
-        for item_id, candidate_image in candidate_images:
-            try:
-                # Extract features from candidate
-                candidate_features = self.extract_features(candidate_image)
-                
-                # Compute similarity
-                similarity = self.compute_similarity(query_features, candidate_features)
-                
-                # Only include if above threshold
-                if similarity >= min_similarity:
-                    results.append((item_id, similarity))
+        # Process candidates in batches for better performance
+        for i in range(0, len(candidate_images), batch_size):
+            batch = candidate_images[i:i + batch_size]
+            batch_ids = [item[0] for item in batch]
+            batch_images = [item[1] for item in batch]
             
+            try:
+                # Extract features for batch
+                batch_features = self.extract_features_batch(batch_images)
+                
+                # Compute similarity for each in batch
+                for item_id, features in zip(batch_ids, batch_features):
+                    try:
+                        similarity = self.compute_similarity(query_features, features)
+                        
+                        # Only include if above threshold
+                        if similarity >= min_similarity:
+                            results.append((item_id, similarity))
+                    except Exception as e:
+                        print(f"Error computing similarity for {item_id}: {str(e)}")
+                        continue
+                        
             except Exception as e:
-                # Skip images that fail to load/process
-                print(f"Error processing candidate {item_id}: {str(e)}")
-                continue
+                print(f"Error processing batch {i}-{i+batch_size}: {str(e)}")
+                # Fallback to individual processing for this batch
+                for item_id, candidate_image in batch:
+                    try:
+                        candidate_features = self.extract_features(candidate_image)
+                        similarity = self.compute_similarity(query_features, candidate_features)
+                        
+                        if similarity >= min_similarity:
+                            results.append((item_id, similarity))
+                    except Exception as e:
+                        print(f"Error processing candidate {item_id}: {str(e)}")
+                        continue
         
         # Sort by similarity (descending) and return top K
         results.sort(key=lambda x: x[1], reverse=True)
@@ -209,3 +288,4 @@ def get_similarity_engine() -> ImageSimilarityEngine:
     if _engine is None:
         _engine = ImageSimilarityEngine()
     return _engine
+

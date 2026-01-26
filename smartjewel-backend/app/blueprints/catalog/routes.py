@@ -781,15 +781,39 @@ def search_by_image():
                     # Cloudinary or external URL
                     candidates.append((str(product['_id']), image_url))
         
-        # Find similar images
-        current_app.logger.info(f"Comparing uploaded image with {len(candidates)} products")
+        # Find similar images using batch processing for better performance
+        current_app.logger.info(f"Comparing uploaded image with {len(candidates)} products using batch processing")
         
         similar_items = engine.find_similar_images(
             query_image=image_bytes,
             candidate_images=candidates,
             top_k=limit,
-            min_similarity=min_similarity
+            min_similarity=min_similarity,
+            batch_size=32  # Process 32 images at a time for optimal performance
         )
+        
+        # Check if the uploaded image is actually jewelry
+        # If max similarity is very low, it's likely not a jewelry image
+        if similar_items:
+            max_similarity = max(item[1] for item in similar_items)
+            
+            # Threshold: if best match is below 0.45, likely not jewelry
+            if max_similarity < 0.45:
+                return jsonify({
+                    "error": "not_jewelry",
+                    "message": "The uploaded image doesn't appear to be jewelry. Please upload a clear photo of a jewelry item (ring, necklace, earring, bracelet, etc.)",
+                    "results": [],
+                    "total_compared": len(candidates)
+                }), 400
+        
+        # If no results at all, also likely not jewelry
+        if not similar_items:
+            return jsonify({
+                "error": "not_jewelry", 
+                "message": "No similar jewelry found. Please upload a clear photo of a jewelry item.",
+                "results": [],
+                "total_compared": len(candidates)
+            }), 400
         
         # Build response with product details
         results = []

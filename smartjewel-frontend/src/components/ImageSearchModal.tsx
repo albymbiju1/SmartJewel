@@ -85,7 +85,15 @@ export const ImageSearchModal: React.FC<ImageSearchModalProps> = ({
             }
         } catch (err: any) {
             console.error('Image search failed:', err);
-            setError(err.response?.data?.message || 'Search failed. Please try again.');
+
+            // Handle specific error types
+            if (err.response?.data?.error === 'not_jewelry') {
+                setError(err.response.data.message || 'This doesn\'t appear to be a jewelry image. Please upload a photo of rings, necklaces, earrings, bracelets, or other jewelry items.');
+            } else if (err.code === 'ECONNABORTED') {
+                setError('Search timed out. The first search may take longer. Please try again.');
+            } else {
+                setError(err.response?.data?.message || 'Search failed. Please try again.');
+            }
         } finally {
             setIsSearching(false);
         }

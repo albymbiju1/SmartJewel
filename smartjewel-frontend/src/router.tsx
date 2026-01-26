@@ -11,6 +11,7 @@ import { ValuationPage } from './pages/inventory/ValuationPage';
 import { BomPage } from './pages/inventory/BomPage';
 import { InventoryDashboard } from './pages/inventory/InventoryDashboard';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
+import { AnalyticsDashboardPage } from './pages/admin/AnalyticsDashboardPage';
 import { default as AdminOrdersPage } from './pages/admin/AdminOrdersPage';
 import { StaffDirectory } from './pages/admin/StaffDirectory';
 import { StaffSchedulePage } from './pages/admin/StaffSchedulePage';
@@ -72,6 +73,7 @@ export const AppRouter: React.FC = () => (
 
       {/* Admin Routes (protected) */}
       <Route path="/admin/dashboard" element={<RequireAuth><AdminDashboard /></RequireAuth>} />
+      <Route path="/admin/analytics" element={<RequireAuth><AnalyticsDashboardPage /></RequireAuth>} />
       <Route path="/admin/inventory" element={<RequireAuth><InventoryDashboard /></RequireAuth>} />
       <Route path="/admin/reports" element={<RequireAuth><ReportsPage /></RequireAuth>} />
       <Route path="/admin/orders" element={<RequireAuth><AdminOrdersPage /></RequireAuth>} />

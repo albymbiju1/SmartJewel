@@ -148,6 +148,10 @@ def create_app():
     # Rental Bookings blueprint
     from app.blueprints.rentals.booking_routes import bp_bookings as rental_bookings_bp
     app.register_blueprint(rental_bookings_bp)
+    
+    # Analytics blueprint
+    from app.blueprints.analytics import bp as analytics_bp
+    app.register_blueprint(analytics_bp)
 
     # Explicit static file serving route with CORS and cache control headers
     @app.route('/static/<path:filename>')

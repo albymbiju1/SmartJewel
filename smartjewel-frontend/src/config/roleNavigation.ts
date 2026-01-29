@@ -34,6 +34,7 @@ export const ROLE_NAVIGATION: Record<string, RoleNavigation> = {
       { label: 'Inventory', key: 'inventory_details', href: '/admin/inventory' },
       { label: 'Customers', key: 'customers', href: '/admin/customers' },
       { label: 'Rentals', key: 'rentals', href: '/admin/rentals' },
+      { label: 'KYC Verification', key: 'kyc_verification', href: '/admin/kyc-verification' },
       // Removed Engagement and Logs as per user request
     ],
     leftSidebarItems: [
@@ -42,6 +43,7 @@ export const ROLE_NAVIGATION: Record<string, RoleNavigation> = {
       // Removed Tags as per user request
       { label: 'Stores', key: 'stores', href: '/admin/stores' },
       { label: 'View Orders', key: 'view_orders', href: '/admin/orders' },
+      { label: 'Analytics', key: 'analytics', href: '/admin/analytics' },
     ]
   },
 

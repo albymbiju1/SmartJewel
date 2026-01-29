@@ -391,10 +391,44 @@ export const RentalDetailPage: React.FC = () => {
                                 </div>
                             )}
 
-                            {/* Error Message */}
+                            {/* Error Message / KYC Required */}
                             {bookingError && (
-                                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                                    {bookingError}
+                                <div className={`border rounded-lg px-4 py-4 ${bookingError.toLowerCase().includes('kyc')
+                                        ? 'bg-amber-50 border-amber-200'
+                                        : 'bg-red-50 border-red-200'
+                                    }`}>
+                                    <div className="flex items-start gap-3">
+                                        <div className="flex-shrink-0 mt-0.5">
+                                            {bookingError.toLowerCase().includes('kyc') ? (
+                                                <svg className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                                </svg>
+                                            ) : (
+                                                <svg className="h-5 w-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                            )}
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className={`text-sm font-medium ${bookingError.toLowerCase().includes('kyc')
+                                                    ? 'text-amber-800'
+                                                    : 'text-red-800'
+                                                }`}>
+                                                {bookingError}
+                                            </p>
+                                            {bookingError.toLowerCase().includes('kyc') && (
+                                                <button
+                                                    onClick={() => navigate('/profile/kyc')}
+                                                    className="mt-3 inline-flex items-center px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors"
+                                                >
+                                                    <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                    </svg>
+                                                    Upload KYC Documents
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
                             )}
 

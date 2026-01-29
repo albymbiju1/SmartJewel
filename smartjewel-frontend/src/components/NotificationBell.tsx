@@ -144,6 +144,12 @@ export const NotificationBell: React.FC = () => {
         }
         setShowNotifications(false);
 
+        // Navigate to action_url if present (for KYC, rentals, etc.)
+        if (n.action_url) {
+            navigate(n.action_url);
+            return;
+        }
+
         // Navigate to order details page for the specific order
         if (n.related_entity_type === 'order' && n.related_entity_id) {
             navigate(`/order-details/${n.related_entity_id}`);
@@ -215,26 +221,25 @@ export const NotificationBell: React.FC = () => {
                                             className={`p-2.5 hover:bg-gray-50 transition-colors cursor-pointer flex gap-2.5 ${!n.is_read ? 'bg-amber-50/40' : ''}`}
                                             onClick={() => handleNotificationClick(n)}
                                         >
-                                            <div className={`mt-0.5 flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${
-                                                n.status === 'delivered' ? 'bg-green-100 text-green-600' :
-                                                n.status === 'shipped' ? 'bg-blue-100 text-blue-600' :
-                                                n.status === 'out_for_delivery' ? 'bg-indigo-100 text-indigo-600' :
-                                                n.status === 'cancelled' ? 'bg-red-100 text-red-600' :
-                                                n.status === 'refunded' ? 'bg-orange-100 text-orange-600' :
-                                                n.status === 'paid' ? 'bg-emerald-100 text-emerald-600' :
-                                                n.status === 'confirmed' ? 'bg-teal-100 text-teal-600' :
-                                                n.status === 'processing' ? 'bg-yellow-100 text-yellow-600' :
-                                                'bg-gray-100 text-gray-600'
-                                            }`}>
+                                            <div className={`mt-0.5 flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${n.status === 'delivered' ? 'bg-green-100 text-green-600' :
+                                                    n.status === 'shipped' ? 'bg-blue-100 text-blue-600' :
+                                                        n.status === 'out_for_delivery' ? 'bg-indigo-100 text-indigo-600' :
+                                                            n.status === 'cancelled' ? 'bg-red-100 text-red-600' :
+                                                                n.status === 'refunded' ? 'bg-orange-100 text-orange-600' :
+                                                                    n.status === 'paid' ? 'bg-emerald-100 text-emerald-600' :
+                                                                        n.status === 'confirmed' ? 'bg-teal-100 text-teal-600' :
+                                                                            n.status === 'processing' ? 'bg-yellow-100 text-yellow-600' :
+                                                                                'bg-gray-100 text-gray-600'
+                                                }`}>
                                                 {n.status === 'delivered' ? <Check className="w-3.5 h-3.5" /> :
-                                                n.status === 'shipped' ? <Package className="w-3.5 h-3.5" /> :
-                                                n.status === 'out_for_delivery' ? <Truck className="w-3.5 h-3.5" /> :
-                                                n.status === 'cancelled' ? <X className="w-3.5 h-3.5" /> :
-                                                n.status === 'refunded' ? <RefreshCw className="w-3.5 h-3.5" /> :
-                                                n.status === 'paid' ? <CreditCard className="w-3.5 h-3.5" /> :
-                                                n.status === 'confirmed' ? <Check className="w-3.5 h-3.5" /> :
-                                                n.status === 'processing' ? <Clock className="w-3.5 h-3.5" /> :
-                                                <Bell className="w-3.5 h-3.5" />}
+                                                    n.status === 'shipped' ? <Package className="w-3.5 h-3.5" /> :
+                                                        n.status === 'out_for_delivery' ? <Truck className="w-3.5 h-3.5" /> :
+                                                            n.status === 'cancelled' ? <X className="w-3.5 h-3.5" /> :
+                                                                n.status === 'refunded' ? <RefreshCw className="w-3.5 h-3.5" /> :
+                                                                    n.status === 'paid' ? <CreditCard className="w-3.5 h-3.5" /> :
+                                                                        n.status === 'confirmed' ? <Check className="w-3.5 h-3.5" /> :
+                                                                            n.status === 'processing' ? <Clock className="w-3.5 h-3.5" /> :
+                                                                                <Bell className="w-3.5 h-3.5" />}
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <p className={`text-xs ${!n.is_read ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
@@ -243,7 +248,10 @@ export const NotificationBell: React.FC = () => {
                                                 <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-2">{n.message}</p>
                                                 <p className="text-[9px] text-gray-400 mt-0.5">
                                                     {(() => {
-                                                        const { dateStr, timeStr } = formatNotificationTime(n.created_at);
+                                                        // Use timestamp field from backend (not created_at)
+                                                        const timestamp = n.timestamp || n.created_at;
+                                                        if (!timestamp) return 'Just now';
+                                                        const { dateStr, timeStr } = formatNotificationTime(timestamp);
                                                         return `${dateStr} ${timeStr}`;
                                                     })()}
                                                 </p>

@@ -13,15 +13,7 @@ export const RentalCheckoutPage: React.FC = () => {
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        // Load Razorpay script
-        if (window.Razorpay) return;
-        const s = document.createElement('script');
-        s.src = 'https://checkout.razorpay.com/v1/checkout.js';
-        s.async = true;
-        document.body.appendChild(s);
-    }, []);
+    const [checkingKYC, setCheckingKYC] = useState(true);
 
     useEffect(() => {
         if (!bookingId || !rentalItem) {
@@ -29,12 +21,73 @@ export const RentalCheckoutPage: React.FC = () => {
         }
     }, [bookingId, rentalItem, navigate]);
 
+    // Check KYC verification status
+    useEffect(() => {
+        const checkKYCStatus = async () => {
+            try {
+                setCheckingKYC(true);
+                const response = await api.get('/customers/me/kyc');
+                const kycData = response.data;
+
+                // If not verified, redirect to KYC page
+                if (kycData.status !== 'verified' || !kycData.can_rent) {
+                    // Store return URL for after KYC completion
+                    sessionStorage.setItem('rental_checkout_state', JSON.stringify(location.state));
+
+                    // Show alert and redirect
+                    alert('KYC verification required! Please upload your ID documents to proceed with rental booking.');
+                    navigate('/profile/kyc', {
+                        state: {
+                            returnTo: '/rental-checkout',
+                            message: 'Complete KYC verification to proceed with your rental booking'
+                        }
+                    });
+                }
+            } catch (error: any) {
+                console.error('KYC check error:', error);
+                // If no KYC found, redirect to KYC page
+                if (error.response?.status === 404 || error.response?.status === 403) {
+                    sessionStorage.setItem('rental_checkout_state', JSON.stringify(location.state));
+                    alert('KYC verification required! Please upload your ID documents to proceed with rental booking.');
+                    navigate('/profile/kyc', {
+                        state: {
+                            returnTo: '/rental-checkout',
+                            message: 'Complete KYC verification to proceed with your rental booking'
+                        }
+                    });
+                }
+            } finally {
+                setCheckingKYC(false);
+            }
+        };
+
+        if (user && bookingId && rentalItem) {
+            checkKYCStatus();
+        }
+    }, [user, bookingId, rentalItem, navigate, location.state]);
+
     const handlePayment = async () => {
         if (!bookingId || !rentalItem || !user) return;
 
         try {
             setLoading(true);
             setError(null);
+
+            // Load Razorpay SDK if not already loaded
+            if (!window.Razorpay) {
+                console.log('Loading Razorpay SDK...');
+                const script = document.createElement('script');
+                script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+                script.async = true;
+
+                await new Promise((resolve, reject) => {
+                    script.onload = resolve;
+                    script.onerror = () => reject(new Error('Failed to load Razorpay SDK'));
+                    document.body.appendChild(script);
+                });
+
+                console.log('Razorpay SDK loaded successfully');
+            }
 
             // Create Razorpay order
             const orderResponse = await api.post('/payments/api/create-order', {
@@ -132,6 +185,21 @@ export const RentalCheckoutPage: React.FC = () => {
         return null;
     }
 
+    // Show loading while checking KYC
+    if (checkingKYC) {
+        return (
+            <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+                <Navbar />
+                <div className="container mx-auto px-6 py-10">
+                    <div className="max-w-2xl mx-auto text-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-600 mx-auto"></div>
+                        <p className="mt-4 text-gray-600">Verifying your account...</p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
             <Navbar />
@@ -212,8 +280,8 @@ export const RentalCheckoutPage: React.FC = () => {
                             onClick={handlePayment}
                             disabled={loading}
                             className={`w-full px-6 py-4 rounded-lg text-white font-semibold text-lg transition-colors ${loading
-                                    ? 'bg-amber-300 cursor-not-allowed'
-                                    : 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 shadow-md hover:shadow-lg'
+                                ? 'bg-amber-300 cursor-not-allowed'
+                                : 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 shadow-md hover:shadow-lg'
                                 }`}
                         >
                             {loading ? 'Processing...' : `Pay ₹${totalPrice.toLocaleString()}`}

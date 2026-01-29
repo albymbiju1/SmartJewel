@@ -96,6 +96,45 @@ def create_booking():
     if rental_item.get("status") != "available":
         return jsonify({"error": "Rental item is not available"}), 400
     
+    
+    # ===== KYC VERIFICATION CHECK =====
+    # Check if customer has verified KYC before allowing rental booking
+    # Note: JWT returns user_id from 'users' collection, so we check there
+    user = db.users.find_one(
+        {"_id": ObjectId(user_id)},
+        {"kyc_verification": 1}
+    )
+    
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    
+    kyc_data = user.get("kyc_verification", {})
+    kyc_status = kyc_data.get("status", "not_submitted")
+    
+    # Block booking if KYC not verified
+    if kyc_status != "verified":
+        return jsonify({
+            "error": "KYC verification required",
+            "message": "You must complete KYC verification before renting jewelry. Please upload your ID documents.",
+            "kyc_status": kyc_status,
+            "redirect_to": "/profile/kyc"
+        }), 403
+    
+    # Check if at least one document is verified
+    documents = kyc_data.get("documents", [])
+    has_verified_doc = any(doc.get("verified", False) for doc in documents)
+    
+    if not has_verified_doc:
+        return jsonify({
+            "error": "No verified KYC documents",
+            "message": "Your KYC documents are pending verification. Please wait for admin approval.",
+            "kyc_status": "pending"
+        }), 403
+    
+    # Get the verified document for linking to booking
+    verified_doc = next((doc for doc in documents if doc.get("verified")), None)
+    # ===== END KYC CHECK =====
+    
     # Parse and validate dates
     try:
         start_date = datetime.strptime(start_date_str, "%Y-%m-%d").replace(hour=0, minute=0, second=0, microsecond=0)
@@ -148,6 +187,14 @@ def create_booking():
         "rental_item_id": rental_item_oid,
         "product_id": rental_item.get("product_id"),
         "customer_id": ObjectId(user_id),
+        
+        # KYC verification
+        "kyc_verified": True,
+        "kyc_document_used": {
+            "type": verified_doc.get("type"),
+            "masked_number": verified_doc.get("masked_number"),
+            "verified_at": kyc_data.get("verified_at")
+        },
         
         # Dates
         "start_date": start_date,

@@ -152,6 +152,14 @@ def create_app():
     # Analytics blueprint
     from app.blueprints.analytics import bp as analytics_bp
     app.register_blueprint(analytics_bp)
+    
+    # Customer KYC blueprint
+    from app.blueprints.customer_kyc import bp as customer_kyc_bp
+    app.register_blueprint(customer_kyc_bp)
+    
+    # Admin KYC blueprint  
+    from app.blueprints.admin_kyc import bp as admin_kyc_bp
+    app.register_blueprint(admin_kyc_bp)
 
     # Explicit static file serving route with CORS and cache control headers
     @app.route('/static/<path:filename>')

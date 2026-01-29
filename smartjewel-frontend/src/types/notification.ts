@@ -7,6 +7,10 @@ export interface NotificationItem {
     status?: string;
     is_read: boolean;
     created_at: string;
+    timestamp?: string;  // Backend sends this for KYC notifications
+    action_url?: string;  // Action URL for KYC, rentals, etc.
+    icon?: string;
+    color?: string;
     data?: {
         order_id?: string;
         status?: string;

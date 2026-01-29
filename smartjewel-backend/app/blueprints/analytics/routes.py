@@ -31,12 +31,12 @@ def get_rental_analytics():
     from_date, to_date = _get_date_range()
     
     try:
-        # Total rental revenue
+        # Total rental revenue (only count PAID rentals)
         revenue_pipeline = [
             {
                 '$match': {
-                    'created_at': {'$gte': from_date, '$lte': to_date}
-                    # Include all payment statuses to show all bookings
+                    'created_at': {'$gte': from_date, '$lte': to_date},
+                    'payment_status': 'paid'  # Only count paid rentals
                 }
             },
             {
@@ -62,11 +62,12 @@ def get_rental_analytics():
             'created_at': {'$gte': from_date, '$lte': to_date}
         })
         
-        # Most popular rental items (top 10)
+        # Most popular rental items (top 10) - only count paid rentals
         popular_items_pipeline = [
             {
                 '$match': {
-                    'created_at': {'$gte': from_date, '$lte': to_date}
+                    'created_at': {'$gte': from_date, '$lte': to_date},
+                    'payment_status': 'paid'  # Only count paid rentals
                 }
             },
             {
@@ -112,12 +113,13 @@ def get_rental_analytics():
                 'total_revenue': float(item['total_revenue'])
             })
         
-        # Average rental duration
+        # Average rental duration (only paid rentals)
         duration_pipeline = [
             {
                 '$match': {
                     'created_at': {'$gte': from_date, '$lte': to_date},
-                    'duration_days': {'$exists': True}
+                    'duration_days': {'$exists': True},
+                    'payment_status': 'paid'  # Only count paid rentals
                 }
             },
             {
@@ -135,8 +137,8 @@ def get_rental_analytics():
         monthly_trend_pipeline = [
             {
                 '$match': {
-                    'created_at': {'$gte': twelve_months_ago, '$lte': to_date}
-                    # Include all bookings for trend analysis
+                    'created_at': {'$gte': twelve_months_ago, '$lte': to_date},
+                    'payment_status': 'paid'  # Only count paid rentals for revenue
                 }
             },
             {
@@ -215,13 +217,13 @@ def get_revenue_analytics():
         sales_revenue = sales_result[0]['total_sales'] if sales_result else 0
         
         # Rental revenue (without date filter for now)
+        # Rental revenue (only count PAID rentals)
         rentals_pipeline = [
-            # Temporarily remove filters to get all rental revenue
-            # {
-            #     '$match': {
-            #         'created_at': {'$gte': from_date, '$lte': to_date}
-            #     }
-            # },
+            {
+                '$match': {
+                    'payment_status': 'paid'  # Only count paid rentals
+                }
+            },
             {
                 '$group': {
                     '_id': None,
@@ -249,18 +251,19 @@ def get_revenue_analytics():
         ]
         monthly_sales = list(db.orders.aggregate(monthly_sales_pipeline))
         
-        # Rentals by month - using created_at field
+        # Rentals by month - using created_at field (only PAID rentals)
         monthly_rentals_pipeline = [
             {
                 '$match': {
-                    'created_at': {'$gte': twelve_months_ago, '$lte': to_date}
+                    'created_at': {'$gte': twelve_months_ago, '$lte': to_date},
+                    'payment_status': 'paid'  # Only count paid rentals
                 }
             },
             {
                 '$group': {
                     '_id': {
-                        'year': {'$year': '$createdAt'},
-                        'month': {'$month': '$createdAt'}
+                        'year': {'$year': '$created_at'},
+                        'month': {'$month': '$created_at'}
                     },
                     'amount': {'$sum': '$total_amount'}
                 }

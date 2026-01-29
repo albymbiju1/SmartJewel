@@ -57,6 +57,8 @@ import { TryOnPage } from './pages/customer/TryOnPage';
 import { EarringTryOnPage } from './pages/customer/EarringTryOnPage';
 import { BraceletTryOnPage } from './pages/customer/BraceletTryOnPage';
 import { BangleTryOnPage } from './pages/customer/BangleTryOnPage';
+import { KYCVerificationPage } from './pages/customer/KYCVerificationPage';
+import { default as AdminKYCVerificationPage } from './pages/admin/AdminKYCVerificationPage';
 
 export const AppRouter: React.FC = () => (
   <Router>
@@ -84,6 +86,7 @@ export const AppRouter: React.FC = () => (
       {/* Removed Engagement and Logs routes as per user request */}
       <Route path="/admin/stores" element={<RequireAuth><StoreManagementPage /></RequireAuth>} />
       <Route path="/admin/rentals" element={<RequireAuth><RentalManagementPage /></RequireAuth>} />
+      <Route path="/admin/kyc-verification" element={<RequireAuth><AdminKYCVerificationPage /></RequireAuth>} />
 
       {/* Store Manager Routes (protected) */}
       <Route path="/store/dashboard" element={<RequireAuth><StoreManagerDashboard /></RequireAuth>} />
@@ -133,6 +136,7 @@ export const AppRouter: React.FC = () => (
 
       {/* Profile (protected) */}
       <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
+      <Route path="/profile/kyc" element={<RequireAuth><KYCVerificationPage /></RequireAuth>} />
 
       {/* Inventory Routes (protected) */}
       <Route path="/inventory/dashboard" element={<RequireAuth><InventoryDashboard /></RequireAuth>} />

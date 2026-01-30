@@ -109,9 +109,18 @@ def create_app():
     from app.blueprints.catalog.routes import bp as catalog_bp
     app.register_blueprint(catalog_bp)
     
-    # Virtual Try-On blueprint
-    from app.blueprints.catalog.virtual_tryon import virtual_tryon_bp
-    app.register_blueprint(virtual_tryon_bp)
+    
+    # Virtual Try-On blueprint (only if ML dependencies are available)
+    try:
+        from app.blueprints.catalog import virtual_tryon_bp, VIRTUAL_TRYON_AVAILABLE
+        if VIRTUAL_TRYON_AVAILABLE and virtual_tryon_bp:
+            app.register_blueprint(virtual_tryon_bp)
+            app.logger.info("Virtual try-on feature enabled")
+        else:
+            app.logger.info("Virtual try-on feature disabled - ML dependencies not available")
+    except (ImportError, AttributeError) as e:
+        app.logger.warning(f"Virtual try-on feature disabled: {e}")
+
 
     # Orders API (customer-facing)
     from app.blueprints.orders.routes import bp as orders_bp

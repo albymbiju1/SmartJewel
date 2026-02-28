@@ -9,14 +9,26 @@ app.use(express.json());
 let client;
 let isReady = false;
 let currentQR = null;
+let keepAliveInterval = null;
 
 // Initialize WhatsApp Client
 console.log('Initializing WhatsApp client...');
 client = new Client({
-    authStrategy: new LocalAuth({ clientId: 'smartjewel' }),
+    authStrategy: new LocalAuth({
+        clientId: 'smartjewel',
+        dataPath: './.wwebjs_auth'
+    }),
     puppeteer: {
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--no-first-run',
+            '--disable-extensions'
+        ],
+        timeout: 120000 // 2 minutes timeout
     }
 });
 
@@ -33,11 +45,34 @@ client.on('ready', () => {
     currentQR = null; // Clear QR after authentication
     isReady = true;
     console.log('✅ WhatsApp client is ready!');
+
+    // Start keepalive mechanism to maintain connection
+    if (keepAliveInterval) {
+        clearInterval(keepAliveInterval);
+    }
+
+    keepAliveInterval = setInterval(async () => {
+        try {
+            if (client && isReady) {
+                const state = await client.getState();
+                console.log('💓 Keepalive ping - State:', state);
+            }
+        } catch (error) {
+            console.error('⚠️ Keepalive ping failed:', error.message);
+        }
+    }, 30000); // Ping every 30 seconds
+
+    console.log('🔄 Keepalive mechanism started (30s interval)');
 });
 
 // Authentication
 client.on('authenticated', () => {
     console.log('✅ WhatsApp authenticated successfully!');
+});
+
+// Remote Session Saved - Confirms session persistence
+client.on('remote_session_saved', () => {
+    console.log('💾 Session saved remotely - connection will persist!');
 });
 
 // Authentication Failure
@@ -50,6 +85,23 @@ client.on('auth_failure', (msg) => {
 client.on('disconnected', (reason) => {
     console.log('❌ WhatsApp disconnected:', reason);
     isReady = false;
+
+    // Stop keepalive when disconnected
+    if (keepAliveInterval) {
+        clearInterval(keepAliveInterval);
+        keepAliveInterval = null;
+        console.log('🔴 Keepalive mechanism stopped');
+    }
+});
+
+// Connection State Changes
+client.on('change_state', (state) => {
+    console.log('🔄 Connection state changed:', state);
+});
+
+// Loading Screen Progress
+client.on('loading_screen', (percent, message) => {
+    console.log(`⏳ Loading: ${percent}% - ${message}`);
 });
 
 // Initialize client

@@ -17,6 +17,12 @@ interface Booking {
     payment_status: string;
     amount_paid: number;
     created_at: string;
+    // Refund fields
+    refund_status?: string;
+    refund_amount?: number;
+    cancellation_charge?: number;
+    refund_id?: string;
+    refund_settled_at?: string;
     product: {
         _id: string;
         name: string;
@@ -70,6 +76,7 @@ export const MyRentalsPage: React.FC = () => {
             pending: 'bg-yellow-100 text-yellow-800',
             partial: 'bg-orange-100 text-orange-800',
             paid: 'bg-green-100 text-green-800',
+            refunded: 'bg-purple-100 text-purple-800',
         };
         return styles[status as keyof typeof styles] || 'bg-gray-100 text-gray-800';
     };
@@ -258,7 +265,7 @@ export const MyRentalsPage: React.FC = () => {
                                             <div className="text-sm">
                                                 <span className="text-gray-600">Paid: </span>
                                                 <span className="font-semibold">₹{booking.amount_paid.toLocaleString()}</span>
-                                                {booking.amount_paid < booking.total_amount && (
+                                                {booking.amount_paid < booking.total_amount && booking.payment_status !== 'refunded' && (
                                                     <>
                                                         <span className="text-gray-600 mx-2">•</span>
                                                         <span className="text-gray-600">Remaining: </span>
@@ -278,6 +285,31 @@ export const MyRentalsPage: React.FC = () => {
                                                 View Details →
                                             </button>
                                         </div>
+
+                                        {/* Refund Banner */}
+                                        {booking.payment_status === 'refunded' && booking.refund_amount && (
+                                            booking.refund_status === 'settled' ? (
+                                                <div className="mt-3 flex items-center gap-2 bg-amber-50 border border-amber-300 rounded-lg px-4 py-2 text-sm">
+                                                    <svg className="w-4 h-4 text-amber-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                    <span className="text-amber-800 font-medium">
+                                                        ₹{booking.refund_amount.toLocaleString()} refunded to your account
+                                                    </span>
+                                                    <span className="text-amber-600 text-xs ml-auto">Credited ✓</span>
+                                                </div>
+                                            ) : (
+                                                <div className="mt-3 flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-4 py-2 text-sm">
+                                                    <svg className="w-4 h-4 text-green-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                    <span className="text-green-800 font-medium">
+                                                        Refund of ₹{booking.refund_amount.toLocaleString()} initiated
+                                                    </span>
+                                                    <span className="text-green-600 text-xs ml-auto">5-7 business days</span>
+                                                </div>
+                                            )
+                                        )}
                                     </div>
                                 </div>
                             </div>

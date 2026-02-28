@@ -27,6 +27,15 @@ interface BookingDetail {
     damage_notes?: string;
     notes?: string;
     created_at: string;
+    // Refund fields
+    refund_status?: string;
+    refund_id?: string;
+    refund_amount?: number;
+    cancellation_charge?: number;
+    refund_initiated_at?: string;
+    refund_settle_date?: string;
+    refund_settled_at?: string;
+    refund_error?: string;
     product: {
         _id: string;
         name: string;
@@ -67,15 +76,29 @@ export const MyRentalDetailPage: React.FC = () => {
     };
 
     const handleCancelBooking = async () => {
-        if (!booking || !window.confirm('Are you sure you want to cancel this booking?')) return;
+        if (!booking || !window.confirm('Are you sure you want to cancel this booking? A 5% cancellation charge will apply.')) return;
 
         try {
             setCancelling(true);
-            await api.put(`/api/rentals/bookings/${bookingId}/cancel`, {
+            const response = await api.put(`/api/rentals/bookings/${bookingId}/cancel`, {
                 reason: 'Customer cancelled'
             });
+
             await fetchBookingDetails(); // Refresh data
-            alert('Booking cancelled successfully');
+
+            // Show refund details if applicable
+            if (response.data.refund_details) {
+                const { refund_amount, cancellation_charge, original_amount } = response.data.refund_details;
+                alert(
+                    `Booking cancelled successfully!\n\n` +
+                    `Original Amount: ₹${original_amount.toLocaleString()}\n` +
+                    `Cancellation Charge (5%): ₹${cancellation_charge.toLocaleString()}\n` +
+                    `Refund Amount (95%): ₹${refund_amount.toLocaleString()}\n\n` +
+                    `The refund will be processed to your original payment method within 5-7 business days.`
+                );
+            } else {
+                alert('Booking cancelled successfully');
+            }
         } catch (err: any) {
             alert(err.response?.data?.error || 'Failed to cancel booking');
         } finally {
@@ -98,6 +121,7 @@ export const MyRentalDetailPage: React.FC = () => {
             pending: 'bg-yellow-100 text-yellow-800',
             partial: 'bg-orange-100 text-orange-800',
             paid: 'bg-green-100 text-green-800',
+            refunded: 'bg-purple-100 text-purple-800',
         };
         return styles[status as keyof typeof styles] || 'bg-gray-100 text-gray-800';
     };
@@ -352,6 +376,159 @@ export const MyRentalDetailPage: React.FC = () => {
                                 )}
                             </div>
                         </div>
+
+                        {/* Refund Information */}
+                        {booking.booking_status === 'cancelled' && booking.refund_amount && booking.refund_amount > 0 && (() => {
+                            const isSettled = booking.refund_status === 'settled';
+                            const isCompleted = booking.refund_status === 'completed';
+                            const isFailed = booking.refund_status === 'failed';
+
+                            if (isSettled) {
+                                return (
+                                    <div className="bg-amber-50 rounded-lg shadow-sm p-6 border border-amber-300">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            <h2 className="text-lg font-semibold text-amber-900">Money Credited ✓</h2>
+                                        </div>
+                                        <div className="space-y-2 text-sm">
+                                            <div className="flex justify-between text-gray-700">
+                                                <span>Original Amount</span>
+                                                <span className="font-medium">₹{booking.amount_paid.toLocaleString()}</span>
+                                            </div>
+                                            {booking.cancellation_charge && (
+                                                <div className="flex justify-between text-orange-700">
+                                                    <span>Cancellation Charge (5%)</span>
+                                                    <span>-₹{booking.cancellation_charge.toLocaleString()}</span>
+                                                </div>
+                                            )}
+                                            <div className="border-t border-amber-200 pt-2 flex justify-between font-bold text-amber-800 text-base">
+                                                <span>Refunded to Account</span>
+                                                <span>₹{booking.refund_amount.toLocaleString()}</span>
+                                            </div>
+                                            {booking.refund_id && (
+                                                <p className="text-xs text-amber-700 pt-1">
+                                                    Refund ID: <span className="font-mono">{booking.refund_id}</span>
+                                                </p>
+                                            )}
+                                            {booking.refund_settled_at && (
+                                                <p className="text-xs text-amber-700">
+                                                    Settled on: {new Date(booking.refund_settled_at).toLocaleDateString()}
+                                                </p>
+                                            )}
+                                            <div className="mt-3 bg-amber-100 rounded-lg px-3 py-2">
+                                                <p className="text-xs text-amber-800 font-medium">
+                                                    💰 ₹{booking.refund_amount.toLocaleString()} has been credited to your original payment method.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            }
+
+                            if (isCompleted) {
+                                return (
+                                    <div className="bg-green-50 rounded-lg shadow-sm p-6 border border-green-300">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            <h2 className="text-lg font-semibold text-green-900">Refund Initiated ✓</h2>
+                                        </div>
+                                        <div className="space-y-2 text-sm">
+                                            <div className="flex justify-between text-gray-700">
+                                                <span>Original Amount</span>
+                                                <span className="font-medium">₹{booking.amount_paid.toLocaleString()}</span>
+                                            </div>
+                                            {booking.cancellation_charge && (
+                                                <div className="flex justify-between text-orange-700">
+                                                    <span>Cancellation Charge (5%)</span>
+                                                    <span>-₹{booking.cancellation_charge.toLocaleString()}</span>
+                                                </div>
+                                            )}
+                                            <div className="border-t border-green-200 pt-2 flex justify-between font-bold text-green-800 text-base">
+                                                <span>Refund Amount</span>
+                                                <span>₹{booking.refund_amount.toLocaleString()}</span>
+                                            </div>
+                                            {booking.refund_id && (
+                                                <p className="text-xs text-green-700 pt-1">
+                                                    Refund ID: <span className="font-mono">{booking.refund_id}</span>
+                                                </p>
+                                            )}
+                                            <div className="mt-3 bg-green-100 rounded-lg px-3 py-2">
+                                                <p className="text-xs text-green-800 font-medium">
+                                                    ✅ Your refund has been successfully processed. It will reflect in your account within 5-7 business days depending on your bank.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            }
+
+                            if (isFailed) {
+                                return (
+                                    <div className="bg-red-50 rounded-lg shadow-sm p-6 border border-red-300">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            <h2 className="text-lg font-semibold text-red-900">Refund Failed</h2>
+                                        </div>
+                                        <div className="space-y-2 text-sm">
+                                            <div className="flex justify-between text-gray-700">
+                                                <span>Refund Amount Due</span>
+                                                <span className="font-medium">₹{booking.refund_amount.toLocaleString()}</span>
+                                            </div>
+                                            <div className="mt-3 bg-red-100 rounded-lg px-3 py-2">
+                                                <p className="text-xs text-red-800 font-medium">
+                                                    ⚠️ We encountered an issue processing your refund. Please contact support with your Booking ID for manual assistance.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            }
+
+                            // Pending / processing
+                            return (
+                                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg shadow-sm p-6 border border-blue-200">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <svg className="w-5 h-5 text-blue-600 animate-spin" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                                        </svg>
+                                        <h2 className="text-lg font-semibold text-blue-900">Refund Processing…</h2>
+                                    </div>
+                                    <div className="space-y-2 text-sm">
+                                        <div className="flex justify-between text-blue-800">
+                                            <span>Original Amount</span>
+                                            <span className="font-medium">₹{booking.amount_paid.toLocaleString()}</span>
+                                        </div>
+                                        {booking.cancellation_charge && (
+                                            <div className="flex justify-between text-orange-700">
+                                                <span>Cancellation Charge (5%)</span>
+                                                <span>-₹{booking.cancellation_charge.toLocaleString()}</span>
+                                            </div>
+                                        )}
+                                        <div className="border-t border-blue-200 pt-2 flex justify-between font-semibold text-green-700">
+                                            <span>Refund Amount (95%)</span>
+                                            <span>₹{booking.refund_amount.toLocaleString()}</span>
+                                        </div>
+                                        {booking.refund_id && (
+                                            <p className="text-xs text-blue-700 pt-1">
+                                                Refund ID: <span className="font-mono">{booking.refund_id}</span>
+                                            </p>
+                                        )}
+                                        <div className="mt-3 bg-blue-100 rounded-lg px-3 py-2">
+                                            <p className="text-xs text-blue-800">
+                                                ⏳ Your refund is being processed. It will be credited to your original payment method within 5-7 business days.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })()}
 
                         {/* Actions */}
                         {booking.booking_status === 'confirmed' && (

@@ -56,7 +56,94 @@ def _check_date_conflicts(db, rental_item_id, start_date, end_date, exclude_book
     return len(conflicting) > 0, conflicting
 
 
+def _process_rental_refund(db, booking, cancellation_reason="Customer cancelled"):
+    """
+    Process refund for a cancelled rental booking.
+    
+    Refund Policy:
+    - 95% refund (5% cancellation charge)
+    - Only available before pickup (booking_status = 'confirmed')
+    - Automatic processing via Razorpay
+    
+    Returns (success, refund_amount, error_message)
+    """
+    import random
+    from app.utils.razorpay_utils import process_refund as razorpay_refund, inr_paise
+    
+    # Check if booking has a payment
+    if booking.get("payment_status") != "paid":
+        return True, 0, None  # No refund needed for unpaid bookings
+    
+    payment_id = booking.get("payment_id")
+    if not payment_id:
+        return False, 0, "Payment ID not found in booking"
+    
+    # Calculate refund amount (95% of total paid)
+    total_paid = booking.get("amount_paid", booking.get("total_amount", 0))
+    refund_amount = total_paid * 0.95  # 95% refund
+    cancellation_charge = total_paid * 0.05  # 5% cancellation charge
+    
+    # Round to 2 decimal places
+    refund_amount = round(refund_amount, 2)
+    cancellation_charge = round(cancellation_charge, 2)
+    
+    # Process refund via Razorpay
+    refund_amount_paise = inr_paise(refund_amount)
+    refund_notes = f"Cancellation refund (95%). Charge: ₹{cancellation_charge}. Reason: {cancellation_reason}"
+    
+    refund_result = razorpay_refund(payment_id, refund_amount_paise, refund_notes)
+    
+    if not refund_result.get("success"):
+        error_msg = refund_result.get("message", "Refund processing failed")
+        return False, 0, error_msg
+    
+    # Get refund ID from Razorpay response
+    refund_data = refund_result.get("refund", {})
+    refund_id = refund_data.get("id", "")
+    
+    # Record refund in rental_payments collection
+    refund_payment = {
+        "booking_id": booking["_id"],
+        "customer_id": booking["customer_id"],
+        "payment_type": "cancellation_refund",
+        "amount": -refund_amount,  # Negative for refund
+        "cancellation_charge": cancellation_charge,
+        "payment_method": "razorpay",
+        "payment_date": datetime.utcnow(),
+        "transaction_ref": refund_id,
+        "received_by": None,  # System-initiated
+        "notes": refund_notes,
+        "razorpay_refund_details": refund_data,
+        "created_at": datetime.utcnow()
+    }
+    db.rental_payments.insert_one(refund_payment)
+    
+    # Simulate bank settlement: pick a random settle date 5-7 days from now
+    settle_days = random.randint(5, 7)
+    refund_settle_date = datetime.utcnow() + timedelta(days=settle_days)
+    
+    # Update booking with refund details
+    db.rental_bookings.update_one(
+        {"_id": booking["_id"]},
+        {
+            "$set": {
+                "refund_status": "completed",
+                "refund_id": refund_id,
+                "refund_amount": refund_amount,
+                "cancellation_charge": cancellation_charge,
+                "refund_initiated_at": datetime.utcnow(),
+                "refund_settle_date": refund_settle_date,
+                "payment_status": "refunded",
+                "updated_at": datetime.utcnow()
+            }
+        }
+    )
+    
+    return True, refund_amount, None
+
+
 # ============ CUSTOMER BOOKING ENDPOINTS ============
+
 
 @bp_bookings.post('/bookings')
 @jwt_required()
@@ -411,7 +498,12 @@ def get_booking_details(booking_id):
 @bp_bookings.put('/bookings/<booking_id>/cancel')
 @jwt_required()
 def cancel_booking(booking_id):
-    """Cancel a booking (only if not yet active)"""
+    """
+    Cancel a booking (only if not yet active)
+    
+    Automatically processes 95% refund for paid bookings.
+    5% cancellation charge applies.
+    """
     db = _db()
     user_id = get_jwt_identity()
     data = request.get_json() or {}
@@ -432,21 +524,64 @@ def cancel_booking(booking_id):
     if booking["booking_status"] not in ["confirmed"]:
         return jsonify({"error": "Can only cancel confirmed bookings that haven't been picked up"}), 400
     
-    # Update booking
+    cancellation_reason = data.get("reason", "Customer cancelled")
+    
+    # Process refund if booking was paid
+    refund_success = True
+    refund_amount = 0
+    refund_error = None
+    
+    if booking.get("payment_status") == "paid":
+        refund_success, refund_amount, refund_error = _process_rental_refund(
+            db, booking, cancellation_reason
+        )
+        
+        if not refund_success:
+            # Refund failed - still cancel booking but inform user
+            current_app.logger.error(f"Refund failed for booking {booking_id}: {refund_error}")
+    
+    # Update booking status
+    update_data = {
+        "booking_status": "cancelled",
+        "cancelled_at": datetime.utcnow(),
+        "cancelled_by": ObjectId(user_id),
+        "cancellation_reason": cancellation_reason,
+        "updated_at": datetime.utcnow()
+    }
+    
+    # If refund failed, record the error
+    if not refund_success and refund_error:
+        update_data["refund_status"] = "failed"
+        update_data["refund_error"] = refund_error
+    
     db.rental_bookings.update_one(
         {"_id": booking_oid},
-        {
-            "$set": {
-                "booking_status": "cancelled",
-                "cancelled_at": datetime.utcnow(),
-                "cancelled_by": ObjectId(user_id),
-                "cancellation_reason": data.get("reason", "Customer cancelled"),
-                "updated_at": datetime.utcnow()
-            }
-        }
+        {"$set": update_data}
     )
     
-    return jsonify({"message": "Booking cancelled successfully"})
+    # Prepare response
+    response = {
+        "message": "Booking cancelled successfully",
+        "refund_processed": refund_success and refund_amount > 0
+    }
+    
+    if refund_amount > 0:
+        total_paid = booking.get("amount_paid", booking.get("total_amount", 0))
+        cancellation_charge = round(total_paid * 0.05, 2)
+        
+        response["refund_details"] = {
+            "refund_amount": refund_amount,
+            "cancellation_charge": cancellation_charge,
+            "original_amount": total_paid,
+            "refund_percentage": 95,
+            "status": "completed" if refund_success else "failed",
+            "message": f"Refund of ₹{refund_amount:.2f} will be processed to your original payment method within 5-7 business days."
+        }
+        
+        if refund_error:
+            response["refund_details"]["error"] = refund_error
+    
+    return jsonify(response)
 
 
 @bp_bookings.get('/availability/<rental_item_id>')

@@ -618,8 +618,21 @@ def update_item(item_id):
         
         if res.matched_count == 0:
             return jsonify({"error": "not_found"}), 404
-            
+
+        # Spot alert: if price was changed, immediately fire price drop alerts
+        if "price" in update:
+            try:
+                from app.services.alert_service import AlertService
+                triggered = AlertService.trigger_price_drop_alerts_for_product(
+                    item_id, float(update["price"])
+                )
+                if triggered:
+                    current_app.logger.info(f"Spot price-drop alerts triggered: {triggered} for item {item_id}")
+            except Exception as alert_err:
+                current_app.logger.warning(f"Spot price alert check failed: {alert_err}")
+
         return jsonify({"updated": True})
+
         
     except Exception as e:
         current_app.logger.error(f"Update item failed for {item_id}: {str(e)}")
@@ -816,7 +829,21 @@ def stock_move():
     elif mtype == "adjustment":
         upsert_level(to_loc or from_loc, qty or 0, weight or 0.0)
 
+    # Spot alert: if stock just came in, immediately fire back-in-stock alerts
+    if mtype in ("inward", "adjustment") and (qty or 0) > 0:
+        try:
+            # Also update the quantity on the product document itself for consistency
+            db.items.update_one(
+                {"_id": item_oid},
+                {"$inc": {"quantity": qty or 0}}
+            )
+            from app.services.alert_service import AlertService
+            AlertService.trigger_stock_alerts_for_product(str(item_oid))
+        except Exception as alert_err:
+            current_app.logger.warning(f"spot stock alert failed: {alert_err}")
+
     return jsonify({"moved": True})
+
 
 
 @bp.get("/stock/ledger")

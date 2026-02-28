@@ -83,6 +83,15 @@ class GoldRateService:
         price_calculator = GoldPriceCalculator(db)
         update_results = price_calculator.update_product_prices(dry_run=False)
 
+        # Spot alert: immediately fire price drop alerts now that prices are fresh
+        try:
+            from flask import current_app
+            from app.services.alert_service import AlertService
+            triggered = AlertService.check_price_drops()
+            print(f"[GoldRateService] Spot price-drop alerts triggered: {triggered}")
+        except Exception as alert_err:
+            print(f"[GoldRateService] Spot alert check failed: {alert_err}")
+
         return {
             "success": True,
             "rates": payload["rates"],
@@ -95,3 +104,4 @@ class GoldRateService:
                 "errors": update_results.get("errors", []),
             },
         }
+

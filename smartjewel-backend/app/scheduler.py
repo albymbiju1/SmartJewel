@@ -95,6 +95,37 @@ def _check_stock_changes_job(app) -> None:
         app.logger.exception(f"Stock check job failed: {e}")
 
 
+def _settle_rental_refunds_job(app) -> None:
+    """Daily job: marks rental refunds as 'settled' once their settle date has passed."""
+    try:
+        with app.app_context():
+            db = app.extensions.get('mongo_db')
+            if db is None:
+                return
+
+            now = datetime.utcnow()
+            result = db.rental_bookings.update_many(
+                {
+                    "refund_status": "completed",
+                    "refund_settle_date": {"$lte": now}
+                },
+                {
+                    "$set": {
+                        "refund_status": "settled",
+                        "refund_settled_at": now,
+                        "updated_at": now
+                    }
+                }
+            )
+
+            if result.modified_count > 0:
+                app.logger.info(
+                    f"rental_refund_settlement_job: settled {result.modified_count} refund(s)"
+                )
+    except Exception as e:
+        app.logger.exception(f"Rental refund settlement job failed: {e}")
+
+
 def trigger_gold_rate_refresh(app: Any) -> dict:
     """Manually trigger the gold rate refresh job for testing."""
     try:
@@ -166,6 +197,19 @@ def setup_scheduler(app: Any) -> BackgroundScheduler:
         id="stock_change_check",
         replace_existing=True,
         misfire_grace_time=600,  # 10 minutes grace
+        coalesce=True,
+        max_instances=1,
+    )
+
+    # Rental refund settlement job - daily at midnight IST
+    refund_settle_trigger = CronTrigger(hour=0, minute=0, timezone=IST)
+    scheduler.add_job(
+        _settle_rental_refunds_job,
+        refund_settle_trigger,
+        args=[app],
+        id="rental_refund_settlement",
+        replace_existing=True,
+        misfire_grace_time=3600,
         coalesce=True,
         max_instances=1,
     )

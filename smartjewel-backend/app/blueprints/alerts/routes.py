@@ -42,6 +42,10 @@ def create_alert():
     alert_id = AlertService.create_alert(user_id, alert_type, params)
     
     if alert_id:
+        # Immediately check if condition is already met (e.g. price already <= target)
+        # so user gets notified right away without waiting for the scheduler
+        AlertService.check_alert_immediately(alert_id)
+        
         return jsonify({
             'success': True,
             'alert_id': alert_id,

@@ -6,6 +6,8 @@ import { recommendationService, Recommendation } from '../../services/recommenda
 import { BraceletTryOn } from '../../components/BraceletTryOn';
 import { EarringTryOn } from '../../components/EarringTryOn';
 import { VirtualTryOn } from '../../components/VirtualTryOn';
+import alertService from '../../services/alertService';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface Product {
   _id: string;
@@ -41,6 +43,11 @@ export const ProductDetailPage: React.FC = () => {
   const [recommendedProducts, setRecommendedProducts] = useState<Recommendation[]>([]);
   const [loadingRecommendations, setLoadingRecommendations] = useState(false);
   const [showTryOn, setShowTryOn] = useState(false);
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertTargetPrice, setAlertTargetPrice] = useState('');
+  const [alertSubmitting, setAlertSubmitting] = useState(false);
+  const [alertSuccess, setAlertSuccess] = useState(false);
+  const { isAuthenticated } = useAuth();
 
   // Version timestamp for cache busting
   const imageVersion = useMemo(() => Date.now(), []);
@@ -487,6 +494,22 @@ export const ProductDetailPage: React.FC = () => {
                       </div>
                     </div>
 
+                    {/* Price Alert Button */}
+                    <button
+                      className="w-full mt-2 py-2.5 px-6 rounded-lg border border-amber-400 text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
+                      onClick={() => {
+                        if (!isAuthenticated) { navigate('/login'); return; }
+                        setAlertSuccess(false);
+                        setAlertTargetPrice('');
+                        setShowAlertModal(true);
+                      }}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                      {productWithStock.stockStatus === 'out_of_stock'
+                        ? '🔔 Notify me when back in stock'
+                        : '🔔 Notify me when price drops'}
+                    </button>
+
                     <div className="mt-4 flex items-center space-x-4 text-sm text-gray-600">
                       <div className="flex items-center space-x-1">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg>
@@ -645,6 +668,93 @@ export const ProductDetailPage: React.FC = () => {
                 <VirtualTryOn productId={product._id} />
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Price Alert Modal */}
+      {showAlertModal && product && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowAlertModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900">
+                {productWithStock?.stockStatus === 'out_of_stock' ? '🔔 Back in Stock Alert' : '🔔 Price Drop Alert'}
+              </h2>
+              <button onClick={() => setShowAlertModal(false)} className="p-1.5 rounded-full hover:bg-gray-100">
+                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            {alertSuccess ? (
+              <div className="text-center py-6">
+                <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-3">
+                  <svg className="w-7 h-7 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                </div>
+                <p className="text-gray-900 font-semibold">Alert set successfully!</p>
+                <p className="text-gray-500 text-sm mt-1">We'll notify you via the notification bell and email.</p>
+                <button onClick={() => setShowAlertModal(false)} className="mt-4 px-5 py-2 rounded-lg bg-gray-900 text-white text-sm hover:opacity-90">Done</button>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-3 bg-gray-50 rounded-xl p-3 mb-5">
+                  {product.image && (
+                    <img src={getImageUrl(product.image)} alt={product.name} className="w-14 h-14 object-cover rounded-lg" />
+                  )}
+                  <div>
+                    <p className="font-medium text-gray-900 text-sm line-clamp-2">{product.name}</p>
+                    {product.price && (
+                      <p className="text-amber-700 font-semibold text-sm">₹{product.price.toLocaleString('en-IN')}</p>
+                    )}
+                  </div>
+                </div>
+
+                {productWithStock?.stockStatus !== 'out_of_stock' && (
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Target price <span className="text-gray-400 font-normal">(optional)</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">₹</span>
+                      <input
+                        type="number"
+                        value={alertTargetPrice}
+                        onChange={e => setAlertTargetPrice(e.target.value)}
+                        placeholder={product.price ? Math.round(product.price * 0.9).toString() : ''}
+                        className="w-full pl-7 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Leave blank to alert on any drop ≥5% or ≥₹1,000
+                    </p>
+                  </div>
+                )}
+
+                <p className="text-xs text-gray-500 mb-4">
+                  You'll be notified via the 🔔 notification bell in the app and by email.
+                </p>
+
+                <button
+                  onClick={async () => {
+                    setAlertSubmitting(true);
+                    const alertType = productWithStock?.stockStatus === 'out_of_stock' ? 'back_in_stock' : 'price_drop';
+                    const id = await alertService.createAlert({
+                      alert_type: alertType,
+                      product_id: product._id,
+                      target_price: alertTargetPrice ? parseFloat(alertTargetPrice) : null,
+                      notification_methods: ['email', 'app'],
+                    });
+                    setAlertSubmitting(false);
+                    if (id) setAlertSuccess(true);
+                  }}
+                  disabled={alertSubmitting}
+                  className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-sm transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {alertSubmitting
+                    ? <><div className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin" /> Setting alert…</>
+                    : '🔔 Set Alert'}
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

@@ -420,6 +420,14 @@ def update_appointment_status(appointment_id: str, action: str):
         return jsonify({"error": "not_found"}), 404
 
     updated_appointment = db.appointments.find_one({"_id": oid})
+
+    # Send notification to customer
+    try:
+        from app.services.notification_service import send_appointment_notification
+        send_appointment_notification(updated_appointment, new_status)
+    except Exception as e:
+        print(f"[Appointment] Failed to send notification: {e}")
+
     return jsonify({
         "appointment": {
             "id": str(updated_appointment.get("_id", "")),
@@ -432,4 +440,4 @@ def update_appointment_status(appointment_id: str, action: str):
             "status": updated_appointment.get("status", "pending"),
             "created_at": updated_appointment.get("created_at", "").isoformat() if isinstance(updated_appointment.get("created_at"), datetime) else updated_appointment.get("created_at", "")
         }
-    })
+    })

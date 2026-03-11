@@ -212,6 +212,43 @@ def delete_store(store_id):
         log.error(f"Error deleting store: {str(e)}")
         return jsonify({"error": "Failed to delete store"}), 500
 
+# ---- Customer Appointment Lookup ----
+@bp.get("/my-appointments")
+def get_my_appointments():
+    """Get all appointments for a customer by email (public endpoint)."""
+    db = current_app.extensions['mongo_db']
+    email = (request.args.get("email") or "").strip().lower()
+    if not email:
+        return jsonify({"error": "email is required"}), 400
+    try:
+        appointments = list(db.appointments.find({"customer_email": email}).sort("created_at", -1))
+        result = []
+        for a in appointments:
+            store_name = a.get("store_name", "")
+            if not store_name and a.get("store_id"):
+                store = db.stores.find_one({"_id": a["store_id"]}, {"name": 1})
+                store_name = store.get("name", "") if store else ""
+            created_at = a.get("created_at", "")
+            if isinstance(created_at, datetime):
+                created_at = created_at.isoformat()
+            result.append({
+                "id": str(a["_id"]),
+                "store_name": store_name,
+                "customer_name": a.get("customer_name", ""),
+                "customer_email": a.get("customer_email", ""),
+                "customer_phone": a.get("customer_phone", ""),
+                "preferred_date": a.get("preferred_date", ""),
+                "preferred_time": a.get("preferred_time", ""),
+                "notes": a.get("notes", ""),
+                "status": a.get("status", "pending"),
+                "created_at": created_at,
+            })
+        return jsonify({"appointments": result}), 200
+    except Exception as e:
+        log.error(f"Error fetching appointments: {str(e)}")
+        return jsonify({"error": "Failed to fetch appointments"}), 500
+
+
 # ---- Appointment Booking (Future Integration) ----
 @bp.post("/<store_id>/book-appointment")
 def book_appointment(store_id):

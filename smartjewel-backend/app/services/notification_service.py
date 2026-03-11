@@ -246,3 +246,76 @@ def should_send_notification(old_status: str, new_status: str) -> bool:
 
     # Send notification if new status is one we notify about
     return new_status.lower() in notify_statuses
+
+
+def send_appointment_notification(appointment: dict, new_status: str) -> bool:
+    """
+    Send an in-app notification to a customer when their appointment is approved or rejected.
+
+    Looks up the user by customer_email (appointments may be booked without auth).
+    Inserts a notification document into db.notifications.
+    """
+    from datetime import datetime
+    from bson import ObjectId
+
+    if new_status not in ("approved", "rejected"):
+        return True  # Nothing to notify for other statuses
+
+    db = current_app.extensions.get('mongo_db')
+    if db is None:
+        return False
+
+    customer_email = (appointment.get("customer_email") or "").strip().lower()
+    customer_name = appointment.get("customer_name", "there")
+    store_name = appointment.get("store_name", "our store")
+    preferred_date = appointment.get("preferred_date", "")
+    preferred_time = appointment.get("preferred_time", "")
+    appointment_id = str(appointment.get("_id", ""))
+
+    # Look up the user in our system by email
+    user_doc = db.users.find_one({"email": customer_email}) if customer_email else None
+
+    if new_status == "approved":
+        title = "Appointment Confirmed! ✅"
+        message = (
+            f"Hi {customer_name}, your appointment at {store_name} on {preferred_date}"
+            + (f" at {preferred_time}" if preferred_time else "")
+            + " has been approved. We look forward to seeing you!"
+        )
+    else:
+        title = "Appointment Update"
+        message = (
+            f"Hi {customer_name}, unfortunately your appointment request at {store_name}"
+            + (f" on {preferred_date}" if preferred_date else "")
+            + " could not be accommodated. Please book a different slot."
+        )
+
+    notification = {
+        "title": title,
+        "message": message,
+        "type": "appointment_status",
+        "status": new_status,
+        "data": {
+            "appointment_id": appointment_id,
+            "status": new_status,
+            "store_name": store_name,
+        },
+        "is_read": False,
+        "created_at": datetime.utcnow(),
+        "related_entity_id": appointment_id,
+        "related_entity_type": "appointment",
+        # Store email for non-registered users too
+        "customer_email": customer_email,
+    }
+
+    # If user found in DB, attach their user_id so the authenticated alerts panel picks it up
+    if user_doc:
+        notification["user_id"] = user_doc["_id"]
+
+    try:
+        result = db.notifications.insert_one(notification)
+        print(f"[Notification] Appointment {new_status} notification created: {result.inserted_id} for {customer_email}")
+        return True
+    except Exception as e:
+        print(f"[Notification] Failed to save appointment notification: {e}")
+        return False

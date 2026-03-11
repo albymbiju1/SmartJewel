@@ -60,6 +60,7 @@ import { BangleTryOnPage } from './pages/customer/BangleTryOnPage';
 import { KYCVerificationPage } from './pages/customer/KYCVerificationPage';
 import { default as AdminKYCVerificationPage } from './pages/admin/AdminKYCVerificationPage';
 import MyAlertsPage from './pages/customer/MyAlertsPage';
+import MyAppointmentsPage from './pages/customer/MyAppointmentsPage';
 
 export const AppRouter: React.FC = () => (
   <Router>
@@ -139,6 +140,7 @@ export const AppRouter: React.FC = () => (
       <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
       <Route path="/profile/kyc" element={<RequireAuth><KYCVerificationPage /></RequireAuth>} />
       <Route path="/my-alerts" element={<RequireAuth><MyAlertsPage /></RequireAuth>} />
+      <Route path="/my-appointments" element={<MyAppointmentsPage />} />
 
       {/* Inventory Routes (protected) */}
       <Route path="/inventory/dashboard" element={<RequireAuth><InventoryDashboard /></RequireAuth>} />

@@ -180,7 +180,7 @@ def create_staff():
         "email": email_l,
         "name": data["name"],
         "password_hash": hash_password(data["password"]),
-        "role": {"_id": str(role_doc["_id"]), "role_name": role} if role_doc else None,
+        "role": {"_id": role_doc["_id"], "role_name": role} if role_doc else None,
         "roles": roles,
         "permissions": perms,
         "is_active": True,
@@ -206,8 +206,20 @@ def login():
     if user.get("status") != "active":
         return jsonify({"error": "account_unverified"}), 403
 
-    # Fetch full role info
-    role_doc = db.roles.find_one({"_id": user["role"]["_id"]}) if user.get("role") else None
+    # Fetch full role info — try _id (raw), ObjectId coerce, then role_name as final fallback
+    role_doc = None
+    if user.get("role"):
+        raw_role_id = user["role"]["_id"]
+        role_doc = db.roles.find_one({"_id": raw_role_id})
+        if role_doc is None:
+            try:
+                from bson import ObjectId as _ObjId
+                role_doc = db.roles.find_one({"_id": _ObjId(raw_role_id)})
+            except Exception:
+                pass
+        if role_doc is None and user["role"].get("role_name"):
+            # Final fallback: look up by role name
+            role_doc = db.roles.find_one({"role_name": user["role"]["role_name"]})
     identity = str(user["_id"])
     
     # Convert role info to JSON-serializable format
@@ -442,6 +454,7 @@ def firebase_login():
     This links Google sign-ins to the same Mongo user (by email), ensuring the same
     identity/claims and consistent data access.
     """
+    import os  # ensure os is always in scope, not just inside nested except blocks
     if fb_auth is None:
         log.error("auth.firebase_login.firebase_not_configured")
         return jsonify({"error": "firebase_not_configured"}), 500
@@ -566,28 +579,28 @@ def firebase_login():
     try:
         # First try with revocation check
         try:
-            # In local development, disable timestamp checking to avoid clock skew issues
+            # In local development, allow clock skew to avoid minor drift issues
             is_local = os.getenv("APP_ENV", "development") == "development" or os.getenv("FLASK_ENV") == "development"
-            
+
             if is_local:
-                # Local: Skip revocation check and disable strict timestamp validation
+                # Local: Skip revocation check and allow up to 10s clock skew
                 log.info("auth.firebase_login.local_mode", msg="Using lenient timestamp validation for local development")
-                decoded = fb_auth.verify_id_token(id_token, check_revoked=False)
+                decoded = fb_auth.verify_id_token(id_token, check_revoked=False, clock_skew_seconds=10)
             else:
-                # Production: Full validation
-                decoded = fb_auth.verify_id_token(id_token, check_revoked=True)
+                # Production: Full validation with small clock skew allowance
+                decoded = fb_auth.verify_id_token(id_token, check_revoked=True, clock_skew_seconds=5)
         except fb_auth.RevokedIdTokenError as e:
             log.warning("auth.firebase_login.revoked_token", error=str(e))
             return jsonify({"error": "token_revoked", "details": str(e)}), 401
         except (fb_auth.InvalidIdTokenError, Exception) as first_attempt_error:
-            # Try again without revocation check - sometimes this can interfere with verification
+            # Try again without revocation check
             log.warning("auth.firebase_login.verify_with_revoke_failed", error=str(first_attempt_error))
             try:
-                decoded = fb_auth.verify_id_token(id_token, check_revoked=False)
+                decoded = fb_auth.verify_id_token(id_token, check_revoked=False, clock_skew_seconds=10)
                 log.info("auth.firebase_login.verify_without_revoke_succeeded")
             except Exception as second_attempt_error:
-                # Both attempts failed
                 raise first_attempt_error  # Re-raise the first error for proper handling
+
     except fb_auth.ExpiredIdTokenError as e:
         log.warning("auth.firebase_login.expired_token", error=str(e))
         return jsonify({"error": "token_expired", "details": str(e)}), 401
@@ -680,12 +693,22 @@ def firebase_login():
         user = db.users.find_one({"_id": user["_id"]})
         log.info("auth.firebase_login.auto_verified_google", email=user.get("email"))
 
-    # Prepare role/claims similar to password login
+    # Prepare role/claims — try _id (raw), ObjectId coerce, then role_name as final fallback
     role_info = {}
     role_doc = None
     if user.get("role"):
-        role_doc = db.roles.find_one({"_id": user["role"]["_id"]})
-        role_info = {"_id": str(user["role"]["_id"]), "role_name": user["role"].get("role_name")}
+        raw_role_id = user["role"]["_id"]
+        role_doc = db.roles.find_one({"_id": raw_role_id})
+        if role_doc is None:
+            try:
+                from bson import ObjectId as _ObjId
+                role_doc = db.roles.find_one({"_id": _ObjId(raw_role_id)})
+            except Exception:
+                pass
+        if role_doc is None and user["role"].get("role_name"):
+            # Final fallback: look up by role name
+            role_doc = db.roles.find_one({"role_name": user["role"]["role_name"]})
+        role_info = {"_id": str(raw_role_id), "role_name": user["role"].get("role_name")}
     roles_claim = user.get("roles") or ([role_doc["role_name"]] if role_doc and role_doc.get("role_name") else [])
     perms_claim = role_doc["permissions"] if role_doc and role_doc.get("permissions") else user.get("permissions", [])
 

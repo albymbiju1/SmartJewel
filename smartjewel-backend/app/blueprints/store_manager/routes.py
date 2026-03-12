@@ -108,13 +108,11 @@ def list_store_orders():
     if db is None:
         return jsonify({"orders": [], "message": "Database not available"}), 503
 
-    # Get current user to determine their store
+    # Get current user
     user_id = get_jwt_identity()
     user = db.users.find_one({"_id": _oid(user_id)})
-    if not user or not user.get("store_id"):
-        return jsonify({"error": "no_store_assigned"}), 400
-
-    store_id = user.get("store_id")
+    if not user:
+        return jsonify({"error": "user_not_found"}), 404
 
     # Pagination
     page = max(int(request.args.get("page", 1)), 1)
@@ -131,8 +129,8 @@ def list_store_orders():
     date_from = request.args.get("from")
     date_to = request.args.get("to")
 
-    # Build query to filter orders for this store
-    query = {"store_id": _oid(store_id)}
+    # Build query to filter orders (all orders for store manager now)
+    query = {}
     ands = []
 
     if status:
@@ -178,8 +176,7 @@ def list_store_orders():
 
     if ands:
         query["$and"] = ands  # type: ignore
-    else:
-        query = {"store_id": _oid(store_id)}
+        
     # Exclude logical deletions globally
     query = {"$and": [query, {"deleted": {"$ne": True}}]}
 
@@ -232,16 +229,14 @@ def get_store_orders_summary():
     if db is None:
         return jsonify({"error": "db_unavailable"}), 503
 
-    # Get current user to determine their store
+    # Get current user
     user_id = get_jwt_identity()
     user = db.users.find_one({"_id": _oid(user_id)})
-    if not user or not user.get("store_id"):
-        return jsonify({"error": "no_store_assigned"}), 400
+    if not user:
+        return jsonify({"error": "user_not_found"}), 404
 
-    store_id = user.get("store_id")
-
-    # Build query to filter orders for this store
-    query = {"store_id": _oid(store_id), "deleted": {"$ne": True}}
+    # Build query for all valid orders
+    query = {"deleted": {"$ne": True}}
 
     # Get total orders count
     total_orders = db.orders.count_documents(query)
@@ -275,23 +270,21 @@ def update_order_status(order_id: str):
     if db is None:
         return jsonify({"error": "db_unavailable"}), 503
     
-    # Get current user to determine their store
+    # Get current user
     user_id = get_jwt_identity()
     user = db.users.find_one({"_id": _oid(user_id)})
-    if not user or not user.get("store_id"):
-        return jsonify({"error": "no_store_assigned"}), 400
-
-    store_id = user.get("store_id")
+    if not user:
+        return jsonify({"error": "user_not_found"}), 404
     
     try:
         oid = ObjectId(order_id)
     except Exception:
         return jsonify({"error": "invalid_order_id"}), 400
 
-    # Verify order belongs to this store
-    order = db.orders.find_one({"_id": oid, "store_id": _oid(store_id)})
+    # Find order
+    order = db.orders.find_one({"_id": oid})
     if not order:
-        return jsonify({"error": "order_not_found_or_unauthorized"}), 404
+        return jsonify({"error": "order_not_found"}), 404
 
     body = request.get_json() or {}
     new_status = (body.get("status") or "").strip()

@@ -10,6 +10,7 @@ import { PricesPage } from './pages/inventory/PricesPage';
 import { ValuationPage } from './pages/inventory/ValuationPage';
 import { BomPage } from './pages/inventory/BomPage';
 import { InventoryDashboard } from './pages/inventory/InventoryDashboard';
+import { InventoryReportsPage } from './pages/inventory/InventoryReportsPage';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { AnalyticsDashboardPage } from './pages/admin/AnalyticsDashboardPage';
 import { default as AdminOrdersPage } from './pages/admin/AdminOrdersPage';
@@ -43,6 +44,7 @@ import { StoreProductsPage } from './pages/store/StoreProductsPage';
 import { StoreManagerDashboard } from './pages/store/StoreManagerDashboard';
 import { StoreOrdersPage } from './pages/store/StoreOrdersPage';
 import { StoreAppointmentsPage } from './pages/store/StoreAppointmentsPage';
+import { default as StoreApproveDiscountsPage } from './pages/store/StoreApproveDiscountsPage';
 import { AdvancedSearchPage } from './pages/products/AdvancedSearchPage';
 import FindStorePage from './pages/FindStorePage';
 import WhatsAppTestPage from './pages/WhatsAppTestPage';
@@ -96,6 +98,7 @@ export const AppRouter: React.FC = () => (
       <Route path="/store/inventory" element={<RequireAuth><InventoryDashboard /></RequireAuth>} />
       <Route path="/store/orders" element={<RequireAuth><StoreOrdersPage /></RequireAuth>} />
       <Route path="/store/appointments" element={<RequireAuth><StoreAppointmentsPage /></RequireAuth>} />
+      <Route path="/store/approve-discounts" element={<RequireAuth><StoreApproveDiscountsPage /></RequireAuth>} />
       <Route path="/store/reports" element={<RequireAuth><div>Store Reports</div></RequireAuth>} />
 
       {/* Sales Executive Routes (protected) */}
@@ -151,7 +154,7 @@ export const AppRouter: React.FC = () => (
       <Route path="/inventory/prices" element={<RequireAuth><PricesPage /></RequireAuth>} />
       <Route path="/inventory/valuation" element={<RequireAuth><ValuationPage /></RequireAuth>} />
       <Route path="/inventory/bom" element={<RequireAuth><BomPage /></RequireAuth>} />
-      <Route path="/inventory/reports" element={<RequireAuth><div>Inventory Reports</div></RequireAuth>} />
+      <Route path="/inventory/reports" element={<RequireAuth><InventoryReportsPage /></RequireAuth>} />
     </Routes>
   </Router>
 );

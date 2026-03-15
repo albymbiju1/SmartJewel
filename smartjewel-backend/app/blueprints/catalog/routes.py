@@ -64,6 +64,71 @@ def _ensure_indexes_once():
         pass
 
 
+def _oid(val):
+    try:
+        return ObjectId(val)
+    except Exception:
+        return None
+
+
+def _apply_active_discount_fields(db, item: dict, now: datetime):
+    """Attach active_discount and override price so search/list results reflect discounts everywhere."""
+    try:
+        oid = _oid(item.get("_id")) if isinstance(item.get("_id"), str) else item.get("_id")
+        if not oid:
+            return item
+
+        base_price = item.get("price") or 0
+        try:
+            base_price = float(base_price)
+        except Exception:
+            base_price = 0
+        if not base_price:
+            return item
+
+        discount = db.discounts.find_one({
+            "active": True,
+            "scope": "product",
+            "product_ids": oid,
+            "$and": [
+                {"$or": [{"start_date": None}, {"start_date": {"$lte": now}}]},
+                {"$or": [{"end_date": None}, {"end_date": {"$gte": now}}]},
+            ],
+        })
+        if not discount:
+            item_category = (item.get("category") or item.get("metal") or "").strip().lower()
+            if item_category:
+                discount = db.discounts.find_one({
+                    "active": True,
+                    "scope": "category",
+                    "category": {"$regex": f"^{item_category}$", "$options": "i"},
+                    "$and": [
+                        {"$or": [{"start_date": None}, {"start_date": {"$lte": now}}]},
+                        {"$or": [{"end_date": None}, {"end_date": {"$gte": now}}]},
+                    ],
+                })
+        if not discount:
+            return item
+
+        dtype = discount.get("discount_type", "percentage")
+        dvalue = float(discount.get("discount_value", 0))
+        damount = round(base_price * dvalue / 100, 2) if dtype == "percentage" else min(dvalue, base_price)
+        discounted = round(max(0, base_price - damount), 2)
+        item["active_discount"] = {
+            "id": str(discount.get("_id")),
+            "name": discount.get("name"),
+            "discount_type": dtype,
+            "discount_value": dvalue,
+            "discount_amount": round(damount, 2),
+            "discounted_price": discounted,
+        }
+        item["original_price"] = base_price
+        item["price"] = discounted
+        return item
+    except Exception:
+        return item
+
+
 # --- Query helpers ---
 def _parse_float(val, default=None):
     try:
@@ -271,6 +336,7 @@ def search_products():
         }
     })
 
+    now = datetime.utcnow()
     agg = list(db.items.aggregate(pipeline))
     results = agg[0]["results"] if agg else []
     total = (agg[0]["total"][0]["count"] if agg and agg[0]["total"] else 0)
@@ -279,6 +345,25 @@ def search_products():
     for d in results:
         if d.get("_id"):
             d["_id"] = str(d["_id"])
+
+    # Apply active discounts so catalog search consumers see dropped prices
+    results = [_apply_active_discount_fields(db, d, now) for d in results]
+
+    # lightweight debug log (no secrets)
+    try:
+        import json, time
+        applied = sum(1 for x in results if isinstance(x, dict) and x.get("active_discount"))
+        with open(r"c:\SmartJewel\.cursor\debug.log", "a", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "runId": "pre-fix",
+                "hypothesisId": "H9",
+                "location": "smartjewel-backend/app/blueprints/catalog/routes.py:search_products",
+                "message": "catalog.search applied discounts",
+                "data": {"returned": len(results), "discounted": applied, "qLen": len(q or '')},
+                "timestamp": int(time.time() * 1000),
+            }) + "\n")
+    except Exception:
+        pass
 
     # Optionally record recent search
     _record_recent_search(q, request.args)

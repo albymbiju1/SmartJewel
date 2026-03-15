@@ -433,4 +433,215 @@ def update_appointment_status(appointment_id: str, action: str):
             "status": updated_appointment.get("status", "pending"),
             "created_at": updated_appointment.get("created_at", "").isoformat() if isinstance(updated_appointment.get("created_at"), datetime) else updated_appointment.get("created_at", "")
         }
-    })
+    })
+
+
+# ---------------------------------------------------------------------------
+# Discount management (store manager creates / activates discounts per item or category)
+# ---------------------------------------------------------------------------
+
+def _serialize_discount(d: dict) -> dict:
+    """Normalize a discount document for JSON output."""
+    d = dict(d)
+    d["_id"] = str(d["_id"])
+    d["product_ids"] = [str(pid) for pid in (d.get("product_ids") or [])]
+    for field in ("start_date", "end_date", "created_at", "updated_at"):
+        if d.get(field) and isinstance(d[field], datetime):
+            d[field] = d[field].isoformat()
+    return d
+
+
+@bp.route("/discounts", methods=["GET"])
+@require_permissions("discount.approve")
+@jwt_required()
+def list_discounts():
+    """List all discounts created by this store manager."""
+    db = current_app.extensions.get('mongo_db')
+    if db is None:
+        return jsonify({"error": "db_unavailable"}), 503
+
+    user_id = get_jwt_identity()
+    if not db.users.find_one({"_id": _oid(user_id)}):
+        return jsonify({"error": "user_not_found"}), 404
+
+    scope_filter = request.args.get("scope", "").strip()
+    active_filter = request.args.get("active", "").strip().lower()
+    page = max(int(request.args.get("page", 1)), 1)
+    limit = min(max(int(request.args.get("limit", 20)), 1), 100)
+    skip = (page - 1) * limit
+
+    query = {}
+    if scope_filter:
+        query["scope"] = scope_filter
+    if active_filter in ("true", "1"):
+        query["active"] = True
+    elif active_filter in ("false", "0"):
+        query["active"] = False
+
+    total = db.discounts.count_documents(query)
+    docs = list(db.discounts.find(query).sort("created_at", -1).skip(skip).limit(limit))
+
+    return jsonify({
+        "discounts": [_serialize_discount(d) for d in docs],
+        "pagination": {"page": page, "limit": limit, "total": total, "pages": (total + limit - 1) // limit}
+    })
+
+
+@bp.route("/discounts", methods=["POST"])
+@require_permissions("discount.approve")
+@jwt_required()
+def create_discount():
+    """Create a new product/category discount."""
+    db = current_app.extensions.get('mongo_db')
+    if db is None:
+        return jsonify({"error": "db_unavailable"}), 503
+
+    user_id = get_jwt_identity()
+    user = db.users.find_one({"_id": _oid(user_id)})
+    if not user:
+        return jsonify({"error": "user_not_found"}), 404
+
+    body = request.get_json() or {}
+    name = (body.get("name") or "").strip()
+    scope = (body.get("scope") or "").strip()
+    discount_type = (body.get("discount_type") or "percentage").strip()
+    discount_value = body.get("discount_value")
+
+    errors = {}
+    if not name:
+        errors["name"] = ["name is required"]
+    if scope not in ("product", "category"):
+        errors["scope"] = ["scope must be 'product' or 'category'"]
+    if discount_type not in ("percentage", "flat"):
+        errors["discount_type"] = ["must be 'percentage' or 'flat'"]
+    if discount_value is None:
+        errors["discount_value"] = ["discount_value is required"]
+    else:
+        try:
+            discount_value = float(discount_value)
+            if discount_value <= 0:
+                errors["discount_value"] = ["must be positive"]
+            elif discount_type == "percentage" and discount_value > 100:
+                errors["discount_value"] = ["percentage cannot exceed 100"]
+        except (TypeError, ValueError):
+            errors["discount_value"] = ["must be a number"]
+
+    if scope == "product" and not (body.get("product_ids") or []):
+        errors["product_ids"] = ["product_ids required when scope is 'product'"]
+    if scope == "category" and not (body.get("category") or "").strip():
+        errors["category"] = ["category required when scope is 'category'"]
+
+    if errors:
+        return jsonify({"error": "validation_failed", "details": errors}), 400
+
+    start_date = None
+    end_date = None
+    if body.get("start_date"):
+        try:
+            start_date = datetime.fromisoformat(body["start_date"])
+        except Exception:
+            pass
+    if body.get("end_date"):
+        try:
+            end_date = datetime.fromisoformat(body["end_date"])
+        except Exception:
+            pass
+
+    now = datetime.utcnow()
+    doc = {
+        "name": name,
+        "scope": scope,
+        "discount_type": discount_type,
+        "discount_value": float(discount_value),
+        "start_date": start_date,
+        "end_date": end_date,
+        "active": bool(body.get("active", True)),
+        "product_ids": [_oid(pid) for pid in (body.get("product_ids") or []) if _oid(pid)] if scope == "product" else [],
+        "category": (body.get("category") or "").strip() if scope == "category" else None,
+        "created_by": user_id,
+        "created_by_name": user.get("name") or user.get("username") or user_id,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    result = db.discounts.insert_one(doc)
+    doc["_id"] = result.inserted_id
+    return jsonify({"discount": _serialize_discount(doc)}), 201
+
+
+@bp.route("/discounts/<discount_id>", methods=["PATCH"])
+@require_permissions("discount.approve")
+@jwt_required()
+def update_discount(discount_id: str):
+    """Toggle active status, change value, or update dates on a discount."""
+    db = current_app.extensions.get('mongo_db')
+    if db is None:
+        return jsonify({"error": "db_unavailable"}), 503
+
+    user_id = get_jwt_identity()
+    if not db.users.find_one({"_id": _oid(user_id)}):
+        return jsonify({"error": "user_not_found"}), 404
+
+    oid = _oid(discount_id)
+    if not oid:
+        return jsonify({"error": "invalid_id"}), 400
+
+    discount = db.discounts.find_one({"_id": oid})
+    if not discount:
+        return jsonify({"error": "not_found"}), 404
+
+    body = request.get_json() or {}
+    updates = {"updated_at": datetime.utcnow()}
+
+    if "active" in body:
+        updates["active"] = bool(body["active"])
+    if "name" in body and (body["name"] or "").strip():
+        updates["name"] = body["name"].strip()
+    if "discount_value" in body:
+        try:
+            updates["discount_value"] = float(body["discount_value"])
+        except (TypeError, ValueError):
+            pass
+    if "discount_type" in body and body["discount_type"] in ("percentage", "flat"):
+        updates["discount_type"] = body["discount_type"]
+    if "start_date" in body:
+        try:
+            updates["start_date"] = datetime.fromisoformat(body["start_date"]) if body["start_date"] else None
+        except Exception:
+            pass
+    if "end_date" in body:
+        try:
+            updates["end_date"] = datetime.fromisoformat(body["end_date"]) if body["end_date"] else None
+        except Exception:
+            pass
+    if "product_ids" in body and discount.get("scope") == "product":
+        updates["product_ids"] = [_oid(pid) for pid in (body["product_ids"] or []) if _oid(pid)]
+    if "category" in body and discount.get("scope") == "category":
+        updates["category"] = (body["category"] or "").strip()
+
+    db.discounts.update_one({"_id": oid}, {"$set": updates})
+    return jsonify({"discount": _serialize_discount(db.discounts.find_one({"_id": oid}))})
+
+
+@bp.route("/discounts/<discount_id>", methods=["DELETE"])
+@require_permissions("discount.approve")
+@jwt_required()
+def delete_discount(discount_id: str):
+    """Delete a discount."""
+    db = current_app.extensions.get('mongo_db')
+    if db is None:
+        return jsonify({"error": "db_unavailable"}), 503
+
+    user_id = get_jwt_identity()
+    if not db.users.find_one({"_id": _oid(user_id)}):
+        return jsonify({"error": "user_not_found"}), 404
+
+    oid = _oid(discount_id)
+    if not oid:
+        return jsonify({"error": "invalid_id"}), 400
+
+    result = db.discounts.delete_one({"_id": oid})
+    if not result.deleted_count:
+        return jsonify({"error": "not_found"}), 404
+
+    return jsonify({"message": "deleted"})

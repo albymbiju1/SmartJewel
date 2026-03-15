@@ -92,14 +92,11 @@ export const ROLE_NAVIGATION: Record<string, RoleNavigation> = {
       { label: 'Reports', key: 'reports', href: '/inventory/reports' },
     ],
     sidebarItems: [
-      { label: 'Items', key: 'items', href: '/inventory/items' },
       { label: 'Stock Movements', key: 'stock_movements', href: '/inventory/stock' },
-      // Removed Tags as per user request
-      { label: 'Locations', key: 'locations', href: '/inventory/locations' },
-      { label: 'Valuation', key: 'valuation', href: '/inventory/valuation' },
-      { label: 'BOM', key: 'bom', href: '/inventory/bom' },
     ],
-    leftSidebarItems: []
+    leftSidebarItems: [
+      { label: 'Items', key: 'items', href: '/inventory/items' },
+    ]
   },
 };
 

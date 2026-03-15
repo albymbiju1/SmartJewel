@@ -7,12 +7,21 @@ interface Product {
   _id: string;
   name: string;
   price?: number;
+  computed_price?: number;
   image?: string;
   metal?: string;
   purity?: string;
   weight?: number;
   weight_unit?: string;
   category?: string;
+  active_discount?: {
+    id: string;
+    name: string;
+    discount_type: 'percentage' | 'flat';
+    discount_value: number;
+    discount_amount: number;
+    discounted_price: number;
+  };
 }
 
 // Safely create absolute image URL for backend-hosted assets
@@ -67,13 +76,20 @@ export const CartPage: React.FC = () => {
   // Pricing helpers
   const lineItems = useMemo(() => items.map(it => {
     const p = productMap[it.productId];
-    const derived = (p?.price ?? 0);
-    const unitPrice = typeof it.price === 'number' ? it.price : derived;
+    const basePrice = typeof it.price === 'number' ? it.price : (p?.computed_price ?? p?.price ?? 0);
+    // Use manager-set discount price when available
+    const unitPrice = p?.active_discount?.discounted_price ?? basePrice;
     const total = unitPrice * it.quantity;
-    return { cart: it, product: p, unitPrice, total };
+    return { cart: it, product: p, unitPrice, basePrice, total };
   }), [items, productMap]);
 
   const subtotal = useMemo(() => lineItems.reduce((sum, li) => sum + li.total, 0), [lineItems]);
+
+  // Product-level savings (from manager-set discounts)
+  const productSavings = useMemo(
+    () => lineItems.reduce((sum, li) => sum + Math.max(0, li.basePrice - li.unitPrice) * li.cart.quantity, 0),
+    [lineItems]
+  );
   const [promoCode, setPromoCode] = useState('');
   const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
 
@@ -136,7 +152,8 @@ export const CartPage: React.FC = () => {
             <div className="lg:col-span-2 space-y-4">
               {items.map((it) => {
                 const p = productMap[it.productId];
-                const unitPrice = typeof it.price === 'number' ? it.price : (p?.price ?? 0);
+                const basePrice = typeof it.price === 'number' ? it.price : (p?.computed_price ?? p?.price ?? 0);
+                const unitPrice = p?.active_discount?.discounted_price ?? basePrice;
                 const lineTotal = unitPrice * it.quantity;
                 return (
                   <div key={`${it.productId}-${it.size || ''}-${it.style || ''}`} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
@@ -160,7 +177,15 @@ export const CartPage: React.FC = () => {
                             </div>
                           </div>
                           <div className="text-right">
-                            <div className="text-gray-900 font-semibold">{unitPrice ? `₹${unitPrice.toLocaleString('en-IN')}` : 'Price on request'}</div>
+                            {p?.active_discount && basePrice ? (
+                              <div>
+                                <div className="text-xs text-gray-400 line-through">₹{basePrice.toLocaleString('en-IN')}</div>
+                                <div className="text-emerald-700 font-semibold">₹{unitPrice.toLocaleString('en-IN')}</div>
+                                <div className="text-xs text-emerald-600 mt-0.5">{p.active_discount.name}</div>
+                              </div>
+                            ) : (
+                              <div className="text-gray-900 font-semibold">{unitPrice ? `₹${unitPrice.toLocaleString('en-IN')}` : 'Price on request'}</div>
+                            )}
                             <button className="mt-2 text-sm text-rose-700 hover:text-rose-800" onClick={() => removeFromCart(it.productId)}>Remove</button>
                           </div>
                         </div>
@@ -203,6 +228,12 @@ export const CartPage: React.FC = () => {
                     <span className="text-gray-600">Subtotal</span>
                     <span className="text-gray-900 font-medium">₹{subtotal.toLocaleString('en-IN')}</span>
                   </div>
+                  {productSavings > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-600">Item Discounts</span>
+                      <span className="text-emerald-700 font-medium">- ₹{Math.round(productSavings).toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between">
                     <span className="text-gray-600">Discount{appliedPromo ? ` (${appliedPromo})` : ''}</span>
                     <span className="text-emerald-700 font-medium">- ₹{discount.toLocaleString('en-IN')}</span>

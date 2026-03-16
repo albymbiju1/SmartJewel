@@ -2,7 +2,6 @@ from flask import Blueprint, request, jsonify, current_app
 from bson import ObjectId
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.utils.authz import require_permissions, require_any_role
-from datetime import datetime
 
 
 bp = Blueprint("inventory", __name__, url_prefix="/inventory")
@@ -178,69 +177,6 @@ def _now(db):
     except Exception:
         from datetime import datetime
         return datetime.utcnow()
-
-
-def _apply_active_discount_fields(db, item: dict, now: datetime):
-    """Mutate item with active_discount info and override price for consistency across listings.
-    This mirrors the logic used in get_item() but in a lightweight way for list endpoints.
-    """
-    try:
-        oid = _oid(item.get("_id")) if isinstance(item.get("_id"), str) else item.get("_id")
-        if not oid:
-            return item
-
-        base_price = item.get("computed_price") or item.get("price") or 0
-        try:
-            base_price = float(base_price)
-        except Exception:
-            base_price = 0
-        if not base_price:
-            return item
-
-        discount = db.discounts.find_one({
-            "active": True,
-            "scope": "product",
-            "product_ids": oid,
-            "$and": [
-                {"$or": [{"start_date": None}, {"start_date": {"$lte": now}}]},
-                {"$or": [{"end_date": None}, {"end_date": {"$gte": now}}]},
-            ],
-        })
-        if not discount:
-            item_category = (item.get("category") or item.get("metal") or "").strip().lower()
-            if item_category:
-                discount = db.discounts.find_one({
-                    "active": True,
-                    "scope": "category",
-                    "category": {"$regex": f"^{item_category}$", "$options": "i"},
-                    "$and": [
-                        {"$or": [{"start_date": None}, {"start_date": {"$lte": now}}]},
-                        {"$or": [{"end_date": None}, {"end_date": {"$gte": now}}]},
-                    ],
-                })
-
-        if not discount:
-            return item
-
-        dtype = discount.get("discount_type", "percentage")
-        dvalue = float(discount.get("discount_value", 0))
-        damount = round(base_price * dvalue / 100, 2) if dtype == "percentage" else min(dvalue, base_price)
-        discounted = round(max(0, base_price - damount), 2)
-
-        item["active_discount"] = {
-            "id": str(discount.get("_id")),
-            "name": discount.get("name"),
-            "discount_type": dtype,
-            "discount_value": dvalue,
-            "discount_amount": round(damount, 2),
-            "discounted_price": discounted,
-        }
-        # Keep original for UI, but override `price` so existing clients automatically show dropped price
-        item["original_price"] = base_price
-        item["price"] = discounted
-        return item
-    except Exception:
-        return item
 
 
 @bp.get("/store/products")
@@ -428,46 +364,18 @@ def create_item():
 @require_permissions("inventory.read")
 def list_items():
     db = current_app.extensions['mongo_db']
-    # H5: Support search by query string (q/query) for typeahead pickers
     q = {}
-    query = (request.args.get("q") or request.args.get("query") or "").strip()
     for f in ["category", "metal", "purity", "status", "sku"]:
         v = request.args.get(f)
         if v:
             q[f] = v
-
-    if query:
-        q["$or"] = [
-            {"name": {"$regex": query, "$options": "i"}},
-            {"sku": {"$regex": query, "$options": "i"}},
-            {"category": {"$regex": query, "$options": "i"}},
-            {"sub_category": {"$regex": query, "$options": "i"}},
-        ]
-
-        # lightweight debug log (no secrets)
-        try:
-            import json, time
-            with open(r"c:\SmartJewel\.cursor\debug.log", "a", encoding="utf-8") as f:
-                f.write(json.dumps({
-                    "runId": "pre-fix",
-                    "hypothesisId": "H5",
-                    "location": "smartjewel-backend/app/blueprints/inventory/routes.py:list_items",
-                    "message": "inventory.items search invoked",
-                    "data": {"queryLen": len(query), "hasFilters": any(k in q for k in ["category","metal","purity","status","sku"])},
-                    "timestamp": int(time.time() * 1000),
-                }) + "\n")
-        except Exception:
-            pass
-
-    # Newest first helps typeahead results feel "relevant" in admin
-    cur = db.items.find(q).sort([("updated_at", -1), ("created_at", -1), ("_id", -1)]).limit(200)
+    cur = db.items.find(q).limit(200)
     items = []
-    now = datetime.utcnow()
     for d in cur:
         d["_id"] = str(d["_id"])
         if d.get("default_location_id"):
             d["default_location_id"] = str(d["default_location_id"])
-        items.append(_apply_active_discount_fields(db, d, now))
+        items.append(d)
     return jsonify({"items": items})
 
 
@@ -510,7 +418,6 @@ def list_products():
         
         cur = db.items.find(q).limit(200)
         items = []
-        now = datetime.utcnow()
         for d in cur:
             d["_id"] = str(d["_id"])
             if d.get("default_location_id"):
@@ -520,23 +427,7 @@ def list_products():
                 d["quantity"] = 0
             else:
                 d["quantity"] = int(d["quantity"]) if d["quantity"] is not None else 0
-            items.append(_apply_active_discount_fields(db, d, now))
-
-        # lightweight debug log (no secrets)
-        try:
-            import json, time
-            applied = sum(1 for x in items if isinstance(x, dict) and x.get("active_discount"))
-            with open(r"c:\SmartJewel\.cursor\debug.log", "a", encoding="utf-8") as f:
-                f.write(json.dumps({
-                    "runId": "pre-fix",
-                    "hypothesisId": "H8",
-                    "location": "smartjewel-backend/app/blueprints/inventory/routes.py:list_products",
-                    "message": "inventory.products applied discounts",
-                    "data": {"returned": len(items), "discounted": applied},
-                    "timestamp": int(time.time() * 1000),
-                }) + "\n")
-        except Exception:
-            pass
+            items.append(d)
         return jsonify({"products": items})
     except Exception as exc:
         # Fail fast if DB is unavailable so frontend loader doesn't spin

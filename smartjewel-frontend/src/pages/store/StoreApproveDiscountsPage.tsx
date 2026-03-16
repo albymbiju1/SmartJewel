@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { api, API_BASE_URL } from '../../api';
+import React, { useState, useEffect, useCallback } from 'react';
+import { api } from '../../api';
 import { RoleBasedNavigation } from '../../components/RoleBasedNavigation';
 
 // ---- Types ----------------------------------------------------------------
@@ -25,10 +25,6 @@ interface ProductOption {
   name: string;
   category?: string;
   metal?: string;
-  purity?: string;
-  image?: string;
-  price?: number;
-  computed_price?: number;
 }
 
 const CATEGORIES = ['Gold', 'Diamond', 'Silver', 'Platinum', 'Wedding', 'Gifting', 'Other'];
@@ -42,23 +38,6 @@ const fmt = (iso: string | null | undefined) => {
 
 const fmtValue = (d: Discount) =>
   d.discount_type === 'percentage' ? `${d.discount_value}%` : `₹${d.discount_value.toLocaleString('en-IN')}`;
-
-const fmtMoney = (n?: number | null) => {
-  if (typeof n !== 'number' || Number.isNaN(n)) return '—';
-  return `₹${n.toLocaleString('en-IN')}`;
-};
-
-const getBasePrice = (p?: ProductOption | null) => {
-  if (!p) return null;
-  if (typeof p.computed_price === 'number') return p.computed_price;
-  if (typeof p.price === 'number') return p.price;
-  return null;
-};
-
-const getImageUrl = (imagePath?: string) => {
-  if (!imagePath) return '';
-  return imagePath.startsWith('http') ? imagePath : `${API_BASE_URL}${imagePath}`;
-};
 
 const StatusBadge: React.FC<{ active: boolean }> = ({ active }) => (
   <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -106,15 +85,9 @@ export const StoreApproveDiscountsPage: React.FC = () => {
   const [searchResults, setSearchResults] = useState<ProductOption[]>([]);
   const [searching, setSearching] = useState(false);
   const [selectedProducts, setSelectedProducts] = useState<ProductOption[]>([]);
-  const [resolvingSelected, setResolvingSelected] = useState(false);
-
-  const selectedProductIds = useMemo(() => selectedProducts.map((p) => p._id), [selectedProducts]);
 
   // delete modal
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
-
-  // cached product meta for price display in discounts table (single-product discounts only)
-  const [productMeta, setProductMeta] = useState<Record<string, ProductOption>>({});
 
   // ---- Fetch discounts -------------------------------------------------------
 
@@ -141,61 +114,13 @@ export const StoreApproveDiscountsPage: React.FC = () => {
 
   useEffect(() => { fetchDiscounts(); }, [fetchDiscounts]);
 
-  const hydrateProductMetaForDiscounts = useCallback(async (ds: Discount[]) => {
-    const ids = Array.from(
-      new Set(
-        ds
-          .filter((d) => d.scope === 'product' && Array.isArray(d.product_ids) && d.product_ids.length === 1)
-          .map((d) => d.product_ids[0])
-      )
-    );
-    const missing = ids.filter((id) => !productMeta[id]);
-    if (missing.length === 0) return;
-
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/af84b1c6-c029-417c-9354-921aac94b4cc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({runId:'pre-fix',hypothesisId:'H7',location:'StoreApproveDiscountsPage.tsx:hydrateProductMetaForDiscounts',message:'Hydrating product meta for discount table',data:{missingCount:missing.length},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-
-    const fetched = await Promise.all(
-      missing.map(async (id) => {
-        try {
-          const res = await api.get<{ item: ProductOption }>(`/inventory/items/${id}`);
-          const item = res.data?.item;
-          if (item && item._id) return item;
-        } catch {
-          // ignore
-        }
-        return null;
-      })
-    );
-
-    setProductMeta((prev) => {
-      const next = { ...prev };
-      for (const p of fetched) {
-        if (p && p._id) next[p._id] = p;
-      }
-      return next;
-    });
-  }, [productMeta]);
-
-  useEffect(() => {
-    if (!discounts.length) return;
-    hydrateProductMetaForDiscounts(discounts);
-  }, [discounts, hydrateProductMetaForDiscounts]);
-
   // ---- Product search -------------------------------------------------------
 
   const searchProducts = useCallback(async (q: string) => {
     if (!q.trim()) { setSearchResults([]); return; }
     try {
       setSearching(true);
-      // Inventory items endpoint is `/inventory/items` in this backend
-      const res = await api.get<{ items: ProductOption[] }>('/inventory/items', { params: { q, limit: 8 } });
-
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/af84b1c6-c029-417c-9354-921aac94b4cc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({runId:'pre-fix',hypothesisId:'H6',location:'StoreApproveDiscountsPage.tsx:searchProducts',message:'Search results received',data:{qLen:q.length,count:(res.data.items||[]).length,hasAnyPrice:(res.data.items||[]).some((x)=>typeof x.price==='number'||typeof x.computed_price==='number')},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-
+      const res = await api.get<{ items: ProductOption[] }>('/api/inventory/items', { params: { q, limit: 8 } });
       setSearchResults((res.data.items || []).filter((p) => !form.product_ids.includes(p._id)));
     } catch {
       setSearchResults([]);
@@ -234,7 +159,7 @@ export const StoreApproveDiscountsPage: React.FC = () => {
       end_date: d.end_date ? d.end_date.slice(0, 10) : '',
       active: d.active,
     });
-    // Resolve product names/images for editing (fallback to id if fetch fails)
+    // We don't re-fetch product names for editing — keep product_ids as strings
     setSelectedProducts(d.product_ids.map((id) => ({ _id: id, name: id })));
     setSearchResults([]);
     setFormError(null);
@@ -254,38 +179,6 @@ export const StoreApproveDiscountsPage: React.FC = () => {
     setForm((f) => ({ ...f, product_ids: f.product_ids.filter((x) => x !== id) }));
     setSelectedProducts((s) => s.filter((p) => p._id !== id));
   };
-
-  const resolveSelectedProducts = useCallback(async (ids: string[]) => {
-    if (!ids.length) return;
-    try {
-      setResolvingSelected(true);
-      const results = await Promise.all(
-        ids.map(async (id) => {
-          try {
-            const res = await api.get<{ item: ProductOption }>(`/inventory/items/${id}`);
-            const item = res.data?.item;
-            if (item && item._id) return item;
-            return { _id: id, name: id } as ProductOption;
-          } catch {
-            return { _id: id, name: id } as ProductOption;
-          }
-        })
-      );
-      setSelectedProducts(results);
-    } finally {
-      setResolvingSelected(false);
-    }
-  }, []);
-
-  // When opening edit modal (or if product_ids change externally), resolve product metadata
-  useEffect(() => {
-    if (!showModal) return;
-    if (form.scope !== 'product') return;
-    // Only resolve when we have placeholder names (id-like)
-    const needsResolve = selectedProducts.some((p) => p.name === p._id);
-    if (!needsResolve) return;
-    resolveSelectedProducts(form.product_ids);
-  }, [form.product_ids, form.scope, resolveSelectedProducts, selectedProducts, showModal]);
 
   // ---- Save (create or update) ----------------------------------------------
 
@@ -466,34 +359,9 @@ export const StoreApproveDiscountsPage: React.FC = () => {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-gray-600">
-                          <div className="space-y-1">
-                            <div>
-                              {d.scope === 'category'
-                                ? d.category
-                                : `${d.product_ids.length} product${d.product_ids.length !== 1 ? 's' : ''}`}
-                            </div>
-                            {d.scope === 'product' && d.product_ids.length === 1 && (() => {
-                              const p = productMeta[d.product_ids[0]];
-                              const base = getBasePrice(p);
-                              if (base == null) return <div className="text-xs text-gray-400">Price: —</div>;
-                              const after = d.discount_type === 'percentage'
-                                ? Math.max(0, base - (base * (d.discount_value / 100)))
-                                : Math.max(0, base - d.discount_value);
-                              return (
-                                <div className="text-xs text-gray-500">
-                                  <span className="line-through text-gray-400">{fmtMoney(base)}</span>
-                                  <span className="mx-1">→</span>
-                                  <span className="font-semibold text-emerald-700">{fmtMoney(Math.round(after * 100) / 100)}</span>
-                                </div>
-                              );
-                            })()}
-                            {(d.scope === 'product' && d.product_ids.length > 1) && (
-                              <div className="text-xs text-gray-400">Price impact: Varies</div>
-                            )}
-                            {d.scope === 'category' && (
-                              <div className="text-xs text-gray-400">Price impact: Varies</div>
-                            )}
-                          </div>
+                          {d.scope === 'category'
+                            ? d.category
+                            : `${d.product_ids.length} product${d.product_ids.length !== 1 ? 's' : ''}`}
                         </td>
                         <td className="px-4 py-3 font-semibold text-emerald-700">{fmtValue(d)}</td>
                         <td className="px-4 py-3 text-gray-500">{fmt(d.end_date)}</td>
@@ -643,85 +511,28 @@ export const StoreApproveDiscountsPage: React.FC = () => {
                             <button
                               key={p._id}
                               onClick={() => addProduct(p)}
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b last:border-0"
+                              className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 border-b last:border-0"
                             >
-                              <div className="flex items-center gap-3">
-                                {p.image ? (
-                                  <img
-                                    src={getImageUrl(p.image)}
-                                    alt={p.name}
-                                    className="w-9 h-9 rounded-md object-cover bg-gray-100 border"
-                                  />
-                                ) : (
-                                  <div className="w-9 h-9 rounded-md bg-gray-100 border flex items-center justify-center text-[10px] text-gray-400">
-                                    No img
-                                  </div>
-                                )}
-                                <div className="min-w-0 flex-1">
-                                  <div className="font-medium text-gray-900 truncate">{p.name}</div>
-                                  <div className="text-xs text-gray-400 truncate">
-                                    {p.category ? p.category : '—'}
-                                    {p.metal ? ` • ${p.metal}${p.purity ? ` (${p.purity})` : ''}` : ''}
-                                    {getBasePrice(p) != null ? ` • ${fmtMoney(getBasePrice(p) as number)}` : ''}
-                                  </div>
-                                </div>
-                              </div>
+                              <span className="font-medium text-gray-900">{p.name}</span>
+                              {p.category && <span className="ml-2 text-xs text-gray-400">{p.category}</span>}
                             </button>
                           ))}
                         </div>
                       )}
                     </div>
                     {selectedProducts.length > 0 && (
-                      <div className="mt-2 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="text-xs text-gray-500">
-                            Selected products ({selectedProducts.length})
-                            {resolvingSelected && <span className="ml-2 text-gray-400">Resolving…</span>}
-                          </div>
-                          {selectedProductIds.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => { setForm((f) => ({ ...f, product_ids: [] })); setSelectedProducts([]); }}
-                              className="text-xs text-gray-500 hover:text-red-600"
-                            >
-                              Clear all
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {selectedProducts.map((p) => (
+                          <span
+                            key={p._id}
+                            className="inline-flex items-center gap-1 bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded-full"
+                          >
+                            {p.name.length > 28 ? p.name.slice(0, 28) + '…' : p.name}
+                            <button onClick={() => removeProduct(p._id)} className="text-gray-400 hover:text-red-500">
+                              ×
                             </button>
-                          )}
-                        </div>
-                        <div className="max-h-40 overflow-y-auto border rounded-lg divide-y bg-white">
-                          {selectedProducts.map((p) => (
-                            <div key={p._id} className="flex items-center gap-3 px-3 py-2">
-                              {p.image ? (
-                                <img
-                                  src={getImageUrl(p.image)}
-                                  alt={p.name}
-                                  className="w-9 h-9 rounded-md object-cover bg-gray-100 border"
-                                />
-                              ) : (
-                                <div className="w-9 h-9 rounded-md bg-gray-100 border flex items-center justify-center text-[10px] text-gray-400">
-                                  No img
-                                </div>
-                              )}
-                              <div className="min-w-0 flex-1">
-                                <div className="text-sm font-medium text-gray-900 truncate">{p.name}</div>
-                                <div className="text-xs text-gray-400 truncate">
-                                  {p.category ? p.category : '—'}
-                                  {p.metal ? ` • ${p.metal}${p.purity ? ` (${p.purity})` : ''}` : ''}
-                                  {getBasePrice(p) != null ? ` • ${fmtMoney(getBasePrice(p) as number)}` : ''}
-                                </div>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => removeProduct(p._id)}
-                                className="text-gray-400 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50"
-                                aria-label={`Remove ${p.name}`}
-                                title="Remove"
-                              >
-                                ×
-                              </button>
-                            </div>
-                          ))}
-                        </div>
+                          </span>
+                        ))}
                       </div>
                     )}
                   </div>

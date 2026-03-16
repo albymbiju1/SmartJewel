@@ -14,9 +14,27 @@ logger = structlog.get_logger()
 
 virtual_tryon_bp = Blueprint('virtual_tryon', __name__)
 
-# Cache directory for processed images
-CACHE_DIR = Path(__file__).parent.parent.parent / "static" / "transparent_cache"
-CACHE_DIR.mkdir(parents=True, exist_ok=True)
+def _get_cache_dir() -> Path:
+    """Return a writable cache directory for processed images."""
+    cache_dir_env = os.getenv("TRANSPARENT_CACHE_DIR")
+    if cache_dir_env:
+        cache_dir = Path(cache_dir_env)
+    elif os.getenv("VERCEL"):
+        # Vercel serverless functions can only write under /tmp.
+        cache_dir = Path("/tmp") / "smartjewel_transparent_cache"
+    else:
+        cache_dir = Path(__file__).parent.parent.parent / "static" / "transparent_cache"
+
+    try:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        # Never fail app import/startup because cache initialization failed.
+        logger.warning("cache_dir_init_failed", path=str(cache_dir), error=str(exc))
+        fallback_dir = Path("/tmp") / "smartjewel_transparent_cache"
+        fallback_dir.mkdir(parents=True, exist_ok=True)
+        return fallback_dir
+
+    return cache_dir
 
 
 def remove_interior_background(image: Image.Image, white_threshold: int = 240) -> Image.Image:
@@ -65,7 +83,7 @@ def remove_interior_background(image: Image.Image, white_threshold: int = 240) -
 
 def get_cached_path(product_id: str) -> Path:
     """Get the cache file path for a processed image."""
-    return CACHE_DIR / f"{product_id}.webp"
+    return _get_cache_dir() / f"{product_id}.webp"
 
 
 def remove_background(image: Image.Image) -> Image.Image:

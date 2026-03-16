@@ -10,7 +10,6 @@ import { PricesPage } from './pages/inventory/PricesPage';
 import { ValuationPage } from './pages/inventory/ValuationPage';
 import { BomPage } from './pages/inventory/BomPage';
 import { InventoryDashboard } from './pages/inventory/InventoryDashboard';
-import { InventoryReportsPage } from './pages/inventory/InventoryReportsPage';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { AnalyticsDashboardPage } from './pages/admin/AnalyticsDashboardPage';
 import { default as AdminOrdersPage } from './pages/admin/AdminOrdersPage';
@@ -154,7 +153,7 @@ export const AppRouter: React.FC = () => (
       <Route path="/inventory/prices" element={<RequireAuth><PricesPage /></RequireAuth>} />
       <Route path="/inventory/valuation" element={<RequireAuth><ValuationPage /></RequireAuth>} />
       <Route path="/inventory/bom" element={<RequireAuth><BomPage /></RequireAuth>} />
-      <Route path="/inventory/reports" element={<RequireAuth><InventoryReportsPage /></RequireAuth>} />
+      <Route path="/inventory/reports" element={<RequireAuth><div>Inventory Reports</div></RequireAuth>} />
     </Routes>
   </Router>
 );

@@ -57,12 +57,10 @@ export const ROLE_NAVIGATION: Record<string, RoleNavigation> = {
     ],
     sidebarItems: [
       // Removed Tags as per user request
-      { label: 'BOM', key: 'bom', href: '/inventory/bom' },
-      { label: 'Valuation', key: 'valuation', href: '/inventory/valuation' },
+      { label: 'Approve Discounts', key: 'approve_discounts', href: '/store/approve-discounts' },
     ],
     leftSidebarItems: [
       { label: 'Appointments', key: 'appointments', href: '/store/appointments' },
-      { label: 'Approve Discounts', key: 'approve_discounts', href: '/store/approve-discounts' },
     ]
   },
 

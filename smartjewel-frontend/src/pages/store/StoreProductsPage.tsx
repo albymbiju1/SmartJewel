@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, API_BASE_URL } from '../../api';
 
 interface StoreProductItem {
@@ -25,6 +26,7 @@ interface StoreProductsResponse {
 }
 
 export const StoreProductsPage: React.FC = () => {
+  const navigate = useNavigate();
   const [items, setItems] = useState<StoreProductItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
@@ -72,7 +74,16 @@ export const StoreProductsPage: React.FC = () => {
       <div className="bg-white border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-6 py-6">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Store Products</h1>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => navigate('/store/dashboard')}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                <span className="text-lg leading-none">←</span>
+                <span>Back</span>
+              </button>
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Store Products</h1>
+            </div>
             <div className="hidden md:block text-sm text-gray-500">Page {page}</div>
           </div>
         </div>

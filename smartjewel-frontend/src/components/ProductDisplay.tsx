@@ -67,6 +67,8 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
   const [sortBy, setSortBy] = useState<string>(searchParams.get('sort') || 'popularity');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>(searchParams.get('view') === 'list' ? 'list' : 'grid');
   const [page, setPage] = useState<number>(parseInt(searchParams.get('page') || '1', 10));
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const [totalCount, setTotalCount] = useState<number>(0);
   const [quickViewOpen, setQuickViewOpen] = useState(false);
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
   const [sortModalOpen, setSortModalOpen] = useState(false);
@@ -249,6 +251,12 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
         // Update product features in recommendation service
         recommendationService.updateProductFeatures(response.results);
 
+        // Store server-side pagination info
+        if (response.pagination) {
+          setTotalPages(response.pagination.total_pages || 1);
+          setTotalCount(response.pagination.total || response.results.length);
+        }
+
         // Track user interaction with this category
         if (category) {
           recommendationService.trackInteraction({
@@ -315,27 +323,19 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
     setSearchParams(params);
   };
 
-  // Sorting and pagination
+  // Sorting (client-side sort within the current page results)
   const sortedProducts = useMemo(() => {
     const arr = [...filteredProducts];
     if (sortBy === 'price-asc') arr.sort((a, b) => (a.price || 0) - (b.price || 0));
     else if (sortBy === 'price-desc') arr.sort((a, b) => (b.price || 0) - (a.price || 0));
-    // simple placeholders for popularity/new/bestseller could be by name/time if available
     console.log('📊 Products loaded:', arr.length);
     return arr;
   }, [filteredProducts, sortBy]);
-  const perPage = 20;
-  const totalPages = Math.max(1, Math.ceil(sortedProducts.length / perPage));
-  const currentPage = Math.min(page, totalPages);
-  const pageSlice = sortedProducts.slice((currentPage - 1) * perPage, currentPage * perPage);
 
-  console.log('📄 Pagination:', {
-    totalProducts: sortedProducts.length,
-    perPage,
-    totalPages,
-    currentPage,
-    pageSlice: pageSlice.length
-  });
+  // Use server-side pagination values; fall back to client-side if not yet set
+  const perPage = 20;
+  const currentPage = page;
+  const pageSlice = sortedProducts; // All results on this page come from the server
 
   if (isLoading || stockLoading) {
     // Skeleton grid placeholders
@@ -439,7 +439,7 @@ export const ProductDisplay: React.FC<ProductDisplayProps> = ({
               </button>
             </div>
 
-            <div className="text-gray-600">Showing {pageSlice.length ? ((currentPage - 1) * perPage + 1) : 0}–{(currentPage - 1) * perPage + pageSlice.length} of {filteredProducts.length} products</div>
+            <div className="text-gray-600">Showing {pageSlice.length ? ((currentPage - 1) * perPage + 1) : 0}–{(currentPage - 1) * perPage + pageSlice.length} of {totalCount} products</div>
 
 
             {/* Active filter badges (secondary row) */}

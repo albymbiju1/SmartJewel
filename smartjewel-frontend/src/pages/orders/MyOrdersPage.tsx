@@ -335,7 +335,6 @@ const MyOrdersPage: React.FC = () => {
                               </div>
                               <span className="text-green-700 font-medium">Delivered on {formatDate(deliveredDate)}</span>
                             </div>
-                            <button className="text-[#C0A172] hover:underline" onClick={(e) => { e.stopPropagation(); /* TODO: navigate to review page */ }}>Review Your Purchase</button>
                           </>
                         )}
                         {isCancelledRefunded && (

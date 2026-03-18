@@ -114,7 +114,16 @@ const FindStorePage: React.FC = () => {
       <div className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 py-8 flex items-start justify-between flex-wrap gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Find a Store</h1>
+            <div className="flex items-center gap-3 mb-2">
+              <button
+                onClick={() => navigate(-1)}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                <span className="text-lg leading-none">←</span>
+                <span>Back</span>
+              </button>
+              <h1 className="text-3xl font-bold text-gray-900">Find a Store</h1>
+            </div>
             <p className="text-gray-600">Visit our showrooms to experience the finest jewelry and book appointments</p>
           </div>
           <button

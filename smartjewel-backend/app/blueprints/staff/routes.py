@@ -226,6 +226,28 @@ def update_staff(id):
         return jsonify({"error": "not_found"}), 404
     return jsonify({"updated": True})
 
+
+@bp.delete("/staff/<id>")
+@jwt_required()
+@require_permissions("staff.manage")
+def delete_staff(id):
+    db = current_app.extensions['mongo_db']
+    oid = _oid(id)
+    if not oid:
+        return jsonify({"error": "not_found"}), 404
+
+    u = db.users.find_one({"_id": oid})
+    if not u:
+        return jsonify({"error": "not_found"}), 404
+
+    role_name = (u.get("role") or {}).get("role_name")
+    # Safety: never allow deleting Admin/Customer via staff deletion
+    if role_name in ["Admin", "Customer"]:
+        return jsonify({"error": "forbidden"}), 403
+
+    res = db.users.delete_one({"_id": oid})
+    return jsonify({"deleted": res.deleted_count > 0}), 200
+
 @bp.patch("/staff/<id>/status")
 @jwt_required()
 @require_permissions("staff.manage")

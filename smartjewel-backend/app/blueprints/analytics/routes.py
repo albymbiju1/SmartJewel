@@ -1,25 +1,32 @@
 from flask import jsonify, request, current_app
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from bson import ObjectId
 from app.utils.authz import require_roles
 from . import bp
 
 
 def _get_date_range():
-    """Parse date range from query parameters or use default (last 30 days)."""
+    """Parse date range from query parameters or use default (last 30 days).
+    Always returns timezone-aware UTC datetimes so MongoDB comparisons work
+    regardless of whether stored dates are tz-aware or naive.
+    """
     from_date_str = request.args.get('from_date')
     to_date_str = request.args.get('to_date')
-    
+
     if to_date_str:
         to_date = datetime.fromisoformat(to_date_str.replace('Z', '+00:00'))
+        if to_date.tzinfo is None:
+            to_date = to_date.replace(tzinfo=timezone.utc)
     else:
-        to_date = datetime.utcnow()
-    
+        to_date = datetime.now(timezone.utc)
+
     if from_date_str:
         from_date = datetime.fromisoformat(from_date_str.replace('Z', '+00:00'))
+        if from_date.tzinfo is None:
+            from_date = from_date.replace(tzinfo=timezone.utc)
     else:
         from_date = to_date - timedelta(days=30)
-    
+
     return from_date, to_date
 
 
@@ -192,14 +199,26 @@ def get_revenue_analytics():
     from_date, to_date = _get_date_range()
     
     try:
-        # Sales revenue
+        # Sales revenue (only paid orders)
         sales_pipeline = [
-            # Temporarily remove date filter to test
-            # {
-            #     '$match': {
-            #         'createdAt': {'$gte': from_date, '$lte': to_date}
-            #     }
-            # },
+            {
+                '$match': {
+                    '$and': [
+                        {
+                            '$or': [
+                                {'createdAt': {'$gte': from_date, '$lte': to_date}},
+                                {'created_at': {'$gte': from_date, '$lte': to_date}},
+                            ]
+                        },
+                        {
+                            '$or': [
+                                {'payment_status': 'paid'},
+                                {'status': 'paid'},
+                            ]
+                        }
+                    ]
+                }
+            },
             {
                 '$group': {
                     '_id': None,
@@ -209,18 +228,14 @@ def get_revenue_analytics():
             }
         ]
         sales_result = list(db.orders.aggregate(sales_pipeline))
-        
-        # Debug logging
-        print(f"[ANALYTICS DEBUG] Total orders in DB: {db.orders.count_documents({})}")
-        print(f"[ANALYTICS DEBUG] Sales aggregation result: {sales_result}")
-        
+
         sales_revenue = sales_result[0]['total_sales'] if sales_result else 0
         
-        # Rental revenue (without date filter for now)
         # Rental revenue (only count PAID rentals)
         rentals_pipeline = [
             {
                 '$match': {
+                    'created_at': {'$gte': from_date, '$lte': to_date},
                     'payment_status': 'paid'  # Only count paid rentals
                 }
             },
@@ -237,16 +252,42 @@ def get_revenue_analytics():
         # Total revenue
         total_revenue = sales_revenue + rental_revenue
         
-        # Monthly revenue trend - temporarily disabled date filtering for orders
-        twelve_months_ago = to_date - timedelta(days=365)
-        
-        # Sales by month - no date filter for now, so just get total
+        # Monthly revenue trend (selected date range)
         monthly_sales_pipeline = [
             {
+                '$match': {
+                    '$and': [
+                        {
+                            '$or': [
+                                {'createdAt': {'$gte': from_date, '$lte': to_date}},
+                                {'created_at': {'$gte': from_date, '$lte': to_date}},
+                            ]
+                        },
+                        {
+                            '$or': [
+                                {'payment_status': 'paid'},
+                                {'status': 'paid'},
+                            ]
+                        }
+                    ]
+                }
+            },
+            {
+                '$addFields': {
+                    '_dateField': {'$ifNull': ['$createdAt', '$created_at']}
+                }
+            },
+            {
                 '$group': {
-                    '_id': None,
+                    '_id': {
+                        'year': {'$year': '$_dateField'},
+                        'month': {'$month': '$_dateField'}
+                    },
                     'amount': {'$sum': {'$ifNull': ['$totalAmount', '$amount']}}
                 }
+            },
+            {
+                '$sort': {'_id.year': 1, '_id.month': 1}
             }
         ]
         monthly_sales = list(db.orders.aggregate(monthly_sales_pipeline))
@@ -255,7 +296,7 @@ def get_revenue_analytics():
         monthly_rentals_pipeline = [
             {
                 '$match': {
-                    'created_at': {'$gte': twelve_months_ago, '$lte': to_date},
+                    'created_at': {'$gte': from_date, '$lte': to_date},
                     'payment_status': 'paid'  # Only count paid rentals
                 }
             },
@@ -275,12 +316,8 @@ def get_revenue_analytics():
         monthly_rentals = list(db.rental_bookings.aggregate(monthly_rentals_pipeline))
         
         # Combine and format monthly trends
-        # Skip if we don't have date grouping (when _id is None)
         monthly_trend = {}
         for month_data in monthly_sales:
-            if month_data.get('_id') is None:
-                # No date grouping, skip monthly trend
-                continue
             key = f"{month_data['_id']['year']}-{month_data['_id']['month']}"
             monthly_trend[key] = {
                 'year': month_data['_id']['year'],
@@ -290,9 +327,6 @@ def get_revenue_analytics():
             }
         
         for month_data in monthly_rentals:
-            if month_data.get('_id') is None:
-                # No date grouping, skip
-                continue
             key = f"{month_data['_id']['year']}-{month_data['_id']['month']}"
             if key in monthly_trend:
                 monthly_trend[key]['rentals'] = float(month_data['amount'])
@@ -314,13 +348,26 @@ def get_revenue_analytics():
         for month in formatted_monthly_trend:
             month['total'] = month['sales'] + month['rentals']
         
-        # Revenue by category (from orders) - no date filter for now
+        # Revenue by category (from orders) within selected date range
         category_pipeline = [
-            # {
-            #     '$match': {
-            #         'updatedAt': {'$gte': from_date, '$lte': to_date}
-            #     }
-            # },
+            {
+                '$match': {
+                    '$and': [
+                        {
+                            '$or': [
+                                {'createdAt': {'$gte': from_date, '$lte': to_date}},
+                                {'created_at': {'$gte': from_date, '$lte': to_date}},
+                            ]
+                        },
+                        {
+                            '$or': [
+                                {'payment_status': 'paid'},
+                                {'status': 'paid'},
+                            ]
+                        }
+                    ]
+                }
+            },
             {
                 '$unwind': '$items'
             },
@@ -382,13 +429,13 @@ def get_product_analytics():
     from_date, to_date = _get_date_range()
     
     try:
-        # Top selling products (by order count) - no date filter for now
+        # Top selling products (by order count) within selected date range
         top_selling_pipeline = [
-            # {
-            #     '$match': {
-            #         'updatedAt': {'$gte': from_date, '$lte': to_date}
-            #     }
-            # },
+            {
+                '$match': {
+                    'createdAt': {'$gte': from_date, '$lte': to_date}
+                }
+            },
             {
                 '$unwind': '$items'
             },
@@ -494,13 +541,13 @@ def get_product_analytics():
         ]
         
         # Category performance (combining sales and rentals)
-        # Sales by category - no date filter for now
+        # Sales by category within selected date range
         sales_category_pipeline = [
-            # {
-            #     '$match': {
-            #         'updatedAt': {'$gte': from_date, '$lte': to_date}
-            #     }
-            # },
+            {
+                '$match': {
+                    'createdAt': {'$gte': from_date, '$lte': to_date}
+                }
+            },
             {
                 '$unwind': '$items'
             },

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Search, Plus, Edit2, Trash2, Filter, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface RentalItem {
     _id: string;
@@ -26,6 +27,7 @@ interface Product {
 }
 
 export const RentalManagementPage: React.FC = () => {
+    const navigate = useNavigate();
     const [rentals, setRentals] = useState<RentalItem[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
@@ -226,9 +228,18 @@ export const RentalManagementPage: React.FC = () => {
         <div className="min-h-screen bg-gray-50 p-6">
             <div className="max-w-7xl mx-auto">
                 {/* Header */}
-                <div className="mb-6">
-                    <h1 className="text-3xl font-bold text-gray-900">Rental Management</h1>
-                    <p className="text-gray-600 mt-1">Manage rental jewellery inventory and pricing</p>
+                <div className="mb-6 flex items-start justify-between gap-4">
+                    <div>
+                        <h1 className="text-3xl font-bold text-gray-900">Rental Management</h1>
+                        <p className="text-gray-600 mt-1">Manage rental jewellery inventory and pricing</p>
+                    </div>
+                    <button
+                        onClick={() => navigate('/admin/dashboard')}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                        <span className="text-lg leading-none">←</span>
+                        <span>Back</span>
+                    </button>
                 </div>
 
                 {/* Actions Bar */}

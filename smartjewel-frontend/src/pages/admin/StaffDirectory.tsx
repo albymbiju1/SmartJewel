@@ -138,6 +138,17 @@ export const StaffDirectory: React.FC = () => {
       setSubmitting(false);
     }
   };
+
+  const onDeleteStaff = async (staffItem: StaffItem) => {
+    const ok = confirm(`Delete staff member "${staffItem.full_name || staffItem.email}"? This cannot be undone.`);
+    if (!ok) return;
+    try {
+      await api.delete(`/api/staff/${staffItem.id}`);
+      loadStaff();
+    } catch (err: any) {
+      setError(err?.response?.data?.error || err?.message || 'Failed to delete staff member.');
+    }
+  };
   // Store assign modal
   const openAppointStore = (staff: StaffItem) => {
     setAppointing(staff);
@@ -175,7 +186,16 @@ export const StaffDirectory: React.FC = () => {
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-6 py-8 flex items-center justify-between">
-          <h1 className="text-3xl font-bold text-gray-900 font-fraunces">Staff Management</h1>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate('/admin/dashboard')}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              <span className="text-lg leading-none">←</span>
+              <span>Back</span>
+            </button>
+            <h1 className="text-3xl font-bold text-gray-900 font-fraunces">Staff Management</h1>
+          </div>
           <button onClick={()=>openForm()} className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white px-6 py-3 rounded-xl font-semibold hover:from-blue-700 hover:to-indigo-800 transition-all duration-300 transform hover:-translate-y-0.5 hover:shadow-lg flex items-center space-x-2">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
             <span>Add Staff Member</span>
@@ -215,6 +235,7 @@ export const StaffDirectory: React.FC = () => {
               <div className="flex gap-2 mt-auto">
                 <button onClick={()=>openForm(staff)} className="flex-1 py-2 bg-gray-100 rounded-lg text-gray-700 text-sm font-medium hover:bg-gray-200 border border-gray-200">Edit</button>
                 <button onClick={()=>openAppointStore(staff)} className="flex-1 py-2 bg-emerald-50 text-emerald-700 rounded-lg text-sm font-medium hover:bg-emerald-100 border border-emerald-200">Assign Store</button>
+                <button onClick={()=>onDeleteStaff(staff)} className="py-2 px-3 bg-red-50 text-red-700 rounded-lg text-sm font-medium hover:bg-red-100 border border-red-200">Delete</button>
               </div>
             </div>))}
           </div>

@@ -349,6 +349,12 @@ def search_products():
     # Apply active discounts so catalog search consumers see dropped prices
     results = [_apply_active_discount_fields(db, d, now) for d in results]
 
+    # Filter by has_discount if requested
+    has_discount = request.args.get('has_discount', '').lower()
+    if has_discount == 'true':
+        results = [d for d in results if d.get('active_discount')]
+        total = len(results)
+
     # lightweight debug log (no secrets)
     try:
         import json, time

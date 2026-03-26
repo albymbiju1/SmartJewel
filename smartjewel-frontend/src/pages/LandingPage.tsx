@@ -12,6 +12,21 @@ import { SearchBar } from '../components/SearchBar';
 import FloatingChatbot from '../components/chatbot/FloatingChatbot';
 import { NotificationBell } from '../components/NotificationBell';
 import { ImageSearchModal } from '../components/ImageSearchModal';
+import { api } from '../api';
+
+interface SaleProduct {
+  _id: string;
+  name: string;
+  image?: string;
+  price?: number;
+  computed_price?: number;
+  category?: string;
+  active_discount?: {
+    discount_type: 'percentage' | 'flat';
+    discount_value: number;
+    discounted_price: number;
+  };
+}
 
 
 export const LandingPage: React.FC = () => {
@@ -20,6 +35,16 @@ export const LandingPage: React.FC = () => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showImageSearch, setShowImageSearch] = useState(false);
+  const [saleProducts, setSaleProducts] = useState<SaleProduct[]>([]);
+
+  useEffect(() => {
+    api.get('/catalog/search', { params: { per_page: 20 } })
+      .then((res) => {
+        const withDiscount = (res.data.results || []).filter((p: any) => p.active_discount);
+        setSaleProducts(withDiscount.slice(0, 5));
+      })
+      .catch(() => {});
+  }, []);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   // Temporary multi-select state while a mega menu is open
   const [mmCategories, setMmCategories] = useState<string[]>([]);
@@ -146,6 +171,7 @@ export const LandingPage: React.FC = () => {
                 <button className="text-sm text-gray-700 hover:text-brand-burgundy" onClick={() => navigate('/inventory/prices')}>Prices</button>
                 <button className="text-sm text-gray-700 hover:text-brand-burgundy" onClick={() => navigate('/inventory/valuation')}>Valuation</button>
                 <button className="text-sm text-gray-700 hover:text-brand-burgundy" onClick={() => navigate('/inventory/bom')}>BOM</button>
+                <button className="text-sm text-gray-700 hover:text-brand-burgundy" onClick={() => navigate('/inventory/reports')}>Reports</button>
               </div>
             )}
 
@@ -622,7 +648,7 @@ export const LandingPage: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 gap-y-10 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
-            {/* Product 1 */}
+            {/* Static featured card */}
             <div className="group cursor-pointer" onClick={() => navigate('/products?category=pendants')}>
               <div className="aspect-square overflow-hidden rounded-lg bg-white group-hover:shadow-lg transition-shadow">
                 <img
@@ -635,6 +661,59 @@ export const LandingPage: React.FC = () => {
               <p className="mt-1 font-fraunces font-light text-[14px] leading-[18px] text-[#56544E]">Heritage Collection</p>
               <p className="mt-1 font-fraunces font-medium text-[18px] leading-[22px] text-black">₹78,500</p>
             </div>
+
+            {/* Live sale product cards */}
+            {saleProducts.length > 0 ? saleProducts.map((p) => {
+              const orig = p.computed_price || p.price || 0;
+              const disc = p.active_discount;
+              return (
+                <div key={p._id} className="group cursor-pointer" onClick={() => navigate(`/product/${p._id}`)}>
+                  <div className="relative aspect-square overflow-hidden rounded-lg bg-white group-hover:shadow-lg transition-shadow">
+                    {p.image ? (
+                      <img src={p.image} alt={p.name} className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-amber-50">
+                        <svg className="w-12 h-12 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                        </svg>
+                      </div>
+                    )}
+                    {disc && (
+                      <div className="absolute top-2 left-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow">
+                        {disc.discount_type === 'percentage' ? `${disc.discount_value}% OFF` : `₹${disc.discount_value.toLocaleString('en-IN')} OFF`}
+                      </div>
+                    )}
+                  </div>
+                  <h3 className="mt-4 font-fraunces font-medium text-[16px] leading-[20px] text-black truncate">{p.name}</h3>
+                  <p className="mt-1 font-fraunces font-light text-[14px] leading-[18px] text-[#56544E] capitalize">{p.category || 'Jewellery'}</p>
+                  {orig > 0 && disc ? (
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="font-fraunces font-medium text-[18px] leading-[22px] text-red-600">₹{Math.round(disc.discounted_price).toLocaleString('en-IN')}</span>
+                      <span className="font-fraunces text-[14px] text-gray-400 line-through">₹{orig.toLocaleString('en-IN')}</span>
+                    </div>
+                  ) : (
+                    <p className="mt-1 font-fraunces font-medium text-[18px] leading-[22px] text-black">
+                      {orig > 0 ? `₹${orig.toLocaleString('en-IN')}` : ''}
+                    </p>
+                  )}
+                </div>
+              );
+            }) : (
+              /* Placeholder sale card shown when no active discounts exist */
+              <div className="group cursor-pointer" onClick={() => navigate('/search?has_discount=true')}>
+                <div className="relative aspect-square overflow-hidden rounded-lg bg-white group-hover:shadow-lg transition-shadow">
+                  <img
+                    src="/Offer.webp"
+                    alt="Special Offers"
+                    className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
+                  />
+                  <div className="absolute top-2 left-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow">SALE</div>
+                </div>
+                <h3 className="mt-4 font-fraunces font-medium text-[16px] leading-[20px] text-black">Special Offers</h3>
+                <p className="mt-1 font-fraunces font-light text-[14px] leading-[18px] text-[#56544E]">Limited Time Deals</p>
+                <p className="mt-1 font-fraunces font-medium text-[18px] leading-[22px] text-red-500">Up to 20% OFF</p>
+              </div>
+            )}
           </div>
 
           <div className="text-center mt-10">

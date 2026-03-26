@@ -25,6 +25,13 @@ export interface SearchParams {
   for?: string[]; // comma-joined in request
 }
 
+export interface ActiveDiscount {
+  discount_type: 'percentage' | 'flat';
+  discount_value: number;
+  discount_amount: number;
+  discounted_price: number;
+}
+
 export interface CatalogItem {
   _id: string;
   sku: string;
@@ -35,6 +42,8 @@ export interface CatalogItem {
   weight?: number;
   weight_unit?: string;
   price?: number;
+  original_price?: number;
+  active_discount?: ActiveDiscount;
   image?: string;
   updated_at?: string;
   quantity?: number;

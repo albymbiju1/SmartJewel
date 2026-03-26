@@ -440,6 +440,110 @@ def update_appointment_status(appointment_id: str, action: str):
 # Discount management (store manager creates / activates discounts per item or category)
 # ---------------------------------------------------------------------------
 
+@bp.get("/discounts/public/sale-products")
+def get_sale_products():
+    """Public endpoint: returns products that have an active, non-expired discount."""
+    try:
+        db = current_app.extensions.get('mongo_db')
+        if db is None:
+            current_app.logger.error("sale-products: mongo_db extension not found")
+            return jsonify({"error": "db_unavailable", "products": []}), 503
+
+        now = datetime.utcnow()
+
+        # Fetch all active discounts (simple query, no complex $and/$or)
+        all_discounts = list(db.discounts.find({"active": True}))
+        current_app.logger.info(f"sale-products: found {len(all_discounts)} active discounts")
+
+        # Filter expired ones in Python to avoid query complexity
+        active_discounts = []
+        for d in all_discounts:
+            end = d.get("end_date")
+            if end and end < now:
+                continue
+            active_discounts.append(d)
+
+        current_app.logger.info(f"sale-products: {len(active_discounts)} non-expired discounts")
+
+        product_oids = []
+        category_discounts = []
+
+        for disc in active_discounts:
+            if disc.get("scope") == "product":
+                for pid in (disc.get("product_ids") or []):
+                    try:
+                        product_oids.append(ObjectId(pid) if not isinstance(pid, ObjectId) else pid)
+                    except Exception:
+                        pass
+            elif disc.get("scope") == "category" and disc.get("category"):
+                category_discounts.append(disc)
+
+        def _safe_item(item, disc):
+            """Return a minimal safe dict for a product with discount info."""
+            base = float(item.get("price") or 0)
+            dval = float(disc.get("discount_value") or 0)
+            dtype = disc.get("discount_type", "percentage")
+            damount = round(base * dval / 100, 2) if dtype == "percentage" else min(dval, base)
+            discounted = round(max(0, base - damount), 2)
+            return {
+                "_id": str(item["_id"]),
+                "name": item.get("name", ""),
+                "category": item.get("category", ""),
+                "metal": item.get("metal", ""),
+                "image": item.get("image", ""),
+                "original_price": base,
+                "price": discounted,
+                "active_discount": {
+                    "discount_type": dtype,
+                    "discount_value": dval,
+                    "discount_amount": damount,
+                    "discounted_price": discounted,
+                }
+            }
+
+        results = []
+        seen_ids = set()
+
+        # Products by ID
+        if product_oids:
+            items = list(db.items.find({"_id": {"$in": product_oids}, "status": "active"}))
+            for item in items:
+                item_id_str = str(item["_id"])
+                if item_id_str in seen_ids:
+                    continue
+                # Find matching discount
+                for disc in active_discounts:
+                    if disc.get("scope") == "product":
+                        disc_pids = [str(p) for p in (disc.get("product_ids") or [])]
+                        if item_id_str in disc_pids:
+                            results.append(_safe_item(item, disc))
+                            seen_ids.add(item_id_str)
+                            break
+
+        # Products by category
+        for disc in category_discounts:
+            cat = (disc.get("category") or "").strip()
+            if not cat:
+                continue
+            cat_items = list(db.items.find(
+                {"category": {"$regex": f"^{cat}$", "$options": "i"}, "status": "active"}
+            ).limit(10))
+            for item in cat_items:
+                item_id_str = str(item["_id"])
+                if item_id_str in seen_ids:
+                    continue
+                results.append(_safe_item(item, disc))
+                seen_ids.add(item_id_str)
+
+        current_app.logger.info(f"sale-products: product_oids={len(product_oids)}, category_discounts={len(category_discounts)}")
+        current_app.logger.info(f"sale-products: returning {len(results)} products")
+        return jsonify({"products": results, "total": len(results)})
+
+    except Exception as e:
+        current_app.logger.exception(f"sale-products endpoint failed: {e}")
+        return jsonify({"error": str(e), "products": []}), 500
+
+
 def _serialize_discount(d: dict) -> dict:
     """Normalize a discount document for JSON output."""
     d = dict(d)

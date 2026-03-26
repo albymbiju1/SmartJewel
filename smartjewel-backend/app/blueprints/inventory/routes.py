@@ -369,7 +369,12 @@ def list_items():
         v = request.args.get(f)
         if v:
             q[f] = v
-    cur = db.items.find(q).limit(200)
+    # Support name/text search via regex
+    name_q = request.args.get("q") or request.args.get("name")
+    if name_q:
+        q["name"] = {"$regex": name_q, "$options": "i"}
+    limit = min(int(request.args.get("limit", 200)), 200)
+    cur = db.items.find(q).limit(limit)
     items = []
     for d in cur:
         d["_id"] = str(d["_id"])

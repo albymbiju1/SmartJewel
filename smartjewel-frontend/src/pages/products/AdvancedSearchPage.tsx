@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { catalogService, CatalogItem } from '../../services/catalogService';
 import { SearchBar } from '../../components/SearchBar';
 import { FiltersPanel, FiltersState } from '../../components/FiltersPanel';
-import { API_BASE_URL } from '../../api';
+import { API_BASE_URL, api } from '../../api';
 
 function useQuery() {
   const { search } = useLocation();
@@ -21,6 +21,7 @@ export const AdvancedSearchPage: React.FC = () => {
   const [total, setTotal] = useState<number>(0);
 
   const q = (query.get('q') || '').trim();
+  const hasDiscount = query.get('has_discount') === 'true';
 
   // Version timestamp for cache busting
   const imageVersion = useMemo(() => Date.now(), []);
@@ -68,28 +69,32 @@ export const AdvancedSearchPage: React.FC = () => {
     const fetch = async () => {
       setLoading(true);
       try {
-        const params = {
-          q: q || undefined,
-          min_price: filters.min_price,
-          max_price: filters.max_price,
-          min_weight: filters.min_weight,
-          max_weight: filters.max_weight,
-          metal: filters.metal,
-          purity: filters.purity,
-          page,
-          per_page: perPage,
-        } as any;
+        let items: any[] = [];
+        let fetchedTotal = 0;
+
+        if (hasDiscount) {
+          const { data } = await api.get('/api/store-manager/discounts/public/sale-products');
+          items = data.products || [];
+          fetchedTotal = items.length;
+        } else {
+          const params = {
+            q: q || undefined,
+            min_price: filters.min_price,
+            max_price: filters.max_price,
+            min_weight: filters.min_weight,
+            max_weight: filters.max_weight,
+            metal: filters.metal,
+            purity: filters.purity,
+            page,
+            per_page: perPage,
+          } as any;
+          const res = await catalogService.search(params);
+          items = res.results || [];
+          fetchedTotal = res.pagination?.total || 0;
+        }
         
-        // Log the search parameters for debugging
-        console.log('Search params:', params);
-        
-        const res = await catalogService.search(params);
-        
-        // Log the response for debugging
-        console.log('Search response:', res);
-        
-        setResults(res.results || []);
-        setTotal(res.pagination?.total || 0);
+        setResults(items);
+        setTotal(fetchedTotal);
       } catch (e) {
         console.error('search failed', e);
         setResults([]);
@@ -99,7 +104,7 @@ export const AdvancedSearchPage: React.FC = () => {
       }
     };
     fetch();
-  }, [q, page, perPage, filters.min_price, filters.max_price, filters.min_weight, filters.max_weight, JSON.stringify(filters.metal), JSON.stringify(filters.purity)]);
+  }, [q, page, perPage, hasDiscount, filters.min_price, filters.max_price, filters.min_weight, filters.max_weight, JSON.stringify(filters.metal), JSON.stringify(filters.purity)]);
 
   const totalPages = Math.max(1, Math.ceil(total / perPage));
 
@@ -110,7 +115,7 @@ export const AdvancedSearchPage: React.FC = () => {
         <div className="container mx-auto px-6 py-4 flex items-center gap-4">
           <button onClick={()=>navigate('/')} className="text-gray-700 hover:text-blue-600">Home</button>
           <span className="text-gray-400">/</span>
-          <span className="text-gray-900 font-medium">Search</span>
+          <span className="text-gray-900 font-medium">{hasDiscount ? 'Special Offers' : 'Search'}</span>
           <div className="flex-1" />
           <div className="w-full max-w-xl"><SearchBar placeholder="Search jewellery…" /></div>
         </div>
@@ -168,7 +173,21 @@ export const AdvancedSearchPage: React.FC = () => {
                         {p.weight ? <span className="text-xs text-gray-500">{p.weight}{p.weight_unit || 'g'}</span> : null}
                       </div>
                       {p.price != null && (
-                        <div className="mt-2 text-lg font-bold text-gray-900">₹{Number(p.price).toLocaleString()}</div>
+                        <div className="mt-2">
+                          {p.active_discount ? (
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-lg font-bold text-red-600">₹{Number(p.price).toLocaleString()}</span>
+                              <span className="text-sm text-gray-400 line-through">₹{Number(p.original_price || (p.active_discount.discounted_price + p.active_discount.discount_amount)).toLocaleString()}</span>
+                              <span className="text-xs font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
+                                {p.active_discount.discount_type === 'percentage'
+                                  ? `${p.active_discount.discount_value}% off`
+                                  : `₹${p.active_discount.discount_amount} off`}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="text-lg font-bold text-gray-900">₹{Number(p.price).toLocaleString()}</div>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
